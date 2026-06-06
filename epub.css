@@ -1,0 +1,13 @@
+body {
+    font-family: serif;
+}
+p {
+    text-align: justify;
+    line-height: 1.5;
+    margin-bottom: 1em;
+}
+h1, h2, h3 {
+    text-align: left;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+}

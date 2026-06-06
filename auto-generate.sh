@@ -1,6 +1,7 @@
 #!/bin/bash
-# KDP Auto-Generate — runs daily at 10:00 ICT (03:00 UTC)
-# Invokes Claude Code with kdp-writer skill to create a new ebook
+# KDP Auto-Generate — runs every day at 10:00 ICT (03:00 UTC)
+# Creates 2 books per run
+# Primary: GPT-4.1 (Claude path disabled)
 
 export PATH="/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export HOME="/root"
@@ -9,32 +10,113 @@ LOG_DIR="/root/kdp/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/$(date +%Y-%m-%d).log"
 
-echo "=== KDP Auto-Generate $(date) ===" >> "$LOG_FILE"
+echo "=== KDP Auto-Generate $(date) — 2 books per run ===" >> "$LOG_FILE"
 
-# Build the prompt: check existing books first, then create new one
-EXISTING=$(for f in /root/kdp/*/listing.json; do
-  [ -f "$f" ] && python3 -c "import sys,json; d=json.load(open('$f')); print(f\"- {d.get('title','')} ({d.get('language','')})\")" 2>/dev/null
-done)
+BOOKS_PER_RUN=2
+TOKEN=$(grep SESSION_TOKEN /root/libra/.env | cut -d= -f2)
+TG_TOKEN=$(grep TELEGRAM_BOT_TOKEN /root/libra/.env | cut -d= -f2)
+TG_CHAT=$(grep TELEGRAM_CHAT_ID /root/libra/.env | cut -d= -f2)
 
-PROMPT="I need you to create a new KDP ebook using the kdp-writer skill.
+tg_notify() {
+  curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+    -H "Content-Type: application/json" \
+    -d "{\"chat_id\": \"${TG_CHAT}\", \"text\": \"$1\", \"parse_mode\": \"HTML\"}" > /dev/null 2>&1
+}
+
+tg_notify "🚀 <b>Libra 2.0 SmartPublisher: เริ่มสร้างหนังสือ</b>\n$(date '+%Y-%m-%d %H:%M') ICT"
+TODAY=$(date +%Y-%m-%d)
+
+for BOOK_NUM in $(seq 1 $BOOKS_PER_RUN); do
+  echo "" >> "$LOG_FILE"
+  echo ">>> Book $BOOK_NUM of $BOOKS_PER_RUN ===" >> "$LOG_FILE"
+
+  # Build the prompt: check existing books first, then create new one
+  EXISTING=$(for f in /root/kdp/*/listing.json; do
+    [ -f "$f" ] && python3 -c "import sys,json; d=json.load(open('$f')); print(f\"- {d.get('title','')} ({d.get('language','')})\")" 2>/dev/null
+  done)
+
+  PROMPT="I need you to create a new KDP ebook using the kdp-writer skill.
 
 Here are the ebooks already created (DO NOT duplicate these topics):
 $EXISTING
 
-Instructions:
-1. Check the list above to avoid duplicates
-2. Use the kdp-writer skill Step 2A to evaluate and choose a marketplace — do NOT default to Brazil. Spread across different marketplaces and languages (Spanish, German, French, Italian, etc.). Check which languages are already overrepresented in existing books and pick a DIFFERENT one.
-3. Research a NEW profitable niche in the chosen marketplace
-4. Pick a different topic/profession/angle from what's already been done
-5. Follow the full kdp-writer pipeline: research → write → listing → cover → EPUB → queue
-6. Make sure the ebook appears in Libra queue with status 'ready'
+=== PHASE 1: MARKET RESEARCH (mandatory — use WebSearch) ===
+BEFORE choosing a topic, you MUST do real market research:
+1. Check which languages are overrepresented in existing books above — pick a DIFFERENT one
+2. Use WebSearch to search for: 'best selling kindle ebooks [marketplace] 2026', 'trending ebook niches [language]', 'amazon kindle bestseller categories [marketplace]'
+3. Search in BOTH English AND the target language for broader results
+4. Look for: trending topics, underserved niches, high-demand categories with low competition
+5. Pick a topic that has REAL market demand based on your research findings
+6. Save your market research as 'market-research.md' in the book directory
+
+=== PHASE 2: CONTENT RESEARCH (mandatory — use WebSearch + WebFetch) ===
+BEFORE writing the book, you MUST research real sources:
+1. Use WebSearch to find 8-12 real sources about your chosen topic: expert articles, research papers, official guidelines, statistics
+2. Use WebFetch to read the most important 3-5 sources in detail
+3. Collect: real statistics/data, expert quotes, verified facts, practical methods from real sources
+4. Compile a list of real references with actual URLs — these will become your Vancouver-style citations
+5. Save your content research as 'content-research.md' in the book directory
+
+=== PHASE 3: WRITE THE BOOK ===
+1. Follow the full kdp-writer pipeline: write → listing → cover → EPUB → queue
+2. Use the researched facts, statistics, and sources from Phase 2 when writing
+3. All references [1]-[n] must be REAL sources with REAL URLs from your research — never hallucinate references
+4. Make sure the ebook appears in Libra queue with status 'ready'
+
+CONTENT QUALITY GUIDELINES: Read and follow ALL guidelines in /root/libra/kdp-writing-guidelines.md BEFORE writing the book.
 
 Go!"
 
-# Run Claude Code in non-interactive mode
-claude -p "$PROMPT" --allowedTools "Bash,Read,Write,Edit,Glob,Grep,WebSearch,mcp__playwright__*" >> "$LOG_FILE" 2>&1
+  # Count books before (exclude logs/ directory)
+  BOOKS_BEFORE=$(ls -d /root/kdp/*/ 2>/dev/null | grep -v '/logs/$' | wc -l)
 
-# Send Telegram notification for any new books created today
-python3 /opt/libra/notify-new-books.py >> "$LOG_FILE" 2>&1
+  # --- GPT-4.1 (primary) ---
+  echo ">>> Running GPT-4.1 (book $BOOK_NUM)..." >> "$LOG_FILE"
+  python3 /root/libra/gpt_fallback_writer.py >> "$LOG_FILE" 2>&1
+  GPT_EXIT=$?
+  if [ $GPT_EXIT -ne 0 ]; then
+    echo ">>> GPT-4.1 failed (exit=$GPT_EXIT) for book $BOOK_NUM — retrying once..." >> "$LOG_FILE"
+    sleep 10
+    python3 /root/libra/gpt_fallback_writer.py >> "$LOG_FILE" 2>&1
+    GPT_EXIT=$?
+    if [ $GPT_EXIT -ne 0 ]; then
+      echo ">>> GPT-4.1 retry also failed (exit=$GPT_EXIT)" >> "$LOG_FILE"
+      tg_notify "❌ <b>Libra 2.0 SmartPublisher: เขียนหนังสือล้มเหลว 2 ครั้ง</b>\nวันที่ $(date '+%Y-%m-%d') — ข้ามไปพรุ่งนี้"
+    fi
+  fi
+
+  # If a new book was created today, upload to KDP automatically
+  LATEST_BOOK=$(ls -dt /root/kdp/*/ 2>/dev/null | grep -v '/logs/$' | head -1 | xargs -I {} basename {})
+  if [ ! -z "$LATEST_BOOK" ]; then
+    LISTING_FILE="/root/kdp/$LATEST_BOOK/listing.json"
+    if [ -f "$LISTING_FILE" ]; then
+      CREATED_DATE=$(python3 -c "import json; d=json.load(open('$LISTING_FILE')); print(d.get('created_at','')[:10])" 2>/dev/null)
+      BOOK_STATUS=$(python3 -c "import json; d=json.load(open('$LISTING_FILE')); print(d.get('status',''))" 2>/dev/null)
+      if [[ "$CREATED_DATE" == "$TODAY" && "$BOOK_STATUS" == "ready" ]]; then
+        echo "=== Auto-uploading to KDP: $LATEST_BOOK ===" >> "$LOG_FILE"
+
+        # Call kdp_upload.py directly (blocking — waits for full completion)
+        # This is reliable: no 60s timeout race, captures full output
+        python3 /root/libra/kdp_upload.py "$LATEST_BOOK" >> "$LOG_FILE" 2>&1
+        KDP_EXIT=$?
+
+        if [ $KDP_EXIT -eq 0 ]; then
+          echo ">>> ✅ KDP upload complete" >> "$LOG_FILE"
+          # Generate PDF for paperback after successful upload
+          curl -s -X POST "http://127.0.0.1:8200/api/books/$LATEST_BOOK/generate-pdf" \
+            -H "Cookie: libra_token=$TOKEN" >> "$LOG_FILE" 2>&1
+          echo "" >> "$LOG_FILE"
+          BOOK_TITLE=$(python3 -c "import json; d=json.load(open('/root/kdp/$LATEST_BOOK/listing.json')); print(d.get('title',''))" 2>/dev/null)
+          tg_notify "✅ <b>Libra 2.0 SmartPublisher: สร้างหนังสือสำเร็จ</b>\n${BOOK_TITLE}\n\nอยู่ใน KDP review แล้ว 📚"
+        else
+          echo ">>> ❌ KDP upload failed (exit=$KDP_EXIT) — book stays in 'ready' for manual retry" >> "$LOG_FILE"
+          BOOK_TITLE=$(python3 -c "import json; d=json.load(open('/root/kdp/$LATEST_BOOK/listing.json')); print(d.get('title',''))" 2>/dev/null)
+          tg_notify "❌ <b>Libra 2.0 SmartPublisher: Upload ล้มเหลว</b>\n${BOOK_TITLE}\n\nหนังสือยังอยู่ใน queue — retry ได้ที่ Libra"
+        fi
+      fi
+    fi
+  fi
+
+done
 
 echo "=== Finished $(date) ===" >> "$LOG_FILE"

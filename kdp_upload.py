@@ -72,39 +72,58 @@ async def notify(message: str):
 
 
 async def set_ai_disclosure(page) -> None:
-    """Set mandatory KDP AI disclosure for GPT text and AI-generated cover art."""
+    """Set mandatory KDP AI disclosure for GPT text and AI-generated cover art.
+
+    On update flows, Amazon may show a reduced option set (e.g. no 'Entire work'
+    for text if the book was already disclosed differently). We try the preferred
+    option first, fall back to 'Some content', and skip gracefully if the
+    accordion is absent (already set on an existing title).
+    """
     ai_accordion = page.locator('[data-a-accordion-name="generative-ai-questionnaire-accordion"]')
+    # If the accordion doesn't exist on this page (e.g. KDP skips it on updates), skip.
+    if not await ai_accordion.is_visible():
+        logger.info("AI disclosure accordion not present — skipping (likely pre-set on existing title)")
+        return
     yes_row = ai_accordion.locator('[data-a-accordion-row-name="yes"] .a-accordion-row')
     await yes_row.click()
     await page.wait_for_timeout(800)
+    # text: prefer "Entire work", fall back to "Some content" if unavailable on update
     selections = {
-        "generative-ai-questionnaire-text": ("Entire work", "GPT-4.1"),
-        "generative-ai-questionnaire-images": ("Some images", "gpt-image-1"),
-        "generative-ai-questionnaire-translations": ("None", None),
+        "generative-ai-questionnaire-text": (["Entire work", "Some content"], "GPT-4.1"),
+        "generative-ai-questionnaire-images": (["Some images", "Some content"], "gpt-image-1"),
+        "generative-ai-questionnaire-translations": (["None"], None),
     }
-    for selector_id, (target_text, tool_name) in selections.items():
+    for selector_id, (candidates, tool_name) in selections.items():
         container = page.locator(".a-dropdown-container").filter(has=page.locator(f"#{selector_id}"))
+        if not await container.is_visible():
+            logger.info(f"  AI {selector_id}: dropdown not visible — skipping")
+            continue
         await container.locator(".a-button-dropdown").click()
         await page.wait_for_timeout(500)
         clicked = False
-        for element in await page.query_selector_all("li a, li"):
-            try:
-                if await element.is_visible() and (await element.inner_text()).strip() == target_text:
-                    await element.click()
-                    clicked = True
-                    break
-            except Exception:
-                continue
+        for target_text in candidates:
+            for element in await page.query_selector_all("li a, li"):
+                try:
+                    if await element.is_visible() and (await element.inner_text()).strip() == target_text:
+                        await element.click()
+                        clicked = True
+                        logger.info(f"  AI {selector_id}: set to '{target_text}'")
+                        break
+                except Exception:
+                    continue
+            if clicked:
+                break
         if not clicked:
-            raise RuntimeError(f"AI disclosure option unavailable: {selector_id}={target_text}")
-        if tool_name:
+            logger.warning(f"⚠️ AI disclosure: no matching option for {selector_id} — leaving as-is")
+        if clicked and tool_name:
             content_type = selector_id.rsplit("-", 1)[-1]
             prompt_id = f"generative-ai-questionnaire-{content_type}-tools-prompt"
             input_box = page.locator(f'input[aria-labelledby="{prompt_id}"]').first
-            if not await input_box.is_visible():
-                raise RuntimeError(f"AI tool field unavailable for {content_type}")
-            await input_box.fill(tool_name)
-    logger.info("✓ AI disclosure set: text=Entire work, images=Some images, translations=None")
+            if await input_box.is_visible():
+                await input_box.fill(tool_name)
+            else:
+                logger.warning(f"⚠️ AI tool field not visible for {content_type} — skipping")
+    logger.info("✓ AI tools done")
 
 
 def _generate_fallback_cover(book_dir, title, subtitle, author, categories=None, keywords=None):

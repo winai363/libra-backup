@@ -39,9 +39,11 @@ def rebuild():
         # Build EPUB
         print(f"Rebuilding EPUB for {book.name}...")
         cmd = [
-            "pandoc", str(md_file), "-o", str(epub_file),
+            "pandoc", str(md_file), "-f", "markdown-yaml_metadata_block",
+            "-o", str(epub_file),
             "--resource-path", str(book),
             "--metadata-file", str(meta_file),
+            "--epub-cover-image", str(book / "cover.jpg"),
             "--css", "/root/libra/epub.css",
             "--toc", "--toc-depth=2",
         ]

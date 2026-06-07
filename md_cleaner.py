@@ -216,6 +216,17 @@ def _remove_orphaned_metadata(content: str) -> str:
     return content
 
 
+def _normalize_thematic_breaks(content: str) -> str:
+    """Replace bare --- thematic breaks with * * * to prevent pandoc YAML parse errors.
+
+    Pandoc's yaml_metadata_block extension treats standalone --- as YAML block
+    starts anywhere in the document. This converts them to an equivalent
+    thematic break that pandoc won't misread as YAML.
+    Only replaces --- on its own line (with optional trailing whitespace).
+    """
+    return re.sub(r'(?m)^---[ \t]*$', '* * *', content)
+
+
 def clean(content: str) -> str:
     """
     Apply all fixes in order and return the cleaned markdown.
@@ -225,4 +236,5 @@ def clean(content: str) -> str:
     content = _remove_orphaned_metadata(content)
     content = _remove_inline_toc(content)
     content = _strip_dash_before_chapter(content)
+    content = _normalize_thematic_breaks(content)
     return content.lstrip('\n')

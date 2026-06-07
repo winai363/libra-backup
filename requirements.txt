@@ -1,2 +1,7 @@
 fastapi
 uvicorn
+httpx
+openai
+python-dotenv
+pillow
+playwright

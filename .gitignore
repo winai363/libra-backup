@@ -3,3 +3,9 @@
 .venv/
 __pycache__/
 *.pyc
+kdp_session.json
+queue.txt
+queue_log.txt
+queue_failed.txt
+.queue.lock
+.audit-fix-backup-stamp

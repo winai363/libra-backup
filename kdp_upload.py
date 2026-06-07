@@ -14,6 +14,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("kdp_upload")
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Load config
 ENV = {}
@@ -34,6 +35,26 @@ TELEGRAM_BOT_TOKEN = ENV.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = ENV.get("TELEGRAM_CHAT_ID", "")
 
 
+def require_quality_gate(slug: str) -> bool:
+    """Block every KDP write unless the deterministic 40-page gate passes."""
+    try:
+        from quality_gate import validate_book, write_report
+        report = validate_book(
+            slug,
+            require_pdf=True,
+            check_urls=True,
+            require_editorial=True,
+        )
+        write_report(report)
+        if report.passed:
+            return True
+        logger.error("Quality gate blocked %s: %s", slug, "; ".join(report.errors))
+        return False
+    except Exception as exc:
+        logger.error("Quality gate crashed for %s: %s", slug, exc)
+        return False
+
+
 async def notify(message: str):
     """Send Telegram notification"""
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -48,6 +69,42 @@ async def notify(message: str):
             )
     except Exception as e:
         logger.error(f"Telegram notify failed: {e}")
+
+
+async def set_ai_disclosure(page) -> None:
+    """Set mandatory KDP AI disclosure for GPT text and AI-generated cover art."""
+    ai_accordion = page.locator('[data-a-accordion-name="generative-ai-questionnaire-accordion"]')
+    yes_row = ai_accordion.locator('[data-a-accordion-row-name="yes"] .a-accordion-row')
+    await yes_row.click()
+    await page.wait_for_timeout(800)
+    selections = {
+        "generative-ai-questionnaire-text": ("Entire work", "GPT-4.1"),
+        "generative-ai-questionnaire-images": ("Some images", "gpt-image-1"),
+        "generative-ai-questionnaire-translations": ("None", None),
+    }
+    for selector_id, (target_text, tool_name) in selections.items():
+        container = page.locator(".a-dropdown-container").filter(has=page.locator(f"#{selector_id}"))
+        await container.locator(".a-button-dropdown").click()
+        await page.wait_for_timeout(500)
+        clicked = False
+        for element in await page.query_selector_all("li a, li"):
+            try:
+                if await element.is_visible() and (await element.inner_text()).strip() == target_text:
+                    await element.click()
+                    clicked = True
+                    break
+            except Exception:
+                continue
+        if not clicked:
+            raise RuntimeError(f"AI disclosure option unavailable: {selector_id}={target_text}")
+        if tool_name:
+            content_type = selector_id.rsplit("-", 1)[-1]
+            prompt_id = f"generative-ai-questionnaire-{content_type}-tools-prompt"
+            input_box = page.locator(f'input[aria-labelledby="{prompt_id}"]').first
+            if not await input_box.is_visible():
+                raise RuntimeError(f"AI tool field unavailable for {content_type}")
+            await input_box.fill(tool_name)
+    logger.info("✓ AI disclosure set: text=Entire work, images=Some images, translations=None")
 
 
 def _generate_fallback_cover(book_dir, title, subtitle, author, categories=None, keywords=None):
@@ -73,6 +130,8 @@ def _generate_fallback_cover(book_dir, title, subtitle, author, categories=None,
 
 async def upload_to_kdp(slug: str):
     """Upload ebook to KDP"""
+    if not require_quality_gate(slug):
+        return False
     book_dir = KDP_DIR / slug
     listing_file = book_dir / "listing.json"
 
@@ -514,62 +573,10 @@ async def upload_to_kdp(slug: str):
                 if not is_checked:
                     logger.warning("⚠️ DRM radio click did not register — KDP may block Save and Continue")
 
-            # AI tools — KDP requires disclosure.
-            # We generate both text and images using AI.
             try:
-                ai_accordion = page.locator('[data-a-accordion-name="generative-ai-questionnaire-accordion"]')
-                yes_row = ai_accordion.locator('[data-a-accordion-row-name="yes"] .a-accordion-row')
-                await yes_row.click()
-                await page.wait_for_timeout(1000)
-                logger.info("✓ AI tools: clicked 'Yes', selecting AI details...")
-
-                # Map dropdown IDs to the exact text KDP uses for AI generated content
-                ai_selections = {
-                    "generative-ai-questionnaire-text": "Entire work",
-                    "generative-ai-questionnaire-images": "None",
-                    "generative-ai-questionnaire-translations": "None"
-                }
-
-                for sel_id, target_text in ai_selections.items():
-                    try:
-                        container = page.locator('.a-dropdown-container').filter(has=page.locator(f'#{sel_id}'))
-                        trigger = container.locator('.a-button-dropdown')
-                        await trigger.click()
-                        await page.wait_for_timeout(800)
-
-                        clicked = False
-                        for el in await page.query_selector_all('li a, li'):
-                            try:
-                                if not await el.is_visible():
-                                    continue
-                                text = (await el.inner_text()).strip()
-                                # Match exact text or fallback to substring match if KDP changed text slightly
-                                if target_text in text or (target_text == "None" and text == "None"):
-                                    await el.click()
-                                    clicked = True
-                                    break
-                            except Exception:
-                                continue
-                        logger.info(f"  AI {sel_id} -> {target_text}: {'✓' if clicked else '⚠️ not found'}")
-                        await page.wait_for_timeout(500)
-                        
-                        # After selecting, KDP now requires typing the tool name if we selected an AI option
-                        if target_text != "None":
-                            try:
-                                tool_type = sel_id.split("-")[-1]  # "text", "images", "translations"
-                                prompt_id = f"generative-ai-questionnaire-{tool_type}-tools-prompt"
-                                input_box = page.locator(f'input[aria-labelledby="{prompt_id}"]').first
-                                if await input_box.is_visible():
-                                    tool_name = "Midjourney" if tool_type == "images" else "GPT-4"
-                                    await input_box.fill(tool_name)
-                                    logger.info(f"  AI Tool Input: filled {tool_name}")
-                            except Exception as e:
-                                logger.warning(f"  AI Tool Input failed for {tool_type}: {e}")
-                                
-                    except Exception as e:
-                        logger.warning(f"  AI {sel_id} failed: {e}")
+                await set_ai_disclosure(page)
             except Exception as e:
-                logger.warning(f"⚠️ AI tools section failed: {e}")
+                raise RuntimeError(f"AI disclosure failed; upload blocked: {e}") from e
             logger.info("✓ AI tools done")
             await page.wait_for_timeout(1000)
 
@@ -824,6 +831,7 @@ async def upload_to_kdp(slug: str):
                 listing["status"] = "uploaded"
                 listing["uploaded_at"] = datetime.now().strftime("%Y-%m-%d")
                 listing["kdp_uploading"] = False
+                listing["kdp_error"] = ""
                 listing_file.write_text(json.dumps(listing, ensure_ascii=False, indent=2))
 
                 # Send success notification
@@ -835,19 +843,19 @@ async def upload_to_kdp(slug: str):
             else:
                 logger.warning("⚠️ Publish may have succeeded, please verify on KDP")
 
-                # Still mark as uploaded even if we're unsure
+                # Never claim success unless KDP confirms it.
                 listing_file = book_dir / "listing.json"
                 listing = json.loads(listing_file.read_text())
-                listing["status"] = "uploaded"
-                listing["uploaded_at"] = datetime.now().strftime("%Y-%m-%d")
+                listing["status"] = "needs_verification"
                 listing["kdp_uploading"] = False
+                listing["kdp_error"] = f"Publish result not confirmed; final URL: {final_url}"[:300]
                 listing_file.write_text(json.dumps(listing, ensure_ascii=False, indent=2))
 
                 title = listing.get("title", slug)
                 msg = f"⚠️ <b>KDP Upload Complete (verify needed)</b>\n{title}\n\nPlease check your KDP account to verify the book was published."
                 await notify(msg)
 
-                return True
+                return False
 
         except Exception as e:
             import traceback
@@ -878,6 +886,8 @@ async def update_ebook_content(slug: str) -> bool:
     Finds the book on the bookshelf by title, navigates to its content
     editing page, re-uploads the EPUB, and saves.
     """
+    if not require_quality_gate(slug):
+        return False
     book_dir = KDP_DIR / slug
     listing_file = book_dir / "listing.json"
     if not listing_file.exists():
@@ -1029,9 +1039,12 @@ async def update_ebook_content(slug: str) -> bool:
             except Exception as e:
                 logger.warning(f"⚠️ Confirm checkbox: {e}")
 
+            await set_ai_disclosure(page)
+
             # ── Step 6: Save ──────────────────────────────────────────────────
             logger.info("Saving...")
             waited = 0
+            content_saved = False
             while waited < 900:
                 save_btn = await page.query_selector(
                     'button:has-text("Save and Continue"), input[value*="Save and Continue"]'
@@ -1042,11 +1055,13 @@ async def update_ebook_content(slug: str) -> bool:
                         await save_btn.click()
                         logger.info("✓ Clicked Save and Continue")
                         await page.wait_for_timeout(8000)
+                        content_saved = True
                         break
                 await page.wait_for_timeout(10000)
                 waited += 10
 
             # If we land on pricing page, just save without changing price
+            republished = False
             if "pricing" in page.url:
                 logger.info("On pricing page — saving current pricing...")
                 save_price = await page.query_selector(
@@ -1056,10 +1071,19 @@ async def update_ebook_content(slug: str) -> bool:
                     await save_price.click()
                     await page.wait_for_timeout(10000)
                     logger.info("✓ Re-published with updated content")
+                    republished = True
+
+            if not content_saved or not republished:
+                raise RuntimeError(
+                    f"KDP update was not confirmed (content_saved={content_saved}, republished={republished}, "
+                    f"url={page.url})"
+                )
 
             # Update listing status
             data["kdp_uploading"] = False
             data["content_updated_at"] = datetime.now().strftime("%Y-%m-%d")
+            data["status"] = "uploaded"
+            data["kdp_error"] = ""
             listing_file.write_text(json.dumps(data, ensure_ascii=False, indent=2))
 
             await notify(f"✅ <b>KDP Content Updated</b>\n{title}\n\nEPUB re-uploaded with layout fixes.")

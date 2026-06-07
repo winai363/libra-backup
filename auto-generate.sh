@@ -1,6 +1,6 @@
 #!/bin/bash
 # KDP Auto-Generate — runs every day at 10:00 ICT (03:00 UTC)
-# Creates 2 books per run
+# Creates 1 quality-gated book per run
 # Primary: GPT-4.1 (Claude path disabled)
 
 export PATH="/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -10,9 +10,9 @@ LOG_DIR="/root/kdp/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/$(date +%Y-%m-%d).log"
 
-echo "=== KDP Auto-Generate $(date) — 2 books per run ===" >> "$LOG_FILE"
+echo "=== KDP Auto-Generate $(date) — 1 quality-gated book per run ===" >> "$LOG_FILE"
 
-BOOKS_PER_RUN=2
+BOOKS_PER_RUN=1
 TOKEN=$(grep SESSION_TOKEN /root/libra/.env | cut -d= -f2)
 TG_TOKEN=$(grep TELEGRAM_BOT_TOKEN /root/libra/.env | cut -d= -f2)
 TG_CHAT=$(grep TELEGRAM_CHAT_ID /root/libra/.env | cut -d= -f2)
@@ -58,7 +58,7 @@ BEFORE writing the book, you MUST research real sources:
 5. Save your content research as 'content-research.md' in the book directory
 
 === PHASE 3: WRITE THE BOOK ===
-1. Follow the full kdp-writer pipeline: write → listing → cover → EPUB → queue
+1. Follow the full pipeline: write → listing → cover → EPUB → quality gate → queue
 2. Use the researched facts, statistics, and sources from Phase 2 when writing
 3. All references [1]-[n] must be REAL sources with REAL URLs from your research — never hallucinate references
 4. Make sure the ebook appears in Libra queue with status 'ready'
@@ -85,7 +85,7 @@ Go!"
     fi
   fi
 
-  # If a new book was created today, upload to KDP automatically
+  # If a new book passed quality today, generate its PDF and add it to the queue.
   LATEST_BOOK=$(ls -dt /root/kdp/*/ 2>/dev/null | grep -v '/logs/$' | head -1 | xargs -I {} basename {})
   if [ ! -z "$LATEST_BOOK" ]; then
     LISTING_FILE="/root/kdp/$LATEST_BOOK/listing.json"
@@ -93,25 +93,28 @@ Go!"
       CREATED_DATE=$(python3 -c "import json; d=json.load(open('$LISTING_FILE')); print(d.get('created_at','')[:10])" 2>/dev/null)
       BOOK_STATUS=$(python3 -c "import json; d=json.load(open('$LISTING_FILE')); print(d.get('status',''))" 2>/dev/null)
       if [[ "$CREATED_DATE" == "$TODAY" && "$BOOK_STATUS" == "ready" ]]; then
-        echo "=== Auto-uploading to KDP: $LATEST_BOOK ===" >> "$LOG_FILE"
-
-        # Call kdp_upload.py directly (blocking — waits for full completion)
-        # This is reliable: no 60s timeout race, captures full output
-        python3 /root/libra/kdp_upload.py "$LATEST_BOOK" >> "$LOG_FILE" 2>&1
-        KDP_EXIT=$?
-
-        if [ $KDP_EXIT -eq 0 ]; then
-          echo ">>> ✅ KDP upload complete" >> "$LOG_FILE"
-          # Generate PDF for paperback after successful upload
-          curl -s -X POST "http://127.0.0.1:8200/api/books/$LATEST_BOOK/generate-pdf" \
-            -H "Cookie: libra_token=$TOKEN" >> "$LOG_FILE" 2>&1
-          echo "" >> "$LOG_FILE"
+        echo "=== Building paperback and validating: $LATEST_BOOK ===" >> "$LOG_FILE"
+        curl -fsS -X POST "http://127.0.0.1:8200/api/books/$LATEST_BOOK/generate-pdf" \
+          -H "Cookie: libra_token=$TOKEN" >> "$LOG_FILE" 2>&1
+        PDF_EXIT=$?
+        python3 /root/libra/quality_gate.py "$LATEST_BOOK" --require-pdf --check-urls --require-editorial >> "$LOG_FILE" 2>&1
+        QA_EXIT=$?
+        if [ $PDF_EXIT -eq 0 ] && [ $QA_EXIT -eq 0 ]; then
+          touch /root/libra/queue.txt
+          if ! grep -Fxq "$LATEST_BOOK" /root/libra/queue.txt; then
+            echo "$LATEST_BOOK" >> /root/libra/queue.txt
+          fi
           BOOK_TITLE=$(python3 -c "import json; d=json.load(open('/root/kdp/$LATEST_BOOK/listing.json')); print(d.get('title',''))" 2>/dev/null)
-          tg_notify "✅ <b>Libra 2.0 SmartPublisher: สร้างหนังสือสำเร็จ</b>\n${BOOK_TITLE}\n\nอยู่ใน KDP review แล้ว 📚"
+          tg_notify "✅ <b>Libra 2.0 SmartPublisher: ผ่าน QA และเข้าคิว KDP</b>\n${BOOK_TITLE}\n\nPaperback 40+ หน้าและ SEO ผ่านครบ"
         else
-          echo ">>> ❌ KDP upload failed (exit=$KDP_EXIT) — book stays in 'ready' for manual retry" >> "$LOG_FILE"
-          BOOK_TITLE=$(python3 -c "import json; d=json.load(open('/root/kdp/$LATEST_BOOK/listing.json')); print(d.get('title',''))" 2>/dev/null)
-          tg_notify "❌ <b>Libra 2.0 SmartPublisher: Upload ล้มเหลว</b>\n${BOOK_TITLE}\n\nหนังสือยังอยู่ใน queue — retry ได้ที่ Libra"
+          python3 - "$LISTING_FILE" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+d["status"] = "quality_failed"
+json.dump(d, open(p, "w"), ensure_ascii=False, indent=2)
+PY
+          tg_notify "❌ <b>Libra 2.0 SmartPublisher: ไม่ผ่าน Quality Gate</b>\n${LATEST_BOOK}\n\nระบบจะไม่ส่งขึ้น KDP"
         fi
       fi
     fi

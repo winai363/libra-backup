@@ -14,7 +14,9 @@ from openai import OpenAI
 LIBRA_DIR = Path(__file__).parent
 KDP_DIR = LIBRA_DIR.parent / "kdp"
 
-THRESHOLD = 65  # minimum score out of 100 to proceed
+THRESHOLD = 65          # minimum total score out of 100 to proceed
+COMPETITION_MIN = 12    # competition must score >= 12/20 (20=blue ocean, 12=moderate-low)
+LANGUAGE_SAT_MIN = 5    # language_saturation must score >= 5/10 (real gap in target language)
 
 HIGH_RISK_KEYWORDS = [
     "medical advice", "cure", "treat", "diagnose", "prescription",
@@ -33,13 +35,16 @@ Marketplace: {marketplace}
 Niche: {niche}
 
 Search for evidence to score each dimension below. USE WEB SEARCH to find real data.
+IMPORTANT: competition and language saturation are the PRIMARY filters. A topic with high
+demand but also high competition is worthless — we need demand WITH a real gap.
 
 Searches to run:
-1. "{title_en}" amazon kindle bestseller rank
-2. "{niche}" ebook demand 2025 2026
-3. "{niche}" amazon.{tld} bestseller
-4. competitors for "{title_en}" kindle ebook
-5. "{niche}" trend google 2024 2025
+1. "{niche}" kindle ebook amazon.{tld} — count how many books appear in results
+2. "{title_en}" site:amazon.{tld} kindle — how many direct competitors?
+3. "{niche}" amazon.{tld} ebook reviews — are top books well-reviewed (signals quality gap if not)?
+4. "{niche}" kindle ebook {language} — books specifically in {language} (saturation check)
+5. "{niche}" ebook demand 2025 2026 — buyer demand evidence
+6. "{title_en}" amazon kindle bestseller rank — is there already a bestseller here?
 
 Return ONLY valid JSON:
 {{
@@ -60,8 +65,8 @@ Return ONLY valid JSON:
   }},
   "competition": {{
     "score": <0-20>,
-    "note": "Higher score = LOWER competition (inverse). 20=blue ocean, 0=saturated.",
-    "evidence": "<number of quality competing books, price range, average rating>",
+    "note": "Higher score = LOWER competition (inverse). 20=blue ocean, 0=saturated. Rubric: 17-20=<50 quality books (blue ocean), 13-16=50-200 books (low), 9-12=200-500 books (moderate), 5-8=500-2000 books (high), 0-4=>2000 books (saturated). Quality = books with 10+ reviews & 4+ stars.",
+    "evidence": "<exact count of competing books found, their review counts, avg rating>",
     "estimated_competing_books": <integer or null>
   }},
   "differentiation": {{
@@ -77,8 +82,8 @@ Return ONLY valid JSON:
   }},
   "language_saturation": {{
     "score": <0-10>,
-    "note": "Higher score = LESS saturation in target language. 10=no books in language.",
-    "evidence": "<how many quality books exist in {language}>",
+    "note": "Higher score = LESS saturation in target language. Rubric: 9-10=0-5 quality books in {language}, 7-8=5-15 books, 5-6=15-40 books, 3-4=40-100 books, 0-2=>100 books. Search specifically for books in {language} not just translated titles.",
+    "evidence": "<exact count of quality books found in {language}, titles if any>",
     "estimated_books_in_language": <integer or null>
   }},
   "expected_royalty": {{
@@ -180,6 +185,22 @@ def score_topic(topic: dict) -> dict:
     go_no_go = "GO" if total >= THRESHOLD else "NO-GO"
     if data.get("recommendation") == "reject":
         go_no_go = "NO-GO"
+
+    # Hard gates — competition and language gap must meet minimums regardless of total score
+    comp_score = data["competition"]["score"]
+    lang_sat_score = data["language_saturation"]["score"]
+    if comp_score < COMPETITION_MIN:
+        go_no_go = "NO-GO"
+        data["risks"] = list(data.get("risks", [])) + [
+            f"Competition too high: score {comp_score}/20 < required {COMPETITION_MIN} "
+            f"(~{data['competition'].get('estimated_competing_books','?')} quality competing books)"
+        ]
+    if lang_sat_score < LANGUAGE_SAT_MIN:
+        go_no_go = "NO-GO"
+        data["risks"] = list(data.get("risks", [])) + [
+            f"Language market saturated: score {lang_sat_score}/10 < required {LANGUAGE_SAT_MIN} "
+            f"(~{data['language_saturation'].get('estimated_books_in_language','?')} books already in {topic['language']})"
+        ]
 
     result = {
         "slug": topic.get("slug", ""),

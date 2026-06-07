@@ -37,12 +37,13 @@ Current keywords: {current_keywords}
 Current description (first 300 chars): {description_preview}
 
 RESEARCH TASKS — use web search:
-1. Search "{title_en}" amazon.{tld} — find top 5 competing books
-2. Search "{niche_en}" kindle ebook amazon.{tld} bestseller — find top sellers
-3. Search for each top book: note their title, subtitle, keywords visible in URL/metadata
-4. Search "amazon kindle {niche_en} categories {tld}" — find sub-categories with fewer books
-5. Search buyer search phrases: how do readers search for "{niche_en}" books in {language}?
-6. Check: what price do the top 5 books sell for?
+1. Search "{niche_en}" kindle ebook amazon.{tld} — count how many quality books (10+ reviews) appear
+2. Search "{title_en}" site:amazon.{tld} kindle — find direct competitors and their review counts
+3. Search "{niche_en}" kindle ebook {language} — how many written in {language} specifically?
+4. Search "amazon kindle categories {niche_en}" site:kdp.amazon.com OR site:amazon.{tld} — find sub-categories
+5. For each sub-category found: estimate how many books it has (smaller = easier to rank)
+6. Search buyer phrases: how do {language}-speaking readers search for this topic? What exact phrases?
+7. Check top 5 competitors: what keywords do their titles/subtitles use?
 
 After research, provide a full SEO upgrade:
 
@@ -58,9 +59,10 @@ Return ONLY valid JSON:
     "keyword phrase 7"
   ],
   "categories": [
-    "Best category path 1 (low competition, high relevance)",
-    "Best category path 2"
+    "Best category path 1 — lowest book count, still highly relevant",
+    "Best category path 2 — second best option"
   ],
+  "category_book_counts": [<estimated books in category 1>, <estimated books in category 2>],
   "optimized_title": "Improved title if needed (keep in {language}, return original if already good)",
   "optimized_subtitle": "Improved subtitle if needed (keep in {language})",
   "optimized_description": "Full SEO-optimized description in {language} (700-1500 chars). Must include top buyer-intent phrases naturally. Use short paragraphs.",

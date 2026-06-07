@@ -39,29 +39,38 @@ MARKETPLACES = [
     {"tld": "co.jp","language": "Japanese", "lang_code": "ja", "marketplace": "amazon.co.jp"},
 ]
 
-DISCOVERY_PROMPT = """You are a KDP niche analyst. Use web search to find 5 profitable ebook opportunities.
+DISCOVERY_PROMPT = """You are a KDP niche analyst. Use web search to find 5 HIGH-DEMAND, LOW-COMPETITION ebook opportunities.
+
+PRIMARY GOAL: Find niches where REAL buyers are searching but FEW quality books exist.
+A niche with 10,000 buyers and 20 competing books beats a niche with 100,000 buyers and 5,000 books.
 
 Existing books to AVOID duplicating:
 {existing_books}
 
-SEARCH STRATEGY — run these searches:
-1. "kindle ebook bestseller" amazon.de site:amazon.de 2025 2026 — trending German niches
-2. "kindle ebook bestseller" amazon.fr 2025 2026 — French niches
-3. "ebook à succès" OR "bestseller kindle" amazon.fr 2025 — French buyer demand
-4. trending amazon kindle niche 2026 non-fiction — English market gaps
-5. "kindle libro electronico" OR "ebook exito" amazon.es 2026 — Spanish niches
-6. self-help productivity kindle bestseller underserved niche 2025 2026
-7. amazon kindle low competition high demand niche 2026 non-fiction
+SEARCH STRATEGY — run ALL these searches:
+1. amazon kindle ebook low competition high demand niche 2025 2026 non-fiction
+2. "kindle direct publishing" underserved niche non-fiction {language_hint} 2026
+3. amazon.de kindle ebook "wenige Ergebnisse" OR "nur wenige" — German niches with few results
+4. amazon.fr kindle ebook "peu de résultats" OR niche sous-représentée — French gaps
+5. amazon.es kindle ebook nicho poco competido — Spanish under-served niches
+6. amazon.nl OR amazon.pl kindle ebook — Dutch/Polish market gaps (very few quality books exist)
+7. "{niche_hint}" kindle ebook site:amazon.de — check real result counts in German market
+8. self-help OR productivity OR finance OR parenting kindle niche gap 2026 non-English
 
-SELECTION CRITERIA (must satisfy ALL):
-- Non-fiction only (no romance/fantasy/fiction/novel)
-- High search demand, low competition (under 500 quality competing books ideal)
-- Practical, how-to, workbook, guide format preferred
-- Target working adults (25-55 years)
-- Under-served in target language (few quality books in that language)
-- Legally safe (no medical advice, investment advice, supplements, children)
+FOR EACH CANDIDATE — you MUST verify:
+- Search the niche on amazon.{tld}: how many books appear with 10+ reviews and 4+ stars?
+- If >500 quality competing books → REJECT this niche, pick another
+- Does demand evidence exist? (search volume, buyer forums, reddit discussions)
 
-Return JSON array of EXACTLY 5 candidates:
+HARD FILTER — only include if ALL pass:
+✅ Non-fiction, practical (how-to, guide, workbook)
+✅ Under 500 quality competing books in the target marketplace
+✅ Under 40 quality books written IN the target language specifically
+✅ Real buyer demand evidence found (not just "this topic exists")
+✅ Target working adults 25-55, legally safe topic
+✅ NOT in existing books list above
+
+Return JSON array of EXACTLY 5 candidates (already filtered to low-competition only):
 [
   {{
     "title": "Book title in target language",
@@ -73,8 +82,10 @@ Return JSON array of EXACTLY 5 candidates:
     "niche": "niche category in English",
     "title_en": "English translation of title",
     "description_en": "2-sentence English description of what the book covers",
-    "demand_evidence": "What search results showed about demand",
-    "competition_note": "How saturated is this niche"
+    "demand_evidence": "Specific evidence: search volume, Reddit/forum discussions, buyer search terms found",
+    "verified_competing_books": <integer — actual count of quality books (10+ reviews, 4+ stars) you found>,
+    "verified_books_in_language": <integer — quality books specifically in this language>,
+    "competition_note": "Why this is low competition — what gap exists"
   }},
   ...
 ]
@@ -96,7 +107,16 @@ def get_existing_books() -> str:
 def discover_candidates(existing_books: str) -> list[dict]:
     """Ask GPT-4.1 with web search to find 5 candidate topics."""
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    prompt = DISCOVERY_PROMPT.format(existing_books=existing_books)
+    # language_hint: push toward under-represented languages in existing library
+    existing_langs = [ln for ln in ["German","French","Spanish","Italian","Dutch","Polish","Japanese"]
+                      if ln.lower() not in existing_books.lower()]
+    language_hint = ", ".join(existing_langs[:4]) if existing_langs else "non-English"
+    niche_hint = "personal finance, career skills, productivity, parenting, health habits, sustainability"
+    prompt = DISCOVERY_PROMPT.format(
+        existing_books=existing_books,
+        language_hint=language_hint,
+        niche_hint=niche_hint,
+    )
 
     response = client.responses.create(
         model="gpt-4.1",
@@ -139,12 +159,28 @@ def _slug_exists(slug: str) -> bool:
     return (KDP_DIR / slug).exists()
 
 
+def _opportunity_score(c: dict) -> float:
+    """
+    Weighted ranking score that prioritises low competition over raw total.
+    competition (20pts) × 2.5 + language_saturation (10pts) × 2.0 + demand (20pts) × 1.0
+    This ensures a blue-ocean topic with moderate demand ranks above a saturated
+    topic with very high demand.
+    """
+    ms = c.get("_market_score", {})
+    scores = ms.get("scores", {})
+    comp   = scores.get("competition",        {}).get("score", 0)
+    lang   = scores.get("language_saturation",{}).get("score", 0)
+    demand = scores.get("demand",             {}).get("score", 0)
+    return comp * 2.5 + lang * 2.0 + demand * 1.0
+
+
 def scout(save_candidates_to: Path | None = None) -> dict:
     """
     Main entry: discover, score, and return the best GO topic.
+    Ranking is weighted toward low competition + language gap.
     Raises RuntimeError if no GO topic found.
     """
-    from market_intelligence import score_topic, THRESHOLD, print_summary
+    from market_intelligence import score_topic, THRESHOLD, COMPETITION_MIN, LANGUAGE_SAT_MIN, print_summary
 
     existing_books = get_existing_books()
     print(f"[topic_scout] Discovering candidates (existing: {existing_books.count(chr(10))+1} books)...")
@@ -167,11 +203,25 @@ def scout(save_candidates_to: Path | None = None) -> dict:
             c["_market_score"] = result
             c["_total_score"] = result["total_score"]
             c["_go_no_go"] = result["go_no_go"]
+            c["_opportunity_score"] = _opportunity_score(c)
+            comp  = result["scores"]["competition"]["score"]
+            lang  = result["scores"]["language_saturation"]["score"]
             print_summary(result)
+            print(f"  Opportunity score: {c['_opportunity_score']:.1f} "
+                  f"(competition={comp}/20, lang_gap={lang}/10)")
+            if result["go_no_go"] == "NO-GO":
+                reasons = []
+                if comp < COMPETITION_MIN:
+                    reasons.append(f"competition {comp}/20 < {COMPETITION_MIN}")
+                if lang < LANGUAGE_SAT_MIN:
+                    reasons.append(f"lang_saturation {lang}/10 < {LANGUAGE_SAT_MIN}")
+                if reasons:
+                    print(f"  BLOCKED by hard gate: {', '.join(reasons)}")
         except Exception as e:
             print(f"  WARNING: scoring failed: {e}")
             c["_total_score"] = 0
             c["_go_no_go"] = "ERROR"
+            c["_opportunity_score"] = 0
 
         scored.append(c)
         time.sleep(2)  # brief pause between API calls
@@ -182,7 +232,7 @@ def scout(save_candidates_to: Path | None = None) -> dict:
         )
         print(f"\n[topic_scout] Candidates saved: {save_candidates_to}")
 
-    # Pick best GO topic
+    # Pick best GO topic — ranked by opportunity score (weights competition heavily)
     go_topics = [
         c for c in scored
         if c.get("_go_no_go") == "GO" and not c.get("_skipped")
@@ -190,12 +240,12 @@ def scout(save_candidates_to: Path | None = None) -> dict:
     if not go_topics:
         raise RuntimeError(
             f"No GO topics found among {len(scored)} candidates. "
-            "All scored below threshold or were duplicates."
+            "All failed hard gates (competition/language saturation) or total score threshold."
         )
 
-    best = max(go_topics, key=lambda c: c.get("_total_score", 0))
+    best = max(go_topics, key=lambda c: c.get("_opportunity_score", 0))
     print(f"\n[topic_scout] ✅ Best topic: {best['title']} ({best['language']}) "
-          f"— score {best.get('_total_score', '?')}/100")
+          f"— opportunity {best.get('_opportunity_score','?'):.1f}, total {best.get('_total_score','?')}/100")
     return best
 
 

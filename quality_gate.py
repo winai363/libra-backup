@@ -112,8 +112,9 @@ def _is_fiction(listing: dict) -> bool:
     )
 
 
-def _unreachable_urls(urls: set[str]) -> list[str]:
+def _check_urls(urls: set[str]) -> tuple[list[str], list[str]]:
     failed = []
+    transient = []
     headers = {"User-Agent": "Mozilla/5.0 LibraQualityGate/2.0"}
     with httpx.Client(follow_redirects=True, timeout=10, headers=headers) as client:
         for url in sorted(urls):
@@ -126,7 +127,13 @@ def _unreachable_urls(urls: set[str]) -> list[str]:
                 if response.status_code >= 400:
                     failed.append(f"{url} ({response.status_code})")
             except httpx.HTTPError as exc:
-                failed.append(f"{url} ({type(exc).__name__})")
+                transient.append(f"{url} ({type(exc).__name__})")
+    return failed, transient
+
+
+def _unreachable_urls(urls: set[str]) -> list[str]:
+    """Compatibility wrapper used by existing tests and callers."""
+    failed, _ = _check_urls(urls)
     return failed
 
 
@@ -210,10 +217,16 @@ def validate_book(
     if not fiction and len(valid_urls) < MIN_REFERENCES:
         report.error(f"Only {len(valid_urls)} valid reference URLs found; minimum is {MIN_REFERENCES}.")
     if not fiction and check_urls and valid_urls:
-        unreachable = _unreachable_urls(valid_urls)
+        unreachable, transient_url_errors = _check_urls(valid_urls)
         report.metrics["unreachable_urls"] = len(unreachable)
+        report.metrics["transient_url_errors"] = len(transient_url_errors)
         if unreachable:
             report.error(f"Unreachable reference URLs: {unreachable[:8]}")
+        if transient_url_errors:
+            report.warning(
+                f"Reference URLs could not be verified due to temporary network errors: "
+                f"{transient_url_errors[:8]}"
+            )
 
     title = str(listing.get("title", "")).strip()
     subtitle = str(listing.get("subtitle", "")).strip()

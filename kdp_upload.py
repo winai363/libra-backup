@@ -65,6 +65,40 @@ async def wait_for_publish_confirmation(page, timeout_ms: int = 120000) -> bool:
     return False
 
 
+def preflight_update(slug: str) -> bool:
+    """Check update readiness without opening a browser or writing to KDP."""
+    if not require_quality_gate(slug):
+        return False
+
+    book_dir = KDP_DIR / slug
+    listing_file = book_dir / "listing.json"
+    epub_file = book_dir / "ebook.epub"
+    if not listing_file.exists():
+        logger.error("Preflight failed: listing.json is missing")
+        return False
+    try:
+        listing = json.loads(listing_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.error("Preflight failed: invalid listing.json: %s", exc)
+        return False
+    if not listing.get("kdp_book_id"):
+        logger.error("Preflight failed: kdp_book_id is missing")
+        return False
+    if not epub_file.exists() or epub_file.stat().st_size < 5_000:
+        logger.error("Preflight failed: ebook.epub is missing or invalid")
+        return False
+    if not SESSION_FILE.exists() or SESSION_FILE.stat().st_size == 0:
+        logger.error("Preflight failed: KDP session file is missing")
+        return False
+
+    logger.info(
+        "Preflight passed for %s (book_id=%s). No browser opened and no KDP write made.",
+        slug,
+        listing["kdp_book_id"],
+    )
+    return True
+
+
 def require_quality_gate(slug: str) -> bool:
     """Block every KDP write unless the deterministic 40-page gate passes."""
     try:
@@ -1176,13 +1210,16 @@ async def update_ebook_content(slug: str) -> bool:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python3 kdp_upload.py <slug> [--update]")
+        print("Usage: python3 kdp_upload.py <slug> [--update|--preflight-update]")
         sys.exit(1)
 
     slug = sys.argv[1]
     update_mode = "--update" in sys.argv
+    preflight_mode = "--preflight-update" in sys.argv
 
-    if update_mode:
+    if preflight_mode:
+        result = preflight_update(slug)
+    elif update_mode:
         result = asyncio.run(update_ebook_content(slug))
     else:
         result = asyncio.run(upload_to_kdp(slug))

@@ -65,6 +65,45 @@ async def wait_for_publish_confirmation(page, timeout_ms: int = 120000) -> bool:
     return False
 
 
+async def wait_for_pricing_page(page, timeout_seconds: int = 900) -> bool:
+    """Wait for KDP file preparation and confirm navigation to pricing."""
+    waited = 0
+    while waited < timeout_seconds:
+        if "/pricing" in page.url:
+            return True
+        try:
+            error_el = await page.query_selector(
+                '.a-alert-error, [data-alert-type="error"], .error-message'
+            )
+            if error_el:
+                error_text = (await error_el.inner_text()).strip()
+                if error_text:
+                    raise RuntimeError(f"KDP content processing error: {error_text[:300]}")
+
+            preparing = await page.query_selector('text="Preparing your files"')
+            if preparing:
+                if waited % 30 == 0:
+                    logger.info("KDP is preparing files (%ss elapsed)", waited)
+            elif "/content" in page.url:
+                save_btn = await page.query_selector(
+                    'button:has-text("Save and Continue"), input[value*="Save and Continue"]'
+                )
+                if save_btn and await save_btn.get_attribute("disabled") is None:
+                    logger.info("File preparation dialog cleared; retrying Save and Continue")
+                    await save_btn.click()
+            await page.wait_for_timeout(10000)
+            waited += 10
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            if "/pricing" in page.url:
+                return True
+            if "navigation" not in str(exc).lower():
+                raise
+            await page.wait_for_timeout(2000)
+    return "/pricing" in page.url
+
+
 def preflight_update(slug: str) -> bool:
     """Check update readiness without opening a browser or writing to KDP."""
     if not require_quality_gate(slug):
@@ -154,7 +193,7 @@ async def set_ai_disclosure(page) -> None:
     # text: prefer "Entire work", fall back to "Some content" if unavailable on update
     selections = {
         "generative-ai-questionnaire-text": (["Entire work", "Some content"], "GPT-4.1"),
-        "generative-ai-questionnaire-images": (["Some AI-generated images", "Many AI-generated images", "Some images", "Some content"], "gpt-image-1"),
+        "generative-ai-questionnaire-images": (["Some AI-generated images", "Some images", "Some content"], "gpt-image-1"),
         "generative-ai-questionnaire-translations": (["None"], None),
     }
     for selector_id, (candidates, tool_name) in selections.items():
@@ -1148,14 +1187,14 @@ async def update_ebook_content(slug: str) -> bool:
                     if not disabled:
                         await save_btn.click()
                         logger.info("✓ Clicked Save and Continue")
-                        # Wait for navigation to pricing page (can take 15-30s after AI disclosures)
-                        try:
-                            await page.wait_for_url("**/pricing**", timeout=60000)
+                        content_saved = await wait_for_pricing_page(page)
+                        if content_saved:
                             logger.info(f"✓ Navigated to: {page.url}")
-                        except Exception:
-                            logger.warning(f"Navigation to pricing not confirmed — current url: {page.url}")
-                            await page.wait_for_timeout(5000)
-                        content_saved = True
+                        else:
+                            logger.error(
+                                "KDP did not reach pricing after content processing (url=%s)",
+                                page.url,
+                            )
                         break
                 await page.wait_for_timeout(10000)
                 waited += 10
@@ -1192,8 +1231,10 @@ async def update_ebook_content(slug: str) -> bool:
             # Update listing status
             data["kdp_uploading"] = False
             data["content_updated_at"] = datetime.now().strftime("%Y-%m-%d")
+            data["update_submission_confirmed_at"] = datetime.now().isoformat(timespec="seconds")
             data["status"] = "uploaded"
             data["kdp_error"] = ""
+            data["quality_errors"] = []
             listing_file.write_text(json.dumps(data, ensure_ascii=False, indent=2))
 
             await notify(f"✅ <b>KDP Content Updated</b>\n{title}\n\nEPUB re-uploaded with layout fixes.")

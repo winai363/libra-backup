@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Libra Profit</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: #0f172a; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
+</style>
+</head>
+<body class="min-h-screen">
+  <div class="max-w-5xl mx-auto p-4 md:p-6">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <div>
+        <h1 class="text-2xl font-bold text-amber-400">Libra Profit Dashboard</h1>
+        <p class="text-slate-400 text-sm">Portfolio traction, estimated revenue, and next actions</p>
+      </div>
+      <a href="/libra/" class="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 text-sm hover:bg-slate-700">Back to Books</a>
+    </div>
+
+    <div id="loading" class="text-slate-400">Loading...</div>
+    <div id="content" class="hidden space-y-6">
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3" id="summary"></div>
+
+      <section class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+        <h2 class="font-bold text-white mb-3">Needs Attention</h2>
+        <div id="attention" class="space-y-2"></div>
+      </section>
+
+      <section class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+        <div class="p-4 border-b border-slate-700">
+          <h2 class="font-bold text-white">All Books</h2>
+          <p class="text-xs text-slate-400 mt-1">Revenue is estimated from recorded snapshots. No snapshot = no real KDP sales data yet.</p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-900/60 text-slate-400">
+              <tr>
+                <th class="text-left p-3">Book</th>
+                <th class="text-right p-3">30d Rev</th>
+                <th class="text-right p-3">Units</th>
+                <th class="text-right p-3">KENP</th>
+                <th class="text-left p-3">Action</th>
+              </tr>
+            </thead>
+            <tbody id="books" class="divide-y divide-slate-700"></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </div>
+
+<script>
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function money(value) {
+  return '$' + Number(value || 0).toFixed(2);
+}
+
+function badge(action) {
+  const colors = {
+    winner: 'bg-emerald-500/20 text-emerald-300',
+    momentum: 'bg-blue-500/20 text-blue-300',
+    watch: 'bg-slate-600 text-slate-200',
+    warming_up: 'bg-amber-500/20 text-amber-300',
+    needs_data: 'bg-purple-500/20 text-purple-300',
+    optimize_metadata: 'bg-orange-500/20 text-orange-300',
+    low_visibility: 'bg-orange-500/20 text-orange-300',
+    fix_quality: 'bg-red-500/20 text-red-300',
+    review_or_kill: 'bg-red-500/20 text-red-300',
+  };
+  return `<span class="inline-flex px-2 py-1 rounded-full text-xs font-medium ${colors[action] || colors.watch}">${escapeHtml(action)}</span>`;
+}
+
+async function load() {
+  const res = await fetch('/libra/api/profit/portfolio', { credentials: 'include' });
+  if (res.status === 401) {
+    window.location.href = '/libra/';
+    return;
+  }
+  const data = await res.json();
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('content').classList.remove('hidden');
+  render(data);
+}
+
+function render(data) {
+  const s = data.summary;
+  const cards = [
+    ['Books', data.book_count],
+    ['With Data', s.books_with_data],
+    ['7d Revenue', money(s.estimated_revenue_7d_usd)],
+    ['30d Revenue', money(s.estimated_revenue_30d_usd)],
+    ['30d KENP', s.kenp_30d],
+  ];
+  document.getElementById('summary').innerHTML = cards.map(([label, value]) => `
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+      <p class="text-xs text-slate-400">${label}</p>
+      <p class="text-xl font-bold text-white mt-1">${escapeHtml(value)}</p>
+    </div>
+  `).join('');
+
+  const attention = data.attention || [];
+  document.getElementById('attention').innerHTML = attention.length
+    ? attention.map(book => `
+      <div class="bg-slate-900/50 rounded-lg p-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <p class="font-medium text-white">${escapeHtml(book.title)}</p>
+          ${badge(book.action)}
+        </div>
+        <p class="text-slate-400 text-xs mt-1">${escapeHtml(book.reason)}</p>
+      </div>
+    `).join('')
+    : '<p class="text-slate-400 text-sm">No urgent action right now.</p>';
+
+  document.getElementById('books').innerHTML = (data.books || []).map(book => `
+    <tr class="hover:bg-slate-700/30">
+      <td class="p-3 min-w-[280px]">
+        <p class="font-medium text-white">${escapeHtml(book.title)}</p>
+        <p class="text-xs text-slate-500">${escapeHtml(book.slug)} · ${escapeHtml(book.language)} · ${book.days_live ?? '?'} days</p>
+      </td>
+      <td class="p-3 text-right">${money(book.totals_30d.revenue_usd)}</td>
+      <td class="p-3 text-right">${book.totals_30d.units}</td>
+      <td class="p-3 text-right">${book.totals_30d.kenp}</td>
+      <td class="p-3 min-w-[260px]">
+        ${badge(book.action)}
+        <p class="text-xs text-slate-400 mt-1">${escapeHtml(book.reason)}</p>
+      </td>
+    </tr>
+  `).join('');
+}
+
+load().catch(err => {
+  document.getElementById('loading').textContent = 'Error: ' + err.message;
+});
+</script>
+</body>
+</html>

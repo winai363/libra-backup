@@ -725,6 +725,39 @@ async def status_page(request: Request):
     return HTMLResponse(html_path.read_text())
 
 
+@app.get("/api/profit/portfolio")
+async def profit_portfolio(request: Request):
+    """Return portfolio-level traction and estimated revenue analytics."""
+    check_auth(request)
+    from profit_tracker import build_portfolio
+    return build_portfolio()
+
+
+@app.post("/api/profit/{slug}/snapshot")
+async def record_profit_snapshot(slug: str, request: Request):
+    """Record one KDP feedback snapshot for profit tracking."""
+    check_auth(request)
+    get_book_dir(slug)
+    body = await request.json()
+    allowed = {
+        "date", "bsr", "units_7d", "kenp_7d", "impressions_7d",
+        "reviews_count", "avg_rating", "revenue_usd",
+    }
+    snapshot = {k: body[k] for k in allowed if k in body}
+    if not snapshot:
+        raise HTTPException(status_code=400, detail="No snapshot fields provided")
+    from feedback_loop import record_snapshot
+    result = record_snapshot(slug, snapshot)
+    return {"ok": True, "snapshot": result}
+
+
+@app.get("/profit", response_class=HTMLResponse)
+async def profit_page(request: Request):
+    check_auth(request)
+    html_path = Path(__file__).parent / "templates" / "profit.html"
+    return HTMLResponse(html_path.read_text())
+
+
 # ── Live Audit endpoints ───────────────────────────────────────────────────────
 
 @app.get("/api/audit/report")

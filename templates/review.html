@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Review Book - Libra</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: #0f172a; color: #e2e8f0; font-family: 'Poppins', sans-serif; }
+    h1, h2, h3, button { font-family: 'Montserrat', sans-serif; }
+    .book-card { background: #1e293b; border-left: 4px solid #f59e0b; }
+  </style>
+</head>
+<body class="min-h-screen p-4">
+  <div class="max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="mb-8">
+      <h1 class="text-4xl font-bold text-amber-400 mb-2">📖 Review Book</h1>
+      <p class="text-slate-400">Check all details before uploading to KDP</p>
+    </div>
+
+    <!-- Book Details -->
+    <div id="loading" class="text-center py-8">
+      <div class="animate-spin h-8 w-8 border-2 border-amber-400 border-t-transparent rounded-full mx-auto mb-3"></div>
+      <p>Loading book details...</p>
+    </div>
+
+    <div id="content" class="hidden space-y-6">
+      <!-- Cover Preview -->
+      <div class="book-card p-6 rounded-lg">
+        <h2 class="text-xl font-bold mb-4">📸 Cover</h2>
+        <img id="coverImg" src="" alt="Book cover" class="w-full max-w-xs rounded-lg shadow-lg mx-auto">
+      </div>
+
+      <!-- Basic Info -->
+      <div class="book-card p-6 rounded-lg">
+        <h2 class="text-xl font-bold mb-4">📝 Basic Information</h2>
+        <div class="space-y-3">
+          <div>
+            <label class="text-slate-400 text-sm">Title</label>
+            <p id="title" class="text-lg font-semibold"></p>
+          </div>
+          <div>
+            <label class="text-slate-400 text-sm">Subtitle</label>
+            <p id="subtitle" class="text-lg"></p>
+          </div>
+          <div>
+            <label class="text-slate-400 text-sm">Language</label>
+            <p id="language" class="text-lg"></p>
+          </div>
+          <div>
+            <label class="text-slate-400 text-sm">Author</label>
+            <p class="text-lg">WK Bui</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Description -->
+      <div class="book-card p-6 rounded-lg">
+        <h2 class="text-xl font-bold mb-4">📖 Description</h2>
+        <p id="description" class="text-slate-300 leading-relaxed"></p>
+      </div>
+
+      <!-- Keywords -->
+      <div class="book-card p-6 rounded-lg">
+        <h2 class="text-xl font-bold mb-4">🏷️ Keywords</h2>
+        <div id="keywords" class="flex flex-wrap gap-2"></div>
+      </div>
+
+      <!-- Files Status -->
+      <div class="book-card p-6 rounded-lg">
+        <h2 class="text-xl font-bold mb-4">📦 Files</h2>
+        <div class="space-y-2">
+          <div id="epubStatus" class="flex items-center gap-2"></div>
+          <div id="pdfStatus" class="flex items-center gap-2"></div>
+          <div id="coverStatus" class="flex items-center gap-2"></div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex gap-4 pt-6">
+        <button onclick="rejectApproval()" class="flex-1 bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 transition">
+          ❌ Reject & Edit
+        </button>
+        <button onclick="approveUpload()" class="flex-1 bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 transition">
+          ✅ Approve & Upload to KDP
+        </button>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div id="error" class="hidden bg-red-900 text-red-200 p-4 rounded-lg">
+      <p id="errorMsg"></p>
+    </div>
+  </div>
+
+  <script>
+    const slug = new URLSearchParams(window.location.search).get('slug') || window.location.pathname.split('/').pop();
+
+    async function loadBookDetails() {
+      try {
+        const res = await fetch(`/libra/api/books?status=ready`, {
+          credentials: 'include'
+        });
+        if (!res.ok) {
+          // Redirect to login if not authenticated
+          window.location.href = '/libra/?redirect=review/' + slug;
+          return;
+        }
+
+        const books = await res.json();
+        const book = books.find(b => b.slug === slug);
+        if (!book) throw new Error('Book not found');
+
+        // Display cover
+        document.getElementById('coverImg').src = `/libra/api/books/${slug}/cover`;
+
+        // Display info
+        document.getElementById('title').textContent = book.title;
+        document.getElementById('subtitle').textContent = book.subtitle || '(No subtitle)';
+        document.getElementById('language').textContent = book.language || 'Unknown';
+        document.getElementById('description').textContent = book.description || '(No description)';
+
+        // Display keywords
+        const keywordsDiv = document.getElementById('keywords');
+        if (book.keywords && book.keywords.length > 0) {
+          keywordsDiv.innerHTML = book.keywords.map(k =>
+            `<span class="bg-amber-900 text-amber-200 px-3 py-1 rounded-full text-sm">${k}</span>`
+          ).join('');
+        } else {
+          keywordsDiv.textContent = '(No keywords)';
+        }
+
+        // Display file status
+        const epubStatus = document.getElementById('epubStatus');
+        epubStatus.innerHTML = book.has_epub
+          ? `<span class="text-green-400">✅</span> <span>EPUB: ${book.epub_name || 'ebook.epub'}</span>`
+          : `<span class="text-red-400">❌</span> <span>EPUB: Missing</span>`;
+
+        const pdfStatus = document.getElementById('pdfStatus');
+        pdfStatus.innerHTML = book.has_pdf
+          ? `<span class="text-green-400">✅</span> <span>PDF (Paperback): ${book.pdf_name || 'paperback.pdf'}</span>`
+          : `<span class="text-yellow-400">⚠️</span> <span>PDF (Paperback): Not generated yet</span>`;
+
+        const coverStatus = document.getElementById('coverStatus');
+        coverStatus.innerHTML = book.has_cover
+          ? `<span class="text-green-400">✅</span> <span>Cover Image: cover.jpg</span>`
+          : `<span class="text-red-400">❌</span> <span>Cover Image: Missing</span>`;
+
+        // Show content
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('content').classList.remove('hidden');
+
+      } catch (err) {
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('error').classList.remove('hidden');
+        document.getElementById('errorMsg').textContent = err.message;
+      }
+    }
+
+    async function approveUpload() {
+      if (!confirm('Approve and upload this book to KDP?')) return;
+
+      document.getElementById('content').classList.add('hidden');
+      document.getElementById('loading').classList.remove('hidden');
+      document.getElementById('loading').innerHTML = '<p>⏳ Uploading to KDP...</p>';
+
+      try {
+        const res = await fetch(`/libra/api/books/${slug}/approve-kdp`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (res.ok) {
+          document.getElementById('loading').innerHTML = `
+            <div class="text-center">
+              <p class="text-green-400 text-lg font-bold mb-2">✅ Approved!</p>
+              <p>Your book is uploading to KDP.</p>
+              <p class="text-slate-400 text-sm mt-2">Check Telegram for updates.</p>
+            </div>
+          `;
+        } else {
+          throw new Error(await res.text());
+        }
+      } catch (err) {
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('error').classList.remove('hidden');
+        document.getElementById('errorMsg').textContent = err.message;
+      }
+    }
+
+    async function rejectApproval() {
+      if (!confirm('Move this book back to Queue for editing?')) return;
+
+      try {
+        const res = await fetch(`/libra/api/books/${slug}/status`, {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'ready' })
+        });
+
+        if (res.ok) {
+          window.location.href = '/libra/';
+        } else {
+          throw new Error('Failed to reject');
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    // Load on page open
+    loadBookDetails();
+  </script>
+</body>
+</html>

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Preview Book - Libra</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&family=Montserrat:wght@600;700;800&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    body { background: #0f172a; color: #e2e8f0; font-family: 'Poppins', sans-serif; }
+    h1, h2, h3 { font-family: 'Montserrat', sans-serif; }
+
+    /* Book content styling */
+    #bookContent {
+      font-family: 'Merriweather', serif;
+      line-height: 1.9;
+      font-size: 1.05rem;
+      color: #cbd5e1;
+    }
+    #bookContent h1 { font-family: 'Montserrat', sans-serif; font-size: 1.8rem; font-weight: 700; color: #f59e0b; margin: 2.5rem 0 1rem; border-bottom: 2px solid #334155; padding-bottom: 0.5rem; }
+    #bookContent h2 { font-family: 'Montserrat', sans-serif; font-size: 1.4rem; font-weight: 600; color: #fbbf24; margin: 2rem 0 0.8rem; }
+    #bookContent h3 { font-family: 'Montserrat', sans-serif; font-size: 1.15rem; font-weight: 600; color: #fcd34d; margin: 1.5rem 0 0.6rem; }
+    #bookContent p { margin: 0.8rem 0; }
+    #bookContent ul, #bookContent ol { margin: 0.8rem 0; padding-left: 1.5rem; }
+    #bookContent li { margin: 0.3rem 0; }
+    #bookContent blockquote { border-left: 4px solid #f59e0b; padding: 0.8rem 1.2rem; margin: 1rem 0; background: #1e293b; border-radius: 0 8px 8px 0; }
+    #bookContent code { background: #1e293b; padding: 0.15rem 0.4rem; border-radius: 4px; font-size: 0.9rem; color: #86efac; }
+    #bookContent pre { background: #1e293b; padding: 1rem; border-radius: 8px; overflow-x: auto; margin: 1rem 0; }
+    #bookContent pre code { background: transparent; padding: 0; }
+    #bookContent strong { color: #f1f5f9; }
+    #bookContent hr { border-color: #334155; margin: 2rem 0; }
+    #bookContent table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+    #bookContent th, #bookContent td { border: 1px solid #334155; padding: 0.5rem 0.8rem; text-align: left; }
+    #bookContent th { background: #1e293b; color: #f59e0b; }
+
+    /* Tab styles */
+    .tab-btn { transition: all 0.2s; }
+    .tab-btn.active { background: #f59e0b; color: #0f172a; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Cover shadow */
+    .cover-shadow { box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(245,158,11,0.1); }
+
+    /* Print styles */
+    @media print {
+      body { background: white; color: black; }
+      #bookContent { color: #1a1a1a; }
+      #bookContent h1, #bookContent h2, #bookContent h3 { color: #333; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+  <!-- Top bar -->
+  <div class="no-print sticky top-0 z-50 bg-slate-900/95 backdrop-blur border-b border-slate-700 px-4 py-3">
+    <div class="max-w-5xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/libra/" class="text-slate-400 hover:text-white transition">← Libra</a>
+        <span class="text-slate-600">|</span>
+        <h1 class="text-lg font-bold text-amber-400">📖 Book Preview</h1>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="window.print()" class="bg-slate-700 text-white px-3 py-1.5 rounded text-sm hover:bg-slate-600 transition">🖨️ Print</button>
+        <button onclick="downloadEpub()" id="btnEpub" class="bg-slate-700 text-white px-3 py-1.5 rounded text-sm hover:bg-slate-600 transition hidden">📥 EPUB</button>
+        <button onclick="approveUpload()" id="btnApprove" class="bg-green-600 text-white px-4 py-1.5 rounded text-sm font-semibold hover:bg-green-700 transition hidden">✅ Approve & Upload</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading" class="flex items-center justify-center py-20">
+    <div class="text-center">
+      <div class="animate-spin h-10 w-10 border-3 border-amber-400 border-t-transparent rounded-full mx-auto mb-4"></div>
+      <p class="text-slate-400">Loading book...</p>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div id="mainContent" class="hidden">
+    <!-- Hero: Cover + Info -->
+    <div class="bg-gradient-to-b from-slate-800 to-slate-900 py-12 px-4">
+      <div class="max-w-5xl mx-auto flex flex-col md:flex-row gap-8 items-start">
+        <!-- Cover -->
+        <div class="flex-shrink-0 mx-auto md:mx-0">
+          <img id="coverImg" src="" alt="Cover" class="w-64 rounded-lg cover-shadow">
+          <div id="coverWarning" class="hidden mt-2 text-sm text-red-400 text-center">⚠️ Cover may be invalid</div>
+        </div>
+        <!-- Info -->
+        <div class="flex-1 min-w-0">
+          <h2 id="bookTitle" class="text-3xl font-bold text-white mb-2"></h2>
+          <p id="bookSubtitle" class="text-xl text-amber-300 mb-4"></p>
+          <div class="flex flex-wrap gap-3 mb-4 text-sm">
+            <span id="bookLang" class="bg-slate-700 px-3 py-1 rounded-full"></span>
+            <span id="bookStatus" class="px-3 py-1 rounded-full"></span>
+            <span id="bookDate" class="bg-slate-700 px-3 py-1 rounded-full text-slate-400"></span>
+          </div>
+          <!-- Keywords -->
+          <div id="keywords" class="flex flex-wrap gap-2 mb-6"></div>
+          <!-- Files -->
+          <div class="bg-slate-800 rounded-lg p-4 space-y-2 text-sm">
+            <h3 class="font-bold text-slate-300 mb-2">Files</h3>
+            <div id="fileEpub" class="flex items-center gap-2"></div>
+            <div id="fileCover" class="flex items-center gap-2"></div>
+            <div id="filePdf" class="flex items-center gap-2"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="no-print max-w-5xl mx-auto px-4 pt-6">
+      <div class="flex gap-2 border-b border-slate-700 pb-0">
+        <button class="tab-btn active px-5 py-2.5 rounded-t-lg font-semibold text-sm" data-tab="description">📋 Description</button>
+        <button class="tab-btn px-5 py-2.5 rounded-t-lg font-semibold text-sm bg-slate-800 text-slate-400 hover:text-white" data-tab="content">📖 Full Content</button>
+      </div>
+    </div>
+
+    <!-- Tab: Description -->
+    <div id="tab-description" class="tab-content active max-w-5xl mx-auto px-4 py-8">
+      <div class="bg-slate-800 rounded-lg p-6">
+        <h3 class="text-lg font-bold text-amber-400 mb-4">KDP Description (Amazon listing)</h3>
+        <div id="bookDescription" class="text-slate-300 leading-relaxed whitespace-pre-line"></div>
+      </div>
+    </div>
+
+    <!-- Tab: Full Content -->
+    <div id="tab-content" class="tab-content max-w-5xl mx-auto px-4 py-8">
+      <div id="contentLoading" class="text-center py-8">
+        <div class="animate-spin h-6 w-6 border-2 border-amber-400 border-t-transparent rounded-full mx-auto mb-3"></div>
+        <p class="text-slate-400">Loading book content...</p>
+      </div>
+      <div id="bookContent" class="bg-slate-800 rounded-lg p-8 hidden"></div>
+      <div id="contentError" class="hidden bg-red-900/50 text-red-300 p-4 rounded-lg"></div>
+    </div>
+  </div>
+
+  <script>
+    const slug = window.location.pathname.split('/').filter(Boolean).pop();
+    let bookData = null;
+
+    // Tab switching
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => {
+          b.classList.remove('active');
+          b.classList.add('bg-slate-800', 'text-slate-400');
+        });
+        btn.classList.add('active');
+        btn.classList.remove('bg-slate-800', 'text-slate-400');
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+
+        // Lazy-load content tab
+        if (btn.dataset.tab === 'content' && !contentLoaded) loadContent();
+      });
+    });
+
+    let contentLoaded = false;
+
+    async function loadBook() {
+      try {
+        // Try all statuses
+        const res = await fetch('/libra/api/books', { credentials: 'include' });
+        if (!res.ok) {
+          window.location.href = '/libra/';
+          return;
+        }
+        const books = await res.json();
+        bookData = books.find(b => b.slug === slug);
+        if (!bookData) throw new Error('Book not found: ' + slug);
+
+        // Cover
+        const coverImg = document.getElementById('coverImg');
+        coverImg.src = `/libra/api/books/${slug}/cover`;
+        coverImg.onerror = () => {
+          coverImg.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="256" height="400" fill="%231e293b"><rect width="256" height="400"/><text x="128" y="200" text-anchor="middle" fill="%23475569" font-size="14">No Cover</text></svg>');
+          document.getElementById('coverWarning').classList.remove('hidden');
+        };
+
+        // Title & subtitle
+        document.getElementById('bookTitle').textContent = bookData.title || slug;
+        document.getElementById('bookSubtitle').textContent = bookData.subtitle || '';
+
+        // Language & status
+        document.getElementById('bookLang').textContent = '🌐 ' + (bookData.language || 'Unknown');
+        const statusEl = document.getElementById('bookStatus');
+        const statusColors = { ready: 'bg-amber-600', uploaded: 'bg-green-600', approved: 'bg-blue-600' };
+        statusEl.textContent = '📌 ' + (bookData.status || 'draft');
+        statusEl.className = `px-3 py-1 rounded-full ${statusColors[bookData.status] || 'bg-slate-600'}`;
+
+        document.getElementById('bookDate').textContent = '📅 ' + (bookData.created_at || '');
+
+        // Keywords
+        const kwDiv = document.getElementById('keywords');
+        if (bookData.keywords?.length) {
+          kwDiv.innerHTML = bookData.keywords.map(k =>
+            `<span class="bg-amber-900/50 text-amber-200 px-3 py-1 rounded-full text-sm border border-amber-700/50">${k}</span>`
+          ).join('');
+        }
+
+        // Description
+        document.getElementById('bookDescription').textContent = bookData.description || '(No description)';
+
+        // Files
+        document.getElementById('fileEpub').innerHTML = bookData.has_epub
+          ? `<span class="text-green-400">✅</span> EPUB: ${bookData.epub_name || 'ebook.epub'} <a href="/libra/api/books/${slug}/epub" class="text-amber-400 underline ml-2">Download</a>`
+          : `<span class="text-red-400">❌</span> EPUB: Missing`;
+        document.getElementById('fileCover').innerHTML = bookData.has_cover
+          ? `<span class="text-green-400">✅</span> Cover: cover.jpg`
+          : `<span class="text-red-400">❌</span> Cover: Missing`;
+        document.getElementById('filePdf').innerHTML = bookData.has_pdf
+          ? `<span class="text-green-400">✅</span> PDF: ${bookData.pdf_name}`
+          : `<span class="text-slate-500">—</span> PDF: Not generated`;
+
+        // Show approve button if status is ready
+        if (bookData.status === 'ready' || bookData.status === 'approved') {
+          document.getElementById('btnApprove').classList.remove('hidden');
+        }
+        if (bookData.has_epub) {
+          document.getElementById('btnEpub').classList.remove('hidden');
+        }
+
+        // Show main content
+        document.getElementById('loading').classList.add('hidden');
+        document.getElementById('mainContent').classList.remove('hidden');
+
+      } catch (err) {
+        document.getElementById('loading').innerHTML = `<div class="text-center text-red-400 py-20"><p class="text-lg">❌ ${err.message}</p><a href="/libra/" class="text-amber-400 underline mt-4 block">← Back to Libra</a></div>`;
+      }
+    }
+
+    async function loadContent() {
+      contentLoaded = true;
+      try {
+        const res = await fetch(`/libra/api/books/${slug}/content`, { credentials: 'include' });
+        if (!res.ok) throw new Error('Content not available');
+        const data = await res.json();
+
+        const contentDiv = document.getElementById('bookContent');
+        contentDiv.textContent = data.content;
+        contentDiv.classList.add('whitespace-pre-wrap');
+        document.getElementById('contentLoading').classList.add('hidden');
+        contentDiv.classList.remove('hidden');
+      } catch (err) {
+        document.getElementById('contentLoading').classList.add('hidden');
+        document.getElementById('contentError').classList.remove('hidden');
+        document.getElementById('contentError').textContent = '❌ ' + err.message + ' — No ebook.md or valid EPUB found.';
+      }
+    }
+
+    function downloadEpub() {
+      window.open(`/libra/api/books/${slug}/epub`, '_blank');
+    }
+
+    async function approveUpload() {
+      if (!confirm('Approve and upload this book to KDP?')) return;
+      try {
+        const res = await fetch(`/libra/api/books/${slug}/approve-kdp`, {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (res.ok) {
+          alert('✅ Approved! Book is uploading to KDP. Check Telegram for updates.');
+          location.reload();
+        } else {
+          throw new Error(await res.text());
+        }
+      } catch (err) {
+        alert('Error: ' + err.message);
+      }
+    }
+
+    loadBook();
+  </script>
+</body>
+</html>

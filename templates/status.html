@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Libra — Pipeline Status</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: #0f172a; color: #e2e8f0; font-family: 'Poppins', sans-serif; }
+  h1, h2, .mono { font-family: 'Montserrat', sans-serif; }
+  .step-dot {
+    width: 32px; height: 32px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; flex-shrink: 0;
+    transition: all 0.2s;
+  }
+  .step-line {
+    flex: 1; height: 3px; border-radius: 2px;
+  }
+  .spin { animation: spin 1.2s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .card-shadow { box-shadow: 0 4px 24px rgba(0,0,0,0.35); }
+</style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+
+<div class="max-w-3xl mx-auto">
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-8">
+    <div>
+      <h1 class="text-3xl font-bold text-amber-400">Libra</h1>
+      <p class="text-slate-400 text-sm mt-1">Book Pipeline Status</p>
+    </div>
+    <div class="text-right">
+      <div id="refresh-badge"
+        class="inline-flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-full px-3 py-1 text-xs text-slate-400">
+        <span id="refresh-dot" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        <span id="refresh-text">Loading...</span>
+      </div>
+      <a href="/libra/" class="block mt-2 text-xs text-slate-500 hover:text-amber-400 transition-colors">← Dashboard</a>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="flex flex-wrap gap-4 mb-6 text-xs text-slate-400">
+    <div class="flex items-center gap-1.5"><span class="step-dot bg-emerald-500/20 text-emerald-400 w-5 h-5 text-xs">✓</span> Done</div>
+    <div class="flex items-center gap-1.5"><span class="step-dot bg-amber-500/20 text-amber-400 w-5 h-5 text-xs spin">↻</span> Running</div>
+    <div class="flex items-center gap-1.5"><span class="step-dot bg-red-500/20 text-red-400 w-5 h-5 text-xs">!</span> Error</div>
+    <div class="flex items-center gap-1.5"><span class="step-dot bg-slate-700 text-slate-500 w-5 h-5 text-xs">○</span> Pending</div>
+  </div>
+
+  <!-- Book cards -->
+  <div id="books-container" class="space-y-4">
+    <div class="text-center text-slate-500 py-12">Loading...</div>
+  </div>
+
+  <p id="generated-at" class="text-center text-xs text-slate-600 mt-8"></p>
+</div>
+
+<script>
+const STEPS = [
+  { key: "generate", label: "Generate",  icon: "✍" },
+  { key: "epub",     label: "EPUB",      icon: "📖" },
+  { key: "cover",    label: "Cover",     icon: "🎨" },
+  { key: "upload",   label: "KDP Upload",icon: "⬆" },
+  { key: "pdf",      label: "PDF",       icon: "📄" },
+];
+
+const LANG_FLAG = {
+  German: "🇩🇪", Italian: "🇮🇹", English: "🇬🇧", Spanish: "🇪🇸",
+  French: "🇫🇷", Portuguese: "🇧🇷", Dutch: "🇳🇱", Japanese: "🇯🇵",
+  Korean: "🇰🇷", Chinese: "🇨🇳", Vietnamese: "🇻🇳",
+};
+
+function stepDot(stepKey, book) {
+  const done   = book.steps[stepKey];
+  const active = book.current_step === stepKey && book.kdp_uploading;
+  const error  = book.kdp_error && book.current_step === stepKey;
+
+  if (active) {
+    return `<div class="step-dot bg-amber-500/20 text-amber-400 spin border border-amber-500/40" title="${stepKey} running">↻</div>`;
+  }
+  if (error && !done) {
+    return `<div class="step-dot bg-red-500/20 text-red-400 border border-red-500/40" title="${book.kdp_error}">!</div>`;
+  }
+  if (done) {
+    return `<div class="step-dot bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">✓</div>`;
+  }
+  return `<div class="step-dot bg-slate-800 text-slate-600 border border-slate-700">○</div>`;
+}
+
+function stepLine(fromKey, book) {
+  const done = book.steps[fromKey];
+  return `<div class="step-line ${done ? 'bg-emerald-500/30' : 'bg-slate-700/50'}"></div>`;
+}
+
+function statusBadge(book) {
+  if (book.kdp_uploading) {
+    return `<span class="inline-block bg-amber-500/15 text-amber-400 text-xs px-2 py-0.5 rounded-full border border-amber-500/30">⏳ Uploading...</span>`;
+  }
+  if (book.current_step === "done") {
+    if (book.kdp_book_id) {
+      return `<span class="inline-block bg-emerald-500/15 text-emerald-400 text-xs px-2 py-0.5 rounded-full border border-emerald-500/30">✅ Complete</span>`;
+    }
+    return `<span class="inline-block bg-emerald-500/15 text-emerald-400 text-xs px-2 py-0.5 rounded-full border border-emerald-500/30">✅ Done</span>`;
+  }
+  if (book.kdp_error) {
+    return `<span class="inline-block bg-red-500/15 text-red-400 text-xs px-2 py-0.5 rounded-full border border-red-500/30">❌ Error</span>`;
+  }
+  const step = STEPS.find(s => s.key === book.current_step);
+  return `<span class="inline-block bg-slate-700/60 text-slate-300 text-xs px-2 py-0.5 rounded-full border border-slate-600">⏳ ${step ? step.label : book.current_step}</span>`;
+}
+
+function renderBook(book) {
+  const flag = LANG_FLAG[book.language] || "🌐";
+  const date = book.created_at ? book.created_at.split(" ")[0] : "";
+  const kdpLink = book.kdp_book_id
+    ? `<a href="https://kdp.amazon.com/en_US/title-setup/kindle/${book.kdp_book_id}/details"
+          target="_blank" class="text-xs text-amber-400 hover:underline ml-2">KDP ↗</a>`
+    : "";
+
+  const pipelineHtml = STEPS.map((step, i) => {
+    const dot = stepDot(step.key, book);
+    const line = i < STEPS.length - 1 ? stepLine(step.key, book) : "";
+    return `
+      <div class="flex flex-col items-center gap-1">
+        ${dot}
+        <span class="text-xs text-slate-500 text-center leading-tight w-14">${step.label}</span>
+      </div>
+      ${line ? `<div class="flex-1 mt-4">${line.replace('class="step-line', 'class="step-line h-0.5 mt-4')}</div>` : ""}
+    `;
+  }).join("");
+
+  const errorHtml = book.kdp_error
+    ? `<div class="mt-3 bg-red-900/20 border border-red-500/20 rounded-lg px-3 py-2 text-xs text-red-400 break-all">${book.kdp_error}</div>`
+    : "";
+
+  return `
+    <div class="bg-slate-800/70 border border-slate-700/60 rounded-2xl p-5 card-shadow">
+      <div class="flex items-start justify-between gap-3 mb-4">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-lg">${flag}</span>
+            <h2 class="text-sm font-semibold text-white leading-snug">${book.title}</h2>
+            ${kdpLink}
+          </div>
+          <div class="flex items-center gap-3 mt-1">
+            <span class="text-xs text-slate-500">${book.language} · ${date}</span>
+            ${statusBadge(book)}
+          </div>
+        </div>
+      </div>
+
+      <!-- Pipeline steps -->
+      <div class="flex items-center gap-0">
+        ${STEPS.map((step, i) => {
+          const dot = stepDot(step.key, book);
+          const isDone = book.steps[step.key];
+          const lineColor = isDone ? "bg-emerald-500/30" : "bg-slate-700/50";
+          return `
+            <div class="flex flex-col items-center">
+              ${dot}
+              <span class="text-xs text-slate-500 mt-1 text-center w-14 leading-tight">${step.label}</span>
+            </div>
+            ${i < STEPS.length - 1 ? `<div class="flex-1 h-0.5 mb-5 ${lineColor}"></div>` : ""}
+          `;
+        }).join("")}
+      </div>
+
+      ${errorHtml}
+    </div>
+  `;
+}
+
+let autoRefreshTimer = null;
+
+async function load() {
+  try {
+    const r = await fetch("/libra/api/pipeline-status");
+    if (!r.ok) throw new Error("fetch failed");
+    const data = await r.json();
+    const container = document.getElementById("books-container");
+
+    if (!data.books || data.books.length === 0) {
+      container.innerHTML = `<div class="text-center text-slate-500 py-12">No books found.</div>`;
+    } else {
+      container.innerHTML = data.books.map(renderBook).join("");
+    }
+
+    document.getElementById("generated-at").textContent = "Updated: " + data.generated_at;
+    document.getElementById("refresh-text").textContent = "Live";
+    document.getElementById("refresh-dot").classList.add("bg-emerald-500");
+    document.getElementById("refresh-dot").classList.remove("bg-slate-500");
+
+    // Auto-refresh every 15s if any book is uploading, else every 60s
+    const anyUploading = data.books.some(b => b.kdp_uploading);
+    const interval = anyUploading ? 15_000 : 60_000;
+    clearTimeout(autoRefreshTimer);
+    autoRefreshTimer = setTimeout(load, interval);
+  } catch(e) {
+    document.getElementById("refresh-text").textContent = "Offline";
+    document.getElementById("refresh-dot").classList.remove("bg-emerald-500");
+    document.getElementById("refresh-dot").classList.add("bg-red-500");
+    autoRefreshTimer = setTimeout(load, 10_000);
+  }
+}
+
+load();
+</script>
+</body>
+</html>

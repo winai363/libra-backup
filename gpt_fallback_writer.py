@@ -8,6 +8,8 @@ import os
 import sys
 import json
 import re
+import shutil
+import subprocess
 import time
 from pathlib import Path
 from openai import OpenAI
@@ -518,7 +520,60 @@ def _validate_topic(topic):
     return topic
 
 
+def run_dry_run() -> int:
+    """Validate the generation pipeline boundary without API calls or writes."""
+    print("=== GPT-4.1 Fallback Writer: deterministic dry run ===")
+    errors = []
+
+    required_files = [
+        Path("/root/libra/quality_gate.py"),
+        Path("/root/libra/editorial_review.py"),
+        Path("/root/libra/market_intelligence.py"),
+        Path("/root/libra/epub.css"),
+        Path("/root/libra/kdp-writing-guidelines.md"),
+    ]
+    for path in required_files:
+        if not path.is_file():
+            errors.append(f"missing required file: {path}")
+
+    for command in ("pandoc", "python3"):
+        if not shutil.which(command):
+            errors.append(f"missing command: {command}")
+
+    cron = subprocess.run(
+        ["crontab", "-l"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    active_libra_cron = [
+        line for line in cron.stdout.splitlines()
+        if "/root/libra/" in line and line.strip() and not line.lstrip().startswith("#")
+    ]
+    if active_libra_cron:
+        errors.append("Libra cron is active; dry-run boundary is not isolated")
+
+    source = Path(__file__).read_text(encoding="utf-8")
+    uploader_name = "kdp_" + "upload.py"
+    if uploader_name in source:
+        errors.append(f"writer directly references {uploader_name}")
+
+    if errors:
+        for error in errors:
+            print(f"FAIL: {error}")
+        return 1
+
+    print("PASS: required pipeline files and commands are available")
+    print("PASS: Libra cron is paused")
+    print("PASS: writer has no direct KDP upload invocation")
+    print("PASS: no API calls, book files, queue entries, or KDP writes were made")
+    return 0
+
+
 def main():
+    if "--dry-run" in sys.argv[1:]:
+        return run_dry_run()
+
     print("=== GPT-4.1 Fallback Writer (with Research) ===")
     print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -669,4 +724,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main() or 0)

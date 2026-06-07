@@ -34,6 +34,36 @@ SESSION_FILE = Path(__file__).parent / "kdp_session.json"
 TELEGRAM_BOT_TOKEN = ENV.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = ENV.get("TELEGRAM_CHAT_ID", "")
 
+PUBLISH_CONFIRMATION_PHRASES = (
+    "successfully submitted",
+    "submitted for review",
+    "your book has been submitted",
+    "your changes have been submitted",
+)
+
+
+def is_kdp_publish_confirmed(url: str, page_text: str) -> bool:
+    """Return True only for explicit KDP publish confirmation."""
+    normalized_url = (url or "").lower()
+    normalized_text = " ".join((page_text or "").lower().split())
+    if "/bookshelf" in normalized_url:
+        return True
+    return any(phrase in normalized_text for phrase in PUBLISH_CONFIRMATION_PHRASES)
+
+
+async def wait_for_publish_confirmation(page, timeout_ms: int = 120000) -> bool:
+    """Poll KDP until the publish action has explicit confirmation."""
+    deadline = asyncio.get_running_loop().time() + (timeout_ms / 1000)
+    while asyncio.get_running_loop().time() < deadline:
+        try:
+            page_text = await page.locator("body").inner_text(timeout=5000)
+        except Exception:
+            page_text = ""
+        if is_kdp_publish_confirmed(page.url, page_text):
+            return True
+        await page.wait_for_timeout(2000)
+    return False
+
 
 def require_quality_gate(slug: str) -> bool:
     """Block every KDP write unless the deterministic 40-page gate passes."""
@@ -90,7 +120,7 @@ async def set_ai_disclosure(page) -> None:
     # text: prefer "Entire work", fall back to "Some content" if unavailable on update
     selections = {
         "generative-ai-questionnaire-text": (["Entire work", "Some content"], "GPT-4.1"),
-        "generative-ai-questionnaire-images": (["Some images", "Some content"], "gpt-image-1"),
+        "generative-ai-questionnaire-images": (["Some AI-generated images", "Many AI-generated images", "Some images", "Some content"], "gpt-image-1"),
         "generative-ai-questionnaire-translations": (["None"], None),
     }
     for selector_id, (candidates, tool_name) in selections.items():
@@ -113,6 +143,9 @@ async def set_ai_disclosure(page) -> None:
                         await page.evaluate("el => el.click()", element)
                         clicked = True
                         logger.info(f"  AI {selector_id}: set to '{text}'")
+                        # Force-dismiss the popover — JS click doesn't trigger Amazon's close handler
+                        await page.keyboard.press("Escape")
+                        await page.wait_for_timeout(400)
                         break
                 except Exception:
                     continue
@@ -120,6 +153,9 @@ async def set_ai_disclosure(page) -> None:
                 break
         if not clicked:
             logger.warning(f"⚠️ AI disclosure: no matching option for {selector_id} — leaving as-is")
+            # Dismiss the open dropdown so it doesn't block the next iteration
+            await page.keyboard.press("Escape")
+            await page.wait_for_timeout(400)
         if clicked and tool_name:
             content_type = selector_id.rsplit("-", 1)[-1]
             prompt_id = f"generative-ai-questionnaire-{content_type}-tools-prompt"
@@ -1078,24 +1114,40 @@ async def update_ebook_content(slug: str) -> bool:
                     if not disabled:
                         await save_btn.click()
                         logger.info("✓ Clicked Save and Continue")
-                        await page.wait_for_timeout(8000)
+                        # Wait for navigation to pricing page (can take 15-30s after AI disclosures)
+                        try:
+                            await page.wait_for_url("**/pricing**", timeout=60000)
+                            logger.info(f"✓ Navigated to: {page.url}")
+                        except Exception:
+                            logger.warning(f"Navigation to pricing not confirmed — current url: {page.url}")
+                            await page.wait_for_timeout(5000)
                         content_saved = True
                         break
                 await page.wait_for_timeout(10000)
                 waited += 10
 
-            # If we land on pricing page, just save without changing price
+            # Updates are not complete until KDP accepts Save and Publish.
             republished = False
+            logger.info(f"Post-save URL: {page.url}")
             if "pricing" in page.url:
                 logger.info("On pricing page — saving current pricing...")
                 save_price = await page.query_selector(
                     'button:has-text("Save and Publish"), button:has-text("Publish")'
                 )
-                if save_price:
-                    await save_price.click()
-                    await page.wait_for_timeout(10000)
-                    logger.info("✓ Re-published with updated content")
+                if not save_price:
+                    raise RuntimeError("KDP Save and Publish button was not found")
+                disabled = await save_price.get_attribute("disabled")
+                if disabled is not None:
+                    raise RuntimeError("KDP Save and Publish button remained disabled")
+                await save_price.click()
+                logger.info("✓ Clicked Save and Publish; waiting for KDP confirmation")
+                if await wait_for_publish_confirmation(page):
+                    logger.info("✓ KDP confirmed the update submission")
                     republished = True
+                else:
+                    raise RuntimeError(
+                        f"KDP did not confirm update submission after Save and Publish (url={page.url})"
+                    )
 
             if not content_saved or not republished:
                 raise RuntimeError(

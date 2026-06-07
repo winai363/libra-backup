@@ -104,10 +104,15 @@ async def set_ai_disclosure(page) -> None:
         for target_text in candidates:
             for element in await page.query_selector_all("li a, li"):
                 try:
-                    if await element.is_visible() and (await element.inner_text()).strip() == target_text:
-                        await element.click()
+                    if not await element.is_visible():
+                        continue
+                    text = (await element.inner_text()).strip()
+                    # Match prefix: "Entire work" matches "Entire work, with minimal or no editing"
+                    if text == target_text or text.startswith(target_text):
+                        # Use JS dispatch to bypass pointer-events intercept from dropdown overlay
+                        await page.evaluate("el => el.click()", element)
                         clicked = True
-                        logger.info(f"  AI {selector_id}: set to '{target_text}'")
+                        logger.info(f"  AI {selector_id}: set to '{text}'")
                         break
                 except Exception:
                     continue

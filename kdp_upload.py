@@ -104,6 +104,68 @@ async def wait_for_pricing_page(page, timeout_seconds: int = 900) -> bool:
     return "/pricing" in page.url
 
 
+async def inspect_bookshelf_title(slug: str) -> list[dict]:
+    """Find matching KDP bookshelf entries without modifying account data."""
+    book_dir = KDP_DIR / slug
+    listing_file = book_dir / "listing.json"
+    if not listing_file.exists() or not SESSION_FILE.exists():
+        logger.error("Bookshelf inspection requires listing.json and a KDP session")
+        return []
+    listing = json.loads(listing_file.read_text(encoding="utf-8"))
+    title = str(listing.get("title", "")).strip()
+    if not title:
+        logger.error("Bookshelf inspection requires a title")
+        return []
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        try:
+            context = await browser.new_context(storage_state=str(SESSION_FILE))
+            page = await context.new_page()
+            await page.goto(
+                "https://kdp.amazon.com/en_US/bookshelf",
+                wait_until="domcontentloaded",
+                timeout=60000,
+            )
+            if "signin" in page.url or "/ap/" in page.url:
+                logger.error("KDP session expired; bookshelf inspection stopped")
+                return []
+            matches = await page.evaluate(
+                """(targetTitle) => {
+                    const normalize = value => (value || "")
+                        .toLowerCase().replace(/\\s+/g, " ").trim();
+                    const target = normalize(targetTitle);
+                    const shortTarget = target.slice(0, 24);
+                    const results = [];
+                    const seen = new Set();
+                    for (const link of document.querySelectorAll("a[href]")) {
+                        const href = link.href || "";
+                        const idMatch = href.match(/\\/kindle\\/([A-Z0-9]+)\\//);
+                        let node = link;
+                        for (let i = 0; i < 10 && node; i++, node = node.parentElement) {
+                            const text = normalize(node.innerText);
+                            if (!text.includes(target) && !text.includes(shortTarget)) continue;
+                            const key = `${idMatch ? idMatch[1] : ""}|${href}`;
+                            if (seen.has(key)) break;
+                            seen.add(key);
+                            results.push({
+                                book_id: idMatch ? idMatch[1] : null,
+                                href,
+                                text: (node.innerText || "").trim().slice(0, 500),
+                            });
+                            break;
+                        }
+                    }
+                    return results;
+                }""",
+                title,
+            )
+            logger.info("Bookshelf inspection found %s matching entries for %s", len(matches), title)
+            return matches
+        finally:
+            await browser.close()
+
+
 def preflight_update(slug: str) -> bool:
     """Check update readiness without opening a browser or writing to KDP."""
     if not require_quality_gate(slug):
@@ -174,7 +236,7 @@ async def notify(message: str):
         logger.error(f"Telegram notify failed: {e}")
 
 
-async def set_ai_disclosure(page) -> None:
+async def set_ai_disclosure(page, require_selections: bool = False) -> None:
     """Set mandatory KDP AI disclosure for GPT text and AI-generated cover art.
 
     On update flows, Amazon may show a reduced option set (e.g. no 'Entire work'
@@ -185,6 +247,8 @@ async def set_ai_disclosure(page) -> None:
     ai_accordion = page.locator('[data-a-accordion-name="generative-ai-questionnaire-accordion"]')
     # If the accordion doesn't exist on this page (e.g. KDP skips it on updates), skip.
     if not await ai_accordion.is_visible():
+        if require_selections:
+            raise RuntimeError("AI disclosure questionnaire is not visible")
         logger.info("AI disclosure accordion not present — skipping (likely pre-set on existing title)")
         return
     yes_row = ai_accordion.locator('[data-a-accordion-row-name="yes"] .a-accordion-row')
@@ -192,43 +256,33 @@ async def set_ai_disclosure(page) -> None:
     await page.wait_for_timeout(800)
     # text: prefer "Entire work", fall back to "Some content" if unavailable on update
     selections = {
-        "generative-ai-questionnaire-text": (["Entire work", "Some content"], "GPT-4.1"),
-        "generative-ai-questionnaire-images": (["Some AI-generated images", "Some images", "Some content"], "gpt-image-1"),
-        "generative-ai-questionnaire-translations": (["None"], None),
+        "generative-ai-questionnaire-text": ("ENTIRE_AND_MINIMAL", "GPT-4.1"),
+        "generative-ai-questionnaire-images": ("FEW_AND_MINIMAL", "gpt-image-1"),
+        "generative-ai-questionnaire-translations": ("NONE", None),
     }
-    for selector_id, (candidates, tool_name) in selections.items():
+    for selector_id, (target_value, tool_name) in selections.items():
         container = page.locator(".a-dropdown-container").filter(has=page.locator(f"#{selector_id}"))
         if not await container.is_visible():
+            if require_selections:
+                raise RuntimeError(f"Required AI disclosure dropdown is unavailable: {selector_id}")
             logger.info(f"  AI {selector_id}: dropdown not visible — skipping")
             continue
-        await container.locator(".a-button-dropdown").click()
-        await page.wait_for_timeout(500)
-        clicked = False
-        for target_text in candidates:
-            for element in await page.query_selector_all("li a, li"):
-                try:
-                    if not await element.is_visible():
-                        continue
-                    text = (await element.inner_text()).strip()
-                    # Match prefix: "Entire work" matches "Entire work, with minimal or no editing"
-                    if text == target_text or text.startswith(target_text):
-                        # Use JS dispatch to bypass pointer-events intercept from dropdown overlay
-                        await page.evaluate("el => el.click()", element)
-                        clicked = True
-                        logger.info(f"  AI {selector_id}: set to '{text}'")
-                        # Force-dismiss the popover — JS click doesn't trigger Amazon's close handler
-                        await page.keyboard.press("Escape")
-                        await page.wait_for_timeout(400)
-                        break
-                except Exception:
-                    continue
-            if clicked:
-                break
-        if not clicked:
+        select = page.locator(f"#{selector_id}")
+        try:
+            selected = await select.select_option(value=target_value)
+            await page.wait_for_timeout(300)
+            current_value = await select.input_value()
+            clicked = target_value in selected and current_value == target_value
+        except Exception:
+            clicked = False
+            current_value = ""
+        if clicked:
+            selected_text = await select.locator(f'option[value="{target_value}"]').inner_text()
+            logger.info(f"  AI {selector_id}: set to '{selected_text}'")
+        else:
+            if require_selections:
+                raise RuntimeError(f"Required AI disclosure option is unavailable: {selector_id}")
             logger.warning(f"⚠️ AI disclosure: no matching option for {selector_id} — leaving as-is")
-            # Dismiss the open dropdown so it doesn't block the next iteration
-            await page.keyboard.press("Escape")
-            await page.wait_for_timeout(400)
         if clicked and tool_name:
             content_type = selector_id.rsplit("-", 1)[-1]
             prompt_id = f"generative-ai-questionnaire-{content_type}-tools-prompt"
@@ -259,6 +313,17 @@ def _generate_fallback_cover(book_dir, title, subtitle, author, categories=None,
     except Exception as e:
         logger.error(f"Cover generation failed: {e}")
         return None
+
+
+def _get_book_price(slug: str) -> str:
+    """Return recommended price string from pricing-recommendation.json, else '2.99'."""
+    try:
+        rec = json.loads((KDP_DIR / slug / "pricing-recommendation.json").read_text())
+        price = float(rec.get("recommended_price_usd", 2.99))
+        price = max(2.99, min(9.99, price))
+        return f"{price:.2f}"
+    except Exception:
+        return "2.99"
 
 
 async def upload_to_kdp(slug: str):
@@ -707,7 +772,7 @@ async def upload_to_kdp(slug: str):
                     logger.warning("⚠️ DRM radio click did not register — KDP may block Save and Continue")
 
             try:
-                await set_ai_disclosure(page)
+                await set_ai_disclosure(page, require_selections=True)
             except Exception as e:
                 raise RuntimeError(f"AI disclosure failed; upload blocked: {e}") from e
             logger.info("✓ AI tools done")
@@ -885,7 +950,8 @@ async def upload_to_kdp(slug: str):
             await page.wait_for_timeout(1000)
 
             # Set primary marketplace price using Playwright fill (not JS)
-            logger.info("Setting price...")
+            book_price = _get_book_price(slug)
+            logger.info(f"Setting price: ${book_price}")
             price_set = False
             # Try common price input selectors
             for sel in ['input[name*="[US][list_price]"]', 'input[name*="[US][price"]',
@@ -894,7 +960,7 @@ async def upload_to_kdp(slug: str):
                 try:
                     price_input = page.locator(sel).first
                     if await price_input.count() > 0 and await price_input.is_visible():
-                        await price_input.fill("2.99")
+                        await price_input.fill(book_price)
                         await price_input.press("Tab")  # trigger blur/change
                         price_set = True
                         logger.info(f"✓ Price set via {sel}")
@@ -910,7 +976,7 @@ async def upload_to_kdp(slug: str):
                         name = await inp.get_attribute('name') or ''
                         if 'price' in name.lower() or 'list_price' in name.lower():
                             if await inp.is_visible():
-                                await inp.fill("2.99")
+                                await inp.fill(book_price)
                                 await inp.evaluate('el => el.dispatchEvent(new Event("blur",{bubbles:true}))')
                                 price_set = True
                                 logger.info(f"✓ Price set via name={name}")
@@ -963,8 +1029,12 @@ async def upload_to_kdp(slug: str):
                 listing = json.loads(listing_file.read_text())
                 listing["status"] = "uploaded"
                 listing["uploaded_at"] = datetime.now().strftime("%Y-%m-%d")
+                listing["publish_submission_confirmed_at"] = datetime.now().isoformat(
+                    timespec="seconds"
+                )
                 listing["kdp_uploading"] = False
                 listing["kdp_error"] = ""
+                listing["quality_errors"] = []
                 listing_file.write_text(json.dumps(listing, ensure_ascii=False, indent=2))
 
                 # Send success notification
@@ -1243,6 +1313,16 @@ async def update_ebook_content(slug: str) -> bool:
 
         except Exception as e:
             logger.error(f"❌ Update failed: {e}")
+            try:
+                failed_data = json.loads(listing_file.read_text(encoding="utf-8"))
+                failed_data["kdp_uploading"] = False
+                failed_data["kdp_error"] = str(e)[:300]
+                listing_file.write_text(
+                    json.dumps(failed_data, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            except Exception as state_exc:
+                logger.error("Could not persist KDP update failure state: %s", state_exc)
             await notify(f"❌ <b>KDP Update Failed</b>\n{title}\n\nError: {str(e)[:100]}")
             return False
         finally:
@@ -1251,14 +1331,22 @@ async def update_ebook_content(slug: str) -> bool:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python3 kdp_upload.py <slug> [--update|--preflight-update]")
+        print(
+            "Usage: python3 kdp_upload.py <slug> "
+            "[--update|--preflight-update|--inspect-title]"
+        )
         sys.exit(1)
 
     slug = sys.argv[1]
     update_mode = "--update" in sys.argv
     preflight_mode = "--preflight-update" in sys.argv
+    inspect_mode = "--inspect-title" in sys.argv
 
-    if preflight_mode:
+    if inspect_mode:
+        matches = asyncio.run(inspect_bookshelf_title(slug))
+        print(json.dumps(matches, ensure_ascii=False, indent=2))
+        result = True
+    elif preflight_mode:
         result = preflight_update(slug)
     elif update_mode:
         result = asyncio.run(update_ebook_content(slug))

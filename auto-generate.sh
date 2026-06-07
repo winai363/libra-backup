@@ -30,49 +30,34 @@ for BOOK_NUM in $(seq 1 $BOOKS_PER_RUN); do
   echo "" >> "$LOG_FILE"
   echo ">>> Book $BOOK_NUM of $BOOKS_PER_RUN ===" >> "$LOG_FILE"
 
-  # Build the prompt: check existing books first, then create new one
-  EXISTING=$(for f in /root/kdp/*/listing.json; do
-    [ -f "$f" ] && python3 -c "import sys,json; d=json.load(open('$f')); print(f\"- {d.get('title','')} ({d.get('language','')})\")" 2>/dev/null
-  done)
+  # --- Phase 0: Market-driven topic discovery ---
+  TOPIC_FILE="/tmp/libra-topic-$(date +%Y%m%d-%H%M%S).json"
+  CANDIDATES_FILE="/root/kdp/logs/topic-candidates-$(date +%Y%m%d).json"
+  echo ">>> [topic_scout] Discovering best topic..." >> "$LOG_FILE"
+  mkdir -p /root/kdp/logs
 
-  PROMPT="I need you to create a new KDP ebook using the kdp-writer skill.
+  python3 /root/libra/topic_scout.py \
+    --save "$TOPIC_FILE" \
+    --candidates "$CANDIDATES_FILE" >> "$LOG_FILE" 2>&1
+  SCOUT_EXIT=$?
 
-Here are the ebooks already created (DO NOT duplicate these topics):
-$EXISTING
-
-=== PHASE 1: MARKET RESEARCH (mandatory — use WebSearch) ===
-BEFORE choosing a topic, you MUST do real market research:
-1. Check which languages are overrepresented in existing books above — pick a DIFFERENT one
-2. Use WebSearch to search for: 'best selling kindle ebooks [marketplace] 2026', 'trending ebook niches [language]', 'amazon kindle bestseller categories [marketplace]'
-3. Search in BOTH English AND the target language for broader results
-4. Look for: trending topics, underserved niches, high-demand categories with low competition
-5. Pick a topic that has REAL market demand based on your research findings
-6. Save your market research as 'market-research.md' in the book directory
-
-=== PHASE 2: CONTENT RESEARCH (mandatory — use WebSearch + WebFetch) ===
-BEFORE writing the book, you MUST research real sources:
-1. Use WebSearch to find 8-12 real sources about your chosen topic: expert articles, research papers, official guidelines, statistics
-2. Use WebFetch to read the most important 3-5 sources in detail
-3. Collect: real statistics/data, expert quotes, verified facts, practical methods from real sources
-4. Compile a list of real references with actual URLs — these will become your Vancouver-style citations
-5. Save your content research as 'content-research.md' in the book directory
-
-=== PHASE 3: WRITE THE BOOK ===
-1. Follow the full pipeline: write → listing → cover → EPUB → quality gate → queue
-2. Use the researched facts, statistics, and sources from Phase 2 when writing
-3. All references [1]-[n] must be REAL sources with REAL URLs from your research — never hallucinate references
-4. Make sure the ebook appears in Libra queue with status 'ready'
-
-CONTENT QUALITY GUIDELINES: Read and follow ALL guidelines in /root/libra/kdp-writing-guidelines.md BEFORE writing the book.
-
-Go!"
+  if [ $SCOUT_EXIT -ne 0 ] || [ ! -f "$TOPIC_FILE" ]; then
+    echo ">>> [topic_scout] Discovery failed (exit=$SCOUT_EXIT) — falling back to writer's built-in research" >> "$LOG_FILE"
+    TOPIC_ARG=""
+  else
+    TOPIC_TITLE=$(python3 -c "import json; d=json.load(open('$TOPIC_FILE')); print(d.get('title','?'))" 2>/dev/null)
+    TOPIC_LANG=$(python3 -c "import json; d=json.load(open('$TOPIC_FILE')); print(d.get('language','?'))" 2>/dev/null)
+    echo ">>> [topic_scout] Best topic: $TOPIC_TITLE ($TOPIC_LANG)" >> "$LOG_FILE"
+    tg_notify "🔍 <b>Libra: พบ topic น่าสนใจ</b>\n${TOPIC_TITLE} (${TOPIC_LANG})\nกำลังเขียน..."
+    TOPIC_ARG="--topic-file $TOPIC_FILE"
+  fi
 
   # Count books before (exclude logs/ directory)
   BOOKS_BEFORE=$(ls -d /root/kdp/*/ 2>/dev/null | grep -v '/logs/$' | wc -l)
 
   # --- GPT-4.1 (primary) ---
   echo ">>> Running GPT-4.1 (book $BOOK_NUM)..." >> "$LOG_FILE"
-  python3 /root/libra/gpt_fallback_writer.py >> "$LOG_FILE" 2>&1
+  python3 /root/libra/gpt_fallback_writer.py $TOPIC_ARG >> "$LOG_FILE" 2>&1
   GPT_EXIT=$?
   if [ $GPT_EXIT -ne 0 ]; then
     echo ">>> GPT-4.1 failed (exit=$GPT_EXIT) for book $BOOK_NUM — retrying once..." >> "$LOG_FILE"

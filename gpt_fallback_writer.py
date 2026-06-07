@@ -574,47 +574,69 @@ def main():
     if "--dry-run" in sys.argv[1:]:
         return run_dry_run()
 
+    # Support --topic-file <path>: skip discovery/scoring, use pre-scouted topic
+    topic_file = None
+    if "--topic-file" in sys.argv:
+        idx = sys.argv.index("--topic-file")
+        if idx + 1 < len(sys.argv):
+            topic_file = Path(sys.argv[idx + 1])
+
     print("=== GPT-4.1 Fallback Writer (with Research) ===")
     print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     existing = get_existing_books()
 
     try:
-        # Step 0: Market Research
-        print("\n[1/7] Market research (web search)...")
-        market_research = step0_market_research(existing)
-        print(f"  Research length: {len(market_research)} chars")
-        if len(market_research) < 100:
-            print("  WARNING: Market research too short, proceeding with limited data")
+        if topic_file and topic_file.exists():
+            # topic_scout.py already did market research + scoring → skip steps 0,1,1.5
+            print(f"\n[1/7] Using pre-scouted topic from {topic_file}")
+            topic = json.loads(topic_file.read_text(encoding="utf-8"))
+            topic = _validate_topic(topic)
+            market_research = topic.pop("_market_score_raw", "")
+            market_score_data = topic.pop("_market_score", None)
+            print(f"  Topic: {topic['title']} ({topic['language']})")
+            print(f"  Slug: {topic['slug']}")
+            if market_score_data:
+                print(f"  Market score: {market_score_data.get('total_score','?')}/100 → {market_score_data.get('go_no_go','?')}")
+            if (KDP_DIR / topic["slug"]).exists():
+                print(f"  ERROR: {topic['slug']} already exists, aborting")
+                sys.exit(1)
+        else:
+            # Step 0: Market Research
+            print("\n[1/7] Market research (web search)...")
+            market_research = step0_market_research(existing)
+            print(f"  Research length: {len(market_research)} chars")
+            if len(market_research) < 100:
+                print("  WARNING: Market research too short, proceeding with limited data")
 
-        # Step 1: Choose topic based on research
-        print("\n[2/7] Choosing topic from research...")
-        topic = step1_choose_topic(existing, market_research)
-        topic = _validate_topic(topic)
-        print(f"  Topic: {topic['title']} ({topic['language']})")
-        print(f"  Slug: {topic['slug']}")
+            # Step 1: Choose topic based on research
+            print("\n[2/7] Choosing topic from research...")
+            topic = step1_choose_topic(existing, market_research)
+            topic = _validate_topic(topic)
+            print(f"  Topic: {topic['title']} ({topic['language']})")
+            print(f"  Slug: {topic['slug']}")
 
-        # Check if already exists
-        if (KDP_DIR / topic["slug"]).exists():
-            print(f"  ERROR: {topic['slug']} already exists, aborting")
-            sys.exit(1)
+            # Check if already exists
+            if (KDP_DIR / topic["slug"]).exists():
+                print(f"  ERROR: {topic['slug']} already exists, aborting")
+                sys.exit(1)
 
-        # Step 1.5: Market Intelligence Scoring (go/no-go gate)
-        print("\n[2b/7] Market intelligence scoring...")
-        try:
-            from market_intelligence import score_and_save, print_summary, THRESHOLD
-            market_score = score_and_save(topic)
-            print_summary(market_score)
-            if market_score["go_no_go"] == "NO-GO":
-                print(f"\n  BLOCKED: Market score {market_score['total_score']}/100 < threshold {THRESHOLD}")
-                print(f"  Reasoning: {market_score['reasoning']}")
-                print("  Aborting — choose a different topic.")
-                sys.exit(2)
-            print(f"  Market score: {market_score['total_score']}/100 → GO")
-        except SystemExit:
-            raise
-        except Exception as e:
-            print(f"  WARNING: Market intelligence failed: {e}. Proceeding without score.")
+            # Step 1.5: Market Intelligence Scoring (go/no-go gate)
+            print("\n[2b/7] Market intelligence scoring...")
+            try:
+                from market_intelligence import score_and_save, print_summary, THRESHOLD
+                market_score = score_and_save(topic)
+                print_summary(market_score)
+                if market_score["go_no_go"] == "NO-GO":
+                    print(f"\n  BLOCKED: Market score {market_score['total_score']}/100 < threshold {THRESHOLD}")
+                    print(f"  Reasoning: {market_score['reasoning']}")
+                    print("  Aborting — choose a different topic.")
+                    sys.exit(2)
+                print(f"  Market score: {market_score['total_score']}/100 → GO")
+            except SystemExit:
+                raise
+            except Exception as e:
+                print(f"  WARNING: Market intelligence failed: {e}. Proceeding without score.")
 
         # Step 1b: Content Research
         print("\n[3/7] Content research (web search)...")
@@ -706,12 +728,34 @@ def main():
             )
             raise ValueError("AI editorial review did not approve the manuscript")
 
+        # Step SEO: optimize keywords, categories, description using competitor research
+        print("\n[SEO] Running SEO optimizer...")
+        try:
+            import seo_optimizer
+            seo_result = seo_optimizer.optimize(topic["slug"])
+            seo_optimizer.print_report(seo_result)
+            print(f"  SEO score: {seo_result.get('seo_score_before','?')} → {seo_result.get('seo_score_after','?')}")
+        except Exception as e:
+            print(f"  WARNING: SEO optimizer failed: {e} — keeping original listing")
+
+        # Step PRICE: smart pricing based on competitor analysis
+        print("\n[PRICE] Running pricing engine...")
+        try:
+            import pricing_engine
+            price_result = pricing_engine.analyze(topic["slug"])
+            pricing_engine.print_report(price_result)
+        except Exception as e:
+            print(f"  WARNING: Pricing engine failed: {e} — will use default $2.99")
+
         # Notify success
+        seo_score = seo_result.get("seo_score_after", "?") if "seo_result" in dir() else "?"
+        price_rec = price_result.get("recommended_price_usd", 2.99) if "price_result" in dir() else 2.99
         notify_telegram(
             f"📚 <b>New Book (GPT-4.1 + Research)</b>\n"
             f"{topic['title']}\n"
             f"({topic['language']}) — {units} {unit_label} (~{est} pages)\n"
-            f"Sources: web research ✅\n"
+            f"Market score ✅ | SEO score: {seo_score}/10\n"
+            f"Recommended price: ${price_rec}\n"
             f"Status: ready"
         )
 

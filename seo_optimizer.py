@@ -103,7 +103,14 @@ def _extract_json(text: str) -> dict:
         elif ch == '}':
             depth -= 1
             if depth == 0:
-                return json.loads(text[start:i+1])
+                blob = text[start:i+1]
+                try:
+                    return json.loads(blob)
+                except json.JSONDecodeError:
+                    # GPT often emits trailing commas before } or ] — strip them
+                    # and retry rather than discarding the whole optimization.
+                    cleaned = re.sub(r",(\s*[}\]])", r"\1", blob)
+                    return json.loads(cleaned)
     raise ValueError("Incomplete JSON in SEO response")
 
 

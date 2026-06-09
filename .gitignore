@@ -9,3 +9,8 @@ queue_log.txt
 queue_failed.txt
 .queue.lock
 .audit-fix-backup-stamp
+
+# runtime artifacts
+.cover_check_state
+.cover_retry.lock
+logs/

@@ -1329,16 +1329,232 @@ async def update_ebook_content(slug: str) -> bool:
             await browser.close()
 
 
+async def update_cover(slug: str) -> bool:
+    """
+    Replace the cover image of an already-published KDP ebook.
+    Navigates to the book's content edit page, re-uploads cover.jpg,
+    handles the accessibility checkbox + AI disclosure, and republishes.
+    Mirrors update_ebook_content() but swaps the EPUB step for the cover step.
+    """
+    book_dir = KDP_DIR / slug
+    listing_file = book_dir / "listing.json"
+    if not listing_file.exists():
+        logger.error(f"No listing.json for {slug}")
+        return False
+
+    data = json.loads(listing_file.read_text())
+    title = data.get("title", slug)
+    cover_path = book_dir / "cover.jpg"
+
+    if not cover_path.exists() or cover_path.stat().st_size < 10000:
+        logger.error(f"No valid cover.jpg for {slug}")
+        return False
+
+    logger.info(f"=== UPDATE COVER: {title} ===")
+
+    async with async_playwright() as p:
+        if not SESSION_FILE.exists():
+            logger.error("No session file — run kdp_login_full.py first")
+            return False
+
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(
+            storage_state=str(SESSION_FILE),
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        )
+        page = await context.new_page()
+        await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => false})")
+
+        try:
+            book_id = data.get("kdp_book_id")
+            if not book_id:
+                logger.error("No kdp_book_id in listing.json — cannot determine which book to update.")
+                return False
+
+            full_url = f"https://kdp.amazon.com/en_US/title-setup/kindle/{book_id}/content"
+            await page.goto(full_url, wait_until="domcontentloaded", timeout=60000)
+            await page.wait_for_timeout(3000)
+
+            if "signin" in page.url or "/ap/" in page.url:
+                logger.warning("Session expired — re-logging in...")
+                await browser.close()
+                import subprocess as _sp
+                login_r = _sp.run(
+                    ["python3", str(Path(__file__).parent / "kdp_login_full.py")],
+                    capture_output=True, text=True, timeout=120
+                )
+                if "Session saved" not in login_r.stdout:
+                    logger.error(f"Re-login failed: {login_r.stdout[-200:]}")
+                    return False
+                browser = await p.chromium.launch(headless=True)
+                context = await browser.new_context(
+                    storage_state=str(SESSION_FILE),
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+                )
+                page = await context.new_page()
+                await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => false})")
+                await page.goto(full_url, wait_until="domcontentloaded", timeout=60000)
+                await page.wait_for_timeout(3000)
+                if "signin" in page.url or "/ap/" in page.url:
+                    logger.error("Still on signin page after re-login")
+                    return False
+
+            logger.info(f"On content page: {page.url}")
+
+            # KDP redirects to bookshelf when book is still "In review" — not editable yet
+            if "bookshelf" in page.url and "title-setup" not in page.url:
+                logger.warning("⏳ Redirected to bookshelf — book still In Review, cannot edit yet")
+                return False
+
+            # ── Upload new cover ──────────────────────────────────────────────
+            logger.info("Uploading new cover...")
+            try:
+                upload_tab = await page.query_selector('a:has-text("Upload a cover you already have")')
+                if upload_tab:
+                    await upload_tab.click()
+                    await page.wait_for_timeout(1500)
+                    logger.info("✓ Switched to cover file upload tab")
+            except Exception as e:
+                logger.warning(f"Could not switch cover tab: {e}")
+
+            cover_input = await page.query_selector('#data-assets-cover-file-upload-AjaxInput')
+            if not cover_input:
+                cover_input = await page.query_selector('#data-assets-cover-jp-file-upload-AjaxInput')
+            if not cover_input:
+                await page.screenshot(path="/tmp/kdp_update_cover.png")
+                raise Exception("Cover file input not found on content page")
+
+            await cover_input.set_input_files(str(cover_path))
+            logger.info("Cover upload started — waiting for processing...")
+            try:
+                await page.wait_for_selector(
+                    '#data-assets-cover-asset-status[value*="SUCCESS"]',
+                    timeout=180000
+                )
+                logger.info("✅ Cover processed successfully")
+            except Exception:
+                logger.warning("Could not confirm cover processing — waiting 30s...")
+                await page.wait_for_timeout(30000)
+
+            # ── Accessibility confirm checkbox (React fiber) ──────────────────
+            try:
+                n = await page.evaluate("""() => {
+                    const cbs = document.querySelectorAll('div[role="checkbox"]');
+                    let clicked = 0;
+                    for (const cb of cbs) {
+                        if (cb.getAttribute('aria-checked') === 'true') continue;
+                        const txt = (cb.closest('label') || cb.parentElement || cb).textContent || '';
+                        if (!txt.toLowerCase().includes('confirm')) continue;
+                        const key = Object.keys(cb).find(k => k.startsWith('__reactFiber'));
+                        if (key) {
+                            let fiber = cb[key];
+                            while (fiber) {
+                                const props = fiber.memoizedProps || fiber.pendingProps || {};
+                                if (props.onClick) {
+                                    props.onClick({type:'click', target:cb, currentTarget:cb,
+                                        stopPropagation:()=>{}, preventDefault:()=>{}});
+                                    clicked++; break;
+                                }
+                                fiber = fiber.return;
+                            }
+                        }
+                    }
+                    return clicked;
+                }""")
+                await page.wait_for_timeout(500)
+                if n:
+                    logger.info(f"✓ Accessibility confirm: clicked {n} checkbox(es) via React fiber")
+            except Exception as e:
+                logger.warning(f"⚠️ Confirm checkbox: {e}")
+
+            await set_ai_disclosure(page)
+
+            # ── Save and Continue → pricing ───────────────────────────────────
+            logger.info("Saving...")
+            waited = 0
+            content_saved = False
+            while waited < 900:
+                save_btn = await page.query_selector(
+                    'button:has-text("Save and Continue"), input[value*="Save and Continue"]'
+                )
+                if save_btn:
+                    disabled = await save_btn.get_attribute("disabled")
+                    if not disabled:
+                        await save_btn.click()
+                        logger.info("✓ Clicked Save and Continue")
+                        content_saved = await wait_for_pricing_page(page)
+                        break
+                await page.wait_for_timeout(10000)
+                waited += 10
+
+            republished = False
+            logger.info(f"Post-save URL: {page.url}")
+            if "pricing" in page.url:
+                logger.info("On pricing page — republishing...")
+                save_price = await page.query_selector(
+                    'button:has-text("Save and Publish"), button:has-text("Publish")'
+                )
+                if not save_price:
+                    raise RuntimeError("KDP Save and Publish button was not found")
+                disabled = await save_price.get_attribute("disabled")
+                if disabled is not None:
+                    raise RuntimeError("KDP Save and Publish button remained disabled")
+                await save_price.click()
+                logger.info("✓ Clicked Save and Publish; waiting for KDP confirmation")
+                if await wait_for_publish_confirmation(page):
+                    logger.info("✓ KDP confirmed the cover update submission")
+                    republished = True
+                else:
+                    raise RuntimeError(
+                        f"KDP did not confirm update after Save and Publish (url={page.url})"
+                    )
+
+            if not content_saved or not republished:
+                raise RuntimeError(
+                    f"KDP cover update not confirmed (content_saved={content_saved}, "
+                    f"republished={republished}, url={page.url})"
+                )
+
+            data["kdp_uploading"] = False
+            data["cover_updated_at"] = datetime.now().strftime("%Y-%m-%d")
+            data["update_submission_confirmed_at"] = datetime.now().isoformat(timespec="seconds")
+            data["status"] = "uploaded"
+            data["kdp_error"] = ""
+            listing_file.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+            await notify(f"✅ <b>KDP Cover Updated</b>\n{title}\n\nNew CJK-safe cover re-uploaded.")
+            logger.info("✅ Cover update complete!")
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Cover update failed: {e}")
+            try:
+                failed_data = json.loads(listing_file.read_text(encoding="utf-8"))
+                failed_data["kdp_uploading"] = False
+                failed_data["kdp_error"] = str(e)[:300]
+                listing_file.write_text(
+                    json.dumps(failed_data, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+            except Exception as state_exc:
+                logger.error("Could not persist failure state: %s", state_exc)
+            await notify(f"❌ <b>KDP Cover Update Failed</b>\n{title}\n\nError: {str(e)[:100]}")
+            return False
+        finally:
+            await browser.close()
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(
             "Usage: python3 kdp_upload.py <slug> "
-            "[--update|--preflight-update|--inspect-title]"
+            "[--update|--cover|--preflight-update|--inspect-title]"
         )
         sys.exit(1)
 
     slug = sys.argv[1]
     update_mode = "--update" in sys.argv
+    cover_mode = "--cover" in sys.argv
     preflight_mode = "--preflight-update" in sys.argv
     inspect_mode = "--inspect-title" in sys.argv
 
@@ -1348,6 +1564,8 @@ if __name__ == "__main__":
         result = True
     elif preflight_mode:
         result = preflight_update(slug)
+    elif cover_mode:
+        result = asyncio.run(update_cover(slug))
     elif update_mode:
         result = asyncio.run(update_ebook_content(slug))
     else:

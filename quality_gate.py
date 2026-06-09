@@ -21,7 +21,9 @@ MIN_FICTION_WORDS = 20_000
 MIN_PAGES = 40
 MIN_REFERENCES = 8
 MIN_SECTIONS = 12
+MIN_CHARS_PER_PAGE = 200   # catastrophic content-drop floor (lowest real book ≈880)
 CJK_CODES = {"ja", "zh", "zh-cn", "zh-tw", "ko"}
+EPUBCHECK_JAR = Path("/opt/epubcheck-5.1.0/epubcheck.jar")
 
 
 @dataclass
@@ -90,9 +92,150 @@ def _pdf_pages(book_dir: Path) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _pdf_script_counts(book_dir: Path) -> dict | None:
+    """Extract the paperback PDF's text layer and count CJK / Thai characters.
+    Catches the silent failure where xelatex drops glyphs the font lacks (e.g.
+    DejaVu has no CJK/Thai), producing a page-correct but text-empty PDF."""
+    pdfs = sorted(book_dir.glob("*paperback*.pdf"))
+    if not pdfs:
+        return None
+    try:
+        result = subprocess.run(
+            ["pdftotext", str(pdfs[0]), "-"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+    text = result.stdout
+    cjk = thai = 0
+    for ch in text:
+        o = ord(ch)
+        if (0x3040 <= o <= 0x30FF or 0x4E00 <= o <= 0x9FFF
+                or 0x3400 <= o <= 0x4DBF or 0xAC00 <= o <= 0xD7A3):
+            cjk += 1
+        elif 0x0E00 <= o <= 0x0E7F:
+            thai += 1
+    nonspace = sum(1 for ch in text if not ch.isspace())
+    return {"cjk": cjk, "thai": thai, "nonspace": nonspace}
+
+
+def _pdf_unembedded_fonts(book_dir: Path) -> list[str] | None:
+    """Names of fonts NOT embedded in the paperback PDF. KDP rejects PDFs with
+    unembedded fonts. [] = all embedded; None if no PDF / pdffonts unavailable."""
+    pdfs = sorted(book_dir.glob("*paperback*.pdf"))
+    if not pdfs:
+        return None
+    try:
+        r = subprocess.run(["pdffonts", str(pdfs[0])],
+                           capture_output=True, text=True, timeout=20)
+    except Exception:
+        return None
+    if r.returncode != 0:
+        return None
+    bad = []
+    for line in r.stdout.splitlines()[2:]:
+        cols = line.split()
+        # cols: name [type...] encoding emb sub uni objNum objGen
+        # The first yes/no token is the 'emb' column (robust to multi-word type).
+        yn = [c for c in cols if c in ("yes", "no")]
+        if yn and yn[0] == "no" and cols:
+            bad.append(cols[0])
+    return bad
+
+
+def _epubcheck(book_dir: Path) -> dict | None:
+    """Run the official W3C epubcheck. Returns {fatals,errors,warnings} or None
+    if the validator/EPUB is unavailable (degrades gracefully)."""
+    epub = book_dir / "ebook.epub"
+    if not epub.exists() or not EPUBCHECK_JAR.exists():
+        return None
+    try:
+        r = subprocess.run(
+            ["java", "-jar", str(EPUBCHECK_JAR), str(epub)],
+            capture_output=True, text=True, timeout=180,
+        )
+    except Exception:
+        return None
+    out = (r.stdout or "") + (r.stderr or "")
+    m = re.search(r"(\d+)\s+fatals?\s*/\s*(\d+)\s+errors?\s*/\s*(\d+)\s+warnings?", out)
+    if m:
+        return {"fatals": int(m.group(1)), "errors": int(m.group(2)),
+                "warnings": int(m.group(3))}
+    if r.returncode == 0:
+        return {"fatals": 0, "errors": 0, "warnings": 0}
+    return None
+
+
 def _duplicates(values: list[str]) -> list[str]:
     normalized = [re.sub(r"\s+", " ", value.strip()).casefold() for value in values]
     return sorted({value for value in normalized if normalized.count(value) > 1})
+
+
+# Back-matter section titles across the languages this catalog ships in.
+_BACK_MATTER_RE = re.compile(
+    r'(?im)^#{1,2}\s+(?:'
+    r'References?|Bibliograph|Resources?|Acknowledg|About\s+the\s+Author|'
+    r'Disclaimer|Glossary|'
+    r'参考文献|著者について|免責事項|リソース|謝辞|用語集|レビュー|'
+    r'Referencias|Sobre\s+el\s+autor|Aviso\s+legal|Recursos|Bibliografía|'
+    r'Referências|Sobre\s+o\s+autor|Isenção|'
+    r'Literatur|Über\s+den\s+Autor|Haftungsausschluss|Danksagung|'
+    r'Bibliographie|À\s+propos|Avertissement|Remerciements'
+    r')'
+)
+# Chapter/part headings. One appearing AFTER back matter has started means a
+# second outline was grafted past the book's ending (writer "continuation after
+# back matter" bug — produces a repetitive, two-book manuscript).
+_MAIN_CONTENT_RE = re.compile(
+    r'(?im)^#{1,2}\s+(?:'
+    r'Part\s*\d|Teil\s*\d|Parte\s*\d|Partie\s*\d|Deel\s*\d|Bagian\s*\d|'
+    r'パート\s*\d|第\s*\d+\s*[章部]|'
+    r'Chapter\s*\d|Kapitel\s*\d|Cap[íi]tulo\s*\d|Capitolo\s*\d|Chapitre\s*\d'
+    r')'
+)
+
+
+def _back_matter_then_content(content: str) -> str | None:
+    """Return the first chapter/part heading that appears AFTER back matter has
+    started (a grafted-on second book), or None if structure is sound."""
+    bms = [m.start() for m in _BACK_MATTER_RE.finditer(content)]
+    if not bms:
+        return None
+    first_bm = min(bms)
+    for m in _MAIN_CONTENT_RE.finditer(content):
+        if m.start() > first_bm:
+            end = content.find("\n", m.start())
+            return content[m.start():end if end != -1 else m.start() + 60].strip()
+    return None
+
+
+# Numbered chapter/part headings, for detecting the SAME number appearing twice
+# (a verbatim-duplicated block — e.g. "Capitolo 19" or "Part 13" written twice).
+_NUMBERED_HEADING_RE = re.compile(
+    r'(?im)^#{1,3}\s+('
+    r'Part|Chapter|Capitolo|Cap[íi]tulo|Kapitel|Chapitre|Teil|Parte|Partie|'
+    r'Deel|Bagian|Bölüm|パート'
+    r')\s*(\d+)\b'
+)
+# Capture the unit character (章=chapter / 部=part) separately so "第1部" and
+# "第1章" are NOT treated as the same heading — a book legitimately has both
+# a Part 1 (第1部) and a Chapter 1 (第1章).
+_JP_CHAPTER_RE = re.compile(r'(?im)^#{1,3}\s+第\s*(\d+)\s*([章部編篇巻])')
+
+
+def _duplicate_chapter_numbers(content: str) -> list[str]:
+    """Return labels of chapter/part numbers that appear more than once (a book
+    written in circles / a duplicated block). Empty list = no repeats."""
+    seen: dict[str, int] = {}
+    for m in _NUMBERED_HEADING_RE.finditer(content):
+        key = f"{m.group(1).title()} {m.group(2)}"
+        seen[key] = seen.get(key, 0) + 1
+    for m in _JP_CHAPTER_RE.finditer(content):
+        key = f"第{m.group(1)}{m.group(2)}"
+        seen[key] = seen.get(key, 0) + 1
+    return [k for k, n in seen.items() if n > 1]
 
 
 def _is_fiction(listing: dict) -> bool:
@@ -112,17 +255,33 @@ def _is_fiction(listing: dict) -> bool:
     )
 
 
+# Status codes where the server clearly exists but is blocking/restricting
+# automated access (bot protection, auth walls, rate limits, method limits).
+# These are NOT dead links — never fail the upload on them.
+_BLOCKED_NOT_DEAD = {401, 403, 405, 406, 429, 451, 999}
+
+
 def _check_urls(urls: set[str]) -> tuple[list[str], list[str]]:
     failed = []
     transient = []
-    headers = {"User-Agent": "Mozilla/5.0 LibraQualityGate/2.0"}
+    # Use a realistic browser User-Agent — many sites (e.g. nih.gov) return
+    # 403/405 to non-browser agents, which is a false positive for "dead link".
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
     with httpx.Client(follow_redirects=True, timeout=10, headers=headers) as client:
         for url in sorted(urls):
             try:
                 response = client.head(url)
-                if response.status_code >= 400 and response.status_code not in {401, 403, 429}:
+                # HEAD is often unsupported/blocked → retry with a real GET.
+                if response.status_code >= 400 and response.status_code not in _BLOCKED_NOT_DEAD:
                     response = client.get(url, headers={**headers, "Range": "bytes=0-1024"})
-                if response.status_code in {401, 403, 429}:
+                if response.status_code in _BLOCKED_NOT_DEAD:
                     continue
                 if response.status_code >= 400:
                     failed.append(f"{url} ({response.status_code})")
@@ -203,6 +362,23 @@ def validate_book(
     if duplicate_headings:
         report.warning(f"Repeated headings need editorial review: {', '.join(duplicate_headings[:5])}")
 
+    grafted = _back_matter_then_content(content)
+    if grafted:
+        report.metrics["grafted_content_heading"] = grafted
+        report.error(
+            "Chapter/part content appears AFTER the book's back matter "
+            f"(\"{grafted[:60]}\") — a second outline was grafted on, producing a "
+            "repetitive/duplicated manuscript. The book must end with its back matter."
+        )
+
+    dup_chapters = _duplicate_chapter_numbers(content)
+    if dup_chapters:
+        report.metrics["duplicate_chapter_numbers"] = dup_chapters
+        report.error(
+            "Duplicated chapter/part numbers (a repeated block / book written in "
+            f"circles): {', '.join(sorted(dup_chapters)[:8])}."
+        )
+
     cited, references = _reference_numbers(content)
     valid_urls = {
         url for url in _urls(content)
@@ -267,8 +443,36 @@ def validate_book(
                     report.error(f"Cover color mode is {cover.mode}; RGB is required.")
         except Exception as exc:
             report.error(f"Invalid cover image: {exc}")
+
+        # Anti-tofu: a valid JPEG can still show □ boxes if the cover font lacks
+        # glyphs for the title's script (e.g. DejaVu has no CJK/Thai). Catch it.
+        try:
+            from cover_generator import unrenderable_chars
+            author = str(listing.get("author", ""))
+            tofu = unrenderable_chars(title, subtitle, author)
+            if tofu:
+                report.metrics["cover_unrenderable_chars"] = "".join(tofu)
+                report.error(
+                    "Cover text has characters with no font glyph (would render "
+                    f"as boxes): {''.join(tofu[:20])}"
+                )
+        except Exception as exc:
+            report.warning(f"Could not run cover glyph check: {exc}")
     if required["ebook.epub"].stat().st_size < 5_000:
         report.error("EPUB file is too small or invalid.")
+    else:
+        epub_result = _epubcheck(book_dir)
+        if epub_result is not None:
+            report.metrics["epubcheck"] = epub_result
+            if epub_result["fatals"] or epub_result["errors"]:
+                report.error(
+                    f"EPUB failed epubcheck: {epub_result['fatals']} fatal / "
+                    f"{epub_result['errors']} error(s) — KDP will likely reject it."
+                )
+            elif epub_result["warnings"]:
+                report.warning(
+                    f"epubcheck reported {epub_result['warnings']} warning(s)."
+                )
 
     pdf_pages = _pdf_pages(book_dir)
     report.metrics["pdf_pages"] = pdf_pages
@@ -278,6 +482,49 @@ def validate_book(
         report.error(f"Generated paperback has {pdf_pages} pages; minimum is {MIN_PAGES}.")
     elif pdf_pages is None and estimated_pages < MIN_PAGES:
         report.error(f"Estimated paperback length is {estimated_pages} pages; minimum is {MIN_PAGES}.")
+
+    # Interior render checks (only meaningful once a PDF exists).
+    if pdf_pages is not None:
+        lang = str(listing.get("language", "")).lower()
+        expect_cjk = any(k in lang for k in ("japanese", "chinese", "korean",
+                                              "mandarin", "cantonese"))
+        expect_thai = "thai" in lang
+
+        counts = _pdf_script_counts(book_dir)
+        if counts is not None:
+            report.metrics["pdf_script_counts"] = counts
+            # (a) CJK/Thai glyph-drop: a book in that language with no such text
+            #     means xelatex dropped the glyphs (wrong font) → blank paperback.
+            if expect_cjk and counts["cjk"] < 50:
+                report.error(
+                    f"Paperback PDF has almost no CJK text ({counts['cjk']} chars) "
+                    "for a CJK-language book — the font likely dropped the glyphs."
+                )
+            if expect_thai and counts["thai"] < 50:
+                report.error(
+                    f"Paperback PDF has almost no Thai text ({counts['thai']} chars) "
+                    "for a Thai-language book — the font likely dropped the glyphs."
+                )
+            # (b) Catastrophic content-drop net for ANY language: a page-correct
+            #     but near-empty PDF (extraction far below any real book).
+            if pdf_pages > 0:
+                cpp = counts["nonspace"] // pdf_pages
+                report.metrics["pdf_chars_per_page"] = cpp
+                if cpp < MIN_CHARS_PER_PAGE:
+                    report.error(
+                        f"Paperback PDF averages only {cpp} characters/page "
+                        f"(min {MIN_CHARS_PER_PAGE}) — interior content may be "
+                        "missing or failed to render."
+                    )
+
+        # (c) Font embedding — KDP rejects PDFs with non-embedded fonts.
+        unembedded = _pdf_unembedded_fonts(book_dir)
+        if unembedded:
+            report.metrics["pdf_unembedded_fonts"] = unembedded
+            report.error(
+                "Paperback PDF has non-embedded font(s): "
+                f"{', '.join(unembedded[:5])} — KDP requires all fonts embedded."
+            )
 
     editorial_file = book_dir / "editorial-review.json"
     if require_editorial:

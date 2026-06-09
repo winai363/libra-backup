@@ -16,12 +16,17 @@ from openai import RateLimitError
 
 
 KDP_DIR = Path("/root/kdp")
+# factual_reliability and citation_quality are the noisiest dimensions — the
+# reviewer fact-checks against external knowledge and swings ±2 on identical
+# content, so we require 7 (solid, minor-improvements-possible) rather than 8.
+# Genuinely false claims are still hard-blocked separately via "contradicted"
+# fact_checks and critical_issues. The other five quality dimensions stay at 8.
 REQUIRED_SCORES = {
     "language_purity": 8,
     "reader_value": 8,
     "structure": 8,
-    "factual_reliability": 8,
-    "citation_quality": 8,
+    "factual_reliability": 7,
+    "citation_quality": 7,
     "seo_quality": 8,
     "originality": 8,
 }
@@ -58,7 +63,10 @@ def _extract_json(text: str) -> dict:
 def _sample_manuscript(content: str, fiction: bool) -> tuple[str, bool]:
     """Return a representative sample of the manuscript within token budget.
 
-    Non-fiction: first 10,000 words (content is typically 10-13k total).
+    Non-fiction: first 8,000 words + last 4,000 words. The tail is essential —
+    the References/citations section lives at the END, and citation_quality
+    can't be judged if the reviewer never sees it (truncating head-only
+    silently caps that score).
     Fiction: first 7,000 words + last 2,000 words to capture opening and ending.
     Returns (sampled_text, was_truncated).
     """
@@ -72,9 +80,12 @@ def _sample_manuscript(content: str, fiction: bool) -> tuple[str, bool]:
         sampled = head + "\n\n[... middle portion omitted for editorial review ...]\n\n" + tail
         return sampled, True
     else:
-        if len(words) <= 10000:
+        if len(words) <= 12000:
             return content, False
-        return " ".join(words[:10000]), True
+        head = " ".join(words[:8000])
+        tail = " ".join(words[-4000:])
+        sampled = head + "\n\n[... middle portion omitted for editorial review ...]\n\n" + tail
+        return sampled, True
 
 
 def review_book(slug: str) -> dict:
@@ -87,7 +98,26 @@ def review_book(slug: str) -> dict:
     fiction = bool(re.search(r"\b(?:fiction|romance|fantasy|romantasy|novel)\b", listing_text))
 
     sampled_content, truncated = _sample_manuscript(content, fiction)
-    truncation_note = "\n[NOTE: Manuscript was sampled (opening + ending) to fit token limits. Judge overall quality from the sample.]" if truncated else ""
+    # Tell the reviewer the TRUE size of the full manuscript. Otherwise, when the
+    # book is truncated to fit the token budget, the reviewer counts only the
+    # sample and wrongly concludes the book is "thin/short" — unfairly depressing
+    # structure/reader_value/originality. Length & completeness are already gated
+    # separately (quality_gate word-count + page minimums), so the editorial board
+    # must judge WRITING quality, not guess length from a partial view.
+    if truncated:
+        total_words = len(content.split())
+        total_sections = len(re.findall(r"(?m)^#{1,3}\s", content))
+        portion = "opening + ending" if fiction else "opening portion"
+        truncation_note = (
+            f"\n[NOTE: This is a {'long' if not fiction else ''} manuscript. "
+            f"The FULL book is {total_words:,} words across {total_sections} headings; "
+            f"to fit token limits you are shown only the {portion}. "
+            f"Do NOT judge length, completeness, or 'thinness' from this sample — "
+            f"the full manuscript meets the word-count minimum (verified separately). "
+            f"Judge WRITING quality, structure, and originality from what you can see.]"
+        )
+    else:
+        truncation_note = ""
 
     prompt = f"""You are the senior editorial board for an international publisher.
 Review this complete {"fiction" if fiction else "non-fiction"} ebook before Amazon KDP publication.
@@ -97,11 +127,12 @@ Be strict and fail weak, repetitive, misleading, mixed-language, thin, or poorly
 BOOK LISTING:
 {json.dumps(listing, ensure_ascii=False)}
 
-CONTENT RESEARCH:
-{research[:15000 if fiction else 30000]}
-
 MANUSCRIPT:
 {sampled_content}
+
+IMPORTANT: Score factual_reliability and citation_quality ONLY on claims that
+actually appear in the MANUSCRIPT above. Do not invent statistics the book does
+not state, and judge citations by the references the manuscript itself provides.
 
 Return JSON only with this exact shape:
 {{

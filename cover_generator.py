@@ -124,6 +124,105 @@ FONT_SERIF_BOLD     = _FONT_BASE + "DejaVuSerif-Bold.ttf"
 FONT_SERIF          = _FONT_BASE + "DejaVuSerif.ttf"
 FONT_COND_BOLD      = _FONT_BASE + "DejaVuSansCondensed-Bold.ttf"
 
+# ── CJK fonts (Japanese / Chinese / Korean) ────────────────────────────────
+# DejaVu has no CJK glyphs → renders as tofu boxes (□). Noto Sans CJK is a
+# pan-CJK superset (kana + hanzi + hangul); face index 0 = "Noto Sans CJK JP".
+_NOTO_BASE = "/usr/share/fonts/opentype/noto/"
+FONT_CJK_BOLD       = _NOTO_BASE + "NotoSansCJK-Bold.ttc"
+FONT_CJK            = _NOTO_BASE + "NotoSansCJK-Regular.ttc"
+_CJK_FONT_INDEX     = 0   # Noto Sans CJK JP
+
+# Thai needs its own font (DejaVu/Noto-CJK have no Thai glyphs) AND complex-text
+# shaping so tone marks / floating vowels land in the right place (raqm layout).
+_NOTO_TTF = "/usr/share/fonts/truetype/noto/"
+FONT_THAI_BOLD      = _NOTO_TTF + "NotoSansThai-Bold.ttf"
+FONT_THAI           = _NOTO_TTF + "NotoSansThai-Regular.ttf"
+
+# Thai non-spacing combining marks (above/below vowels + tone marks). A line
+# must never break *before* one of these — they attach to the preceding letter.
+_THAI_COMBINING = set(range(0x0E34, 0x0E3B)) | {0x0E31} | set(range(0x0E47, 0x0E4F))
+
+
+def _is_thai(text: str) -> bool:
+    """True if `text` contains any Thai character (U+0E00–U+0E7F)."""
+    return any(0x0E00 <= ord(ch) <= 0x0E7F for ch in text)
+
+
+def _is_cjk(text: str) -> bool:
+    """True if `text` contains any CJK ideograph / kana / hangul character."""
+    for ch in text:
+        o = ord(ch)
+        if (0x3040 <= o <= 0x30FF      # Hiragana + Katakana
+                or 0x4E00 <= o <= 0x9FFF   # CJK Unified Ideographs
+                or 0x3400 <= o <= 0x4DBF   # CJK Extension A
+                or 0xAC00 <= o <= 0xD7A3   # Hangul syllables
+                or 0xFF00 <= o <= 0xFFEF): # Fullwidth forms
+            return True
+    return False
+
+
+def _cjk_font(bold: bool):
+    """Return (font_path, index) for the CJK face, weight per `bold`."""
+    return (FONT_CJK_BOLD if bold else FONT_CJK), _CJK_FONT_INDEX
+
+
+# ── Glyph-coverage check (anti-tofu) ───────────────────────────────────────
+# A "valid" JPEG can still show garbled □ boxes if the chosen font lacks glyphs
+# for the script (e.g. DejaVu has no CJK/Thai). This catches that before upload.
+_CMAP_CACHE: dict = {}
+
+
+def _font_glyphs(path: str, index: int = 0):
+    """Return the set of codepoints a font can render, or None if unreadable."""
+    key = (path, index)
+    if key not in _CMAP_CACHE:
+        try:
+            from fontTools.ttLib import TTFont
+            if path.lower().endswith((".ttc", ".otc")):
+                ft = TTFont(path, fontNumber=index)
+            else:
+                ft = TTFont(path)
+            _CMAP_CACHE[key] = set(ft.getBestCmap().keys())
+        except Exception:
+            _CMAP_CACHE[key] = None   # glyph data unavailable → skip the check
+    return _CMAP_CACHE[key]
+
+
+def _missing_chars(path: str, index: int, text: str) -> list[str]:
+    """Characters in `text` the font at (path,index) cannot render (no tofu)."""
+    glyphs = _font_glyphs(path, index)
+    if glyphs is None:
+        return []
+    out: list[str] = []
+    for ch in text or "":
+        if ch.isspace() or ord(ch) < 0x20:
+            continue
+        if ord(ch) not in glyphs and ch not in out:
+            out.append(ch)
+    return out
+
+
+def unrenderable_chars(title: str, subtitle: str = "", author: str = "") -> list[str]:
+    """Return cover-text characters that would render as tofu boxes with the
+    fonts this generator would actually select. Empty list = safe to publish.
+    Returns [] if fontTools/glyph data is unavailable (degrades gracefully)."""
+    if _is_thai(title) or _is_thai(subtitle or ""):
+        tp, ti = FONT_THAI_BOLD, 0
+        sp, si = FONT_THAI, 0
+    elif _is_cjk(title) or _is_cjk(subtitle or ""):
+        tp, ti = _cjk_font(bold=True)
+        sp, si = _cjk_font(bold=False)
+    else:
+        tp, ti = FONT_SANS_BOLD, 0
+        sp, si = FONT_SANS, 0
+    missing: list[str] = []
+    for ch in (_missing_chars(tp, ti, title)
+               + _missing_chars(sp, si, subtitle)
+               + _missing_chars(FONT_SANS_BOLD, 0, author)):
+        if ch not in missing:
+            missing.append(ch)
+    return missing
+
 W, H    = 1600, 2560
 SAFE    = 80               # minimum margin from edge
 MAX_TW  = W - SAFE * 2 - 40   # max text width
@@ -274,6 +373,9 @@ _GENRE_KEYWORDS: dict[str, list[str]] = {
         "emotional", "self-care", "depression", "burnout", "resilience",
         "trauma", "fear", "worry", "panic", "breath", "relaxation",
         "achtsamkeit", "entspannung", "wohlbefinden",
+        # CJK
+        "不安", "ストレス", "瞑想", "マインドフルネス", "メンタル", "心の健康",
+        "癒し", "焦虑", "压力", "冥想",
     ],
     "tech": [
         "ai", "artificial intelligence", "digital", "technology", "computer",
@@ -281,18 +383,27 @@ _GENRE_KEYWORDS: dict[str, list[str]] = {
         "automation", "coding", "developer", "database", "cloud", "cyber",
         "intelligenza artificiale", "tecnologia", "digitale",
         "künstliche intelligenz", "technologie",
+        # CJK
+        "デジタル", "プログラミング", "テクノロジー", "人工知能", "技術",
+        "数字", "编程", "技术", "人工智能",
     ],
     "business": [
         "business", "entrepreneur", "startup", "management", "leadership",
         "strategy", "marketing", "productivity", "success", "corporate",
         "negotiation", "sales", "brand", "customer", "revenue", "profit",
         "azienda", "imprenditore", "strategie", "unternehmen",
+        # CJK
+        "ビジネス", "起業", "経営", "マーケティング", "営業", "副業",
+        "リーダーシップ", "生産性", "商业", "创业", "管理",
     ],
     "finance": [
         "finance", "money", "invest", "wealth", "budget", "saving", "income",
         "financial", "economia", "finanza", "geld", "finanzen", "banque",
         "stock", "trading", "crypto", "asset", "retire", "debt", "tax",
         "เงิน", "การเงิน", "ลงทุน",
+        # CJK
+        "家計", "貯金", "貯蓄", "投資", "お金", "副業", "副収入", "収入",
+        "節約", "予算", "資産", "借金", "年金", "税", "理财", "投资", "储蓄",
     ],
     "food": [
         "recipe", "rezept", "rezepte", "cook", "cooking", "food", "drink",
@@ -302,11 +413,17 @@ _GENRE_KEYWORDS: dict[str, list[str]] = {
         "getränk", "kochen", "küche", "backen", "ernährung",
         "ricetta", "cucina", "bevanda", "receta", "bebida", "cocina",
         "alkoholfrei", "sober",
+        # CJK
+        "レシピ", "料理", "食事", "ごはん", "お菓子", "飲み物", "食",
+        "食谱", "烹饪", "美食",
     ],
     "creative": [
         "creative", "creativity", "workbook", "journal", "art", "design",
         "writing", "paint", "craft", "draw", "sketch", "poetry", "fiction",
         "story", "template", "quaderno", "creativo", "kreativ",
+        # CJK
+        "創作", "アート", "デザイン", "イラスト", "絵", "手帳", "創造",
+        "创作", "艺术", "设计",
     ],
     "children": [
         "children", "kids", "juvenile", "child", "young adult", "teen",
@@ -317,12 +434,17 @@ _GENRE_KEYWORDS: dict[str, list[str]] = {
         "confidence", "mindset", "goal", "overcome", "transform", "improve",
         "success", "happiness", "positive", "wachstum", "selbsthilfe",
         "sviluppo personale", "crescita personale",
+        # CJK
+        "自己啓発", "習慣", "モチベーション", "目標", "成長", "自信", "幸せ",
+        "自我提升", "习惯", "目标",
     ],
     "seniors": [
         "senior", "senioren", "seniorin", "älter", "rentner", "ruhestand",
         "ältere menschen", "retiree", "elderly", "60 plus", "50 plus",
         "smartphone für senioren", "internet für senioren", "computer für senioren",
         "nonno", "nonna", "anziani",
+        # CJK
+        "シニア", "高齢者", "年配", "老後", "老年", "长辈",
     ],
 }
 
@@ -408,8 +530,91 @@ def _draw_pattern(base_img, pattern: str, accent_rgb: tuple):
     return result.convert("RGB")
 
 
+_THAI_BREAKER = None
+
+
+def _thai_words(text: str) -> list[str]:
+    """Segment Thai text into word tokens using ICU's dictionary-based
+    BreakIterator (the same engine xelatex uses for the book interior, so the
+    cover wraps words consistently). Spaces are preserved as their own tokens.
+    Falls back to a single token if PyICU is unavailable."""
+    global _THAI_BREAKER
+    try:
+        import icu
+        if _THAI_BREAKER is None:
+            _THAI_BREAKER = icu.BreakIterator.createWordInstance(icu.Locale("th"))
+        bi = _THAI_BREAKER
+        bi.setText(text)
+        words, prev = [], 0
+        for pos in bi:
+            words.append(text[prev:pos])
+            prev = pos
+        return [w for w in words if w]
+    except Exception:
+        return [text]
+
+
 def _wrap_text(draw, text: str, font, max_width: int) -> list[str]:
-    """Word-wrap `text` so each line fits within max_width pixels."""
+    """Word-wrap `text` so each line fits within max_width pixels.
+
+    CJK languages (Japanese/Chinese/Korean) have no spaces between words, so
+    splitting on whitespace yields a single un-wrappable run. For CJK text we
+    wrap character-by-character instead (the normal line-breaking convention
+    for those scripts)."""
+    if _is_cjk(text):
+        # Break on Japanese punctuation when possible, else any character.
+        no_break_before = "。、）」』】〕》〉”’!?！？.,)"
+        lines: list[str] = []
+        line = ""
+        for ch in text:
+            candidate = line + ch
+            bb = draw.textbbox((0, 0), candidate, font=font)
+            if bb[2] - bb[0] > max_width and line and ch not in no_break_before:
+                lines.append(line)
+                line = ch
+            else:
+                line = candidate
+        if line:
+            lines.append(line)
+        return lines
+
+    if _is_thai(text):
+        # Thai has no inter-word spaces. Break on real word boundaries (ICU
+        # dictionary segmentation — same engine the book interior uses) so a
+        # line never ends mid-word or orphans a leading vowel (เ แ โ ใ ไ).
+        lines: list[str] = []
+        line = ""
+        for tok in _thai_words(text):
+            candidate = line + tok
+            bb = draw.textbbox((0, 0), candidate, font=font)
+            if bb[2] - bb[0] > max_width and line:
+                lines.append(line.rstrip())
+                line = "" if tok == " " else tok
+            elif tok == " " and not line:
+                continue   # don't start a line with a space
+            else:
+                line = candidate
+        if line.strip():
+            lines.append(line.rstrip())
+        # Safety net: if any single word was wider than max_width, char-split it
+        # so it can never overflow the cover edge.
+        fixed: list[str] = []
+        for ln in lines:
+            if draw.textbbox((0, 0), ln, font=font)[2] <= max_width:
+                fixed.append(ln)
+                continue
+            cur = ""
+            for ch in ln:
+                if (draw.textbbox((0, 0), cur + ch, font=font)[2] > max_width
+                        and cur and ord(ch) not in _THAI_COMBINING):
+                    fixed.append(cur)
+                    cur = ch
+                else:
+                    cur += ch
+            if cur:
+                fixed.append(cur)
+        return fixed
+
     words = text.split()
     lines: list[str] = []
     line = ""
@@ -482,11 +687,68 @@ def _draw_bottom_shape(draw, theme: dict):
 
 # ── DALL-E 3 background generator ──────────────────────────────────────────
 
-def _dalle_background(genre: str, title: str) -> "Image | None":
+# Design rules shared by every cover. Quality stays high and consistent while
+# the *scene* itself is invented fresh per book (see _art_direction_prompt), so
+# no two books — even in the same genre — ever get the same image.
+_COVER_ART_RULES = (
+    "Design rules (follow ALL): one single strong focal point, no busy or cluttered "
+    "composition; photorealistic editorial/commercial photography style (not abstract "
+    "AI art, not a collage); high contrast so it stays clear as a tiny 160x250px "
+    "thumbnail; the upper 35-40% of the frame must be calm dark tones or clean negative "
+    "space reserved for overlaid title text; cinematic premium lighting; portrait "
+    "orientation. Absolutely NO text, words, letters, numbers, logos or UI in the image."
+)
+
+
+def _art_direction_prompt(genre: str, title: str, subtitle: str,
+                          keywords: list[str]) -> "str | None":
+    """Use GPT to invent a UNIQUE, content-specific cover scene for THIS exact
+    book, so two books in the same genre never get the same image. Returns a
+    scene-description string (rules appended), or None to fall back to template."""
+    try:
+        import openai
+        api_key = _load_openai_key()
+        if not api_key:
+            return None
+        client = openai.OpenAI(api_key=api_key)
+        kw = ", ".join(keywords[:7]) if keywords else ""
+        user = (
+            f"Book title: {title}\n"
+            f"Subtitle: {subtitle or '(none)'}\n"
+            f"Keywords: {kw or '(none)'}\n"
+            f"Genre: {genre}\n\n"
+            "Describe ONE specific, concrete photographic cover scene that visually "
+            "captures THIS book's exact topic and would make a browsing shopper stop and "
+            "click. Be vivid and specific about the subject, props, setting, colour "
+            "palette and lighting. 2-4 sentences. Make it distinctive and memorable — "
+            "never a generic interchangeable stock photo."
+        )
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content":
+                 "You are an award-winning book-cover art director. " + _COVER_ART_RULES},
+                {"role": "user", "content": user},
+            ],
+            temperature=0.9,      # high → fresh, non-repeating scenes
+            max_tokens=320,
+        )
+        scene = (resp.choices[0].message.content or "").strip()
+        if len(scene) < 40:
+            return None
+        return f"{scene}\n\n{_COVER_ART_RULES}"
+    except Exception as e:
+        print(f"  art-direction prompt failed ({e}), using genre template")
+        return None
+
+
+def _dalle_background(genre: str, title: str, subtitle: str = "",
+                      keywords: list[str] | None = None) -> "Image | None":
     """
     Request a background image from gpt-image-1 (portrait 1024x1536).
     Returns a PIL Image resized to 1600x2560 RGB, or None on failure.
     Never requests text in the image — text is overlaid by Pillow later.
+    The scene is generated per-book so covers never repeat.
     """
     try:
         import openai, base64, io
@@ -498,12 +760,17 @@ def _dalle_background(genre: str, title: str) -> "Image | None":
 
         client = openai.OpenAI(api_key=api_key)
 
-        base_prompt = DALLE_PROMPTS.get(genre, DALLE_PROMPTS["default"])
+        # Bespoke, content-matched scene per book → no duplicate covers.
+        # Falls back to the fixed genre template only if GPT is unavailable.
+        base_prompt = _art_direction_prompt(genre, title, subtitle, keywords or [])
+        if not base_prompt:
+            base_prompt = (
+                f"{DALLE_PROMPTS.get(genre, DALLE_PROMPTS['default'])} "
+                f"The book is titled '{title}'. {_COVER_ART_RULES}"
+            )
         prompt = (
             f"{base_prompt} "
-            f"The book is titled '{title}'. "
-            "Photorealistic or painterly illustration style. "
-            "High quality, suitable for a published book cover. "
+            "Photorealistic, high quality, suitable for a published book cover. "
             "Absolutely no text, no words, no letters anywhere in the image."
         )
 
@@ -590,7 +857,7 @@ def generate_cover(
     theme = THEMES[genre]
 
     # ── 1. Background: DALL-E 3 → Pillow fallback ──────────────────────────
-    img = _dalle_background(genre, title)
+    img = _dalle_background(genre, title, subtitle, keywords)
     dalle_used = img is not None
 
     if dalle_used:
@@ -598,33 +865,65 @@ def generate_cover(
         # Overlay the background pattern lightly on top of the photo
         img = _draw_pattern(img, theme["pattern"], theme["accent"])
     else:
+        # Fallback: jitter the gradient colours with a title-seeded RNG so two
+        # books in the same genre never share an identical fallback cover.
+        import random, hashlib
+        rng = random.Random(int(hashlib.md5(title.encode("utf-8")).hexdigest(), 16))
+        def _jit(rgb):
+            return tuple(max(0, min(255, c + rng.randint(-22, 22))) for c in rgb)
         img = Image.new("RGB", (W, H))
-        _gradient_bg(img, theme["bg_top"], theme["bg_bottom"])
+        _gradient_bg(img, _jit(theme["bg_top"]), _jit(theme["bg_bottom"]))
         img = _draw_pattern(img, theme["pattern"], theme["accent"])
 
     draw = ImageDraw.Draw(img)
 
     # ── 2. Fonts ────────────────────────────────────────────────────────────
+    # Non-Latin scripts need their own font; DejaVu renders them as tofu boxes.
+    # Thai also needs raqm layout so tone marks / floating vowels position right.
+    cjk  = _is_cjk(title) or _is_cjk(subtitle or "")
+    thai = _is_thai(title) or _is_thai(subtitle or "")
+    if thai:
+        title_path, title_idx = FONT_THAI_BOLD, 0
+        sub_path,   sub_idx   = FONT_THAI, 0
+    elif cjk:
+        title_path, title_idx = _cjk_font(bold=True)
+        sub_path,   sub_idx   = _cjk_font(bold=False)
+    else:
+        title_path, title_idx = theme["font_title"], 0
+        sub_path,   sub_idx   = theme["font_sub"], 0
+
+    _LAYOUT = ImageFont.Layout.RAQM if thai else ImageFont.Layout.BASIC
+
+    def _mkfont(path, size, index=0):
+        return ImageFont.truetype(path, size, index=index, layout_engine=_LAYOUT)
+
+    # Anti-tofu guard: warn loudly if the chosen fonts can't render the text.
+    _tofu = (_missing_chars(title_path, title_idx, title)
+             + _missing_chars(sub_path, sub_idx, subtitle))
+    if _tofu:
+        print(f"  ⚠️ COVER WARNING: {len(_tofu)} char(s) have no glyph in the "
+              f"selected font and will render as boxes: {''.join(_tofu[:20])}")
+
     # Title: start large, shrink until it fits in ≤3 lines within the top zone
     # Target: title occupies roughly top 35% of cover (≈ 896 px)
     title_size  = 128
-    font_title  = ImageFont.truetype(theme["font_title"], title_size)
+    font_title  = _mkfont(title_path, title_size, title_idx)
     lines_title = _wrap_text(draw, title, font_title, MAX_TW)
 
     while len(lines_title) > 3 and title_size > 72:
         title_size -= 6
-        font_title  = ImageFont.truetype(theme["font_title"], title_size)
+        font_title  = _mkfont(title_path, title_size, title_idx)
         lines_title = _wrap_text(draw, title, font_title, MAX_TW)
 
     # Allow up to 4 lines for long titles before capping at 66
     while len(lines_title) > 4 and title_size > 66:
         title_size -= 6
-        font_title  = ImageFont.truetype(theme["font_title"], title_size)
+        font_title  = _mkfont(title_path, title_size, title_idx)
         lines_title = _wrap_text(draw, title, font_title, MAX_TW)
 
     sub_size   = max(44, title_size - 36)
-    font_sub   = ImageFont.truetype(theme["font_sub"], sub_size)
-    font_auth  = ImageFont.truetype(FONT_SANS_BOLD, 54)
+    font_sub   = _mkfont(sub_path, sub_size, sub_idx)
+    font_auth  = _mkfont(FONT_SANS_BOLD, 54)
 
     line_h_title = title_size + 20
     line_h_sub   = sub_size + 16
@@ -653,14 +952,30 @@ def generate_cover(
         fill=theme["accent"],
     )
 
-    # ── 5. Subtitle — below image zone, upper part of bottom area ──────────
+    # ── 5. Subtitle — below image zone, fitted into a guarded band so it can
+    # never overlap the author line below or get silently truncated. ─────────
+    # Band: from 72% of the height down to a safe margin above the author
+    # accent line (author sits at H-210, its rule at H-232).
+    sub_band_top    = int(H * 0.72)        # 1843 px
+    sub_band_bottom = (H - 210) - 22 - 34  # ≈ 2294 px — keep clear of author rule
+    band_h          = sub_band_bottom - sub_band_top
+
     lines_sub: list[str] = []
     if subtitle:
-        lines_sub = _wrap_text(draw, subtitle, font_sub, MAX_TW - 80)
-        lines_sub = lines_sub[:3]
+        # Shrink the subtitle font until the WHOLE subtitle fits in ≤3 lines
+        # AND the block height fits the band — so nothing is dropped or collides.
+        while sub_size > 34:
+            font_sub   = _mkfont(sub_path, sub_size, sub_idx)
+            line_h_sub = sub_size + 16
+            lines_sub  = _wrap_text(draw, subtitle, font_sub, MAX_TW - 80)
+            if len(lines_sub) <= 3 and len(lines_sub) * line_h_sub <= band_h:
+                break
+            sub_size -= 4
+        lines_sub = lines_sub[:3]   # last-resort cap (only if min size reached)
 
-    sub_zone_start = int(H * 0.72)   # 1843 px — where subtitle begins
-    y = sub_zone_start
+    # Vertically center the subtitle block within its band.
+    block_h = len(lines_sub) * line_h_sub
+    y = sub_band_top + max(0, (band_h - block_h) // 2)
     for line in lines_sub:
         bb = draw.textbbox((0, 0), line, font=font_sub)
         sx = (W - (bb[2] - bb[0])) // 2

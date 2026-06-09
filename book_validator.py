@@ -44,15 +44,23 @@ _BACK_MATTER_RE = re.compile(
     # Dutch
     r'Over\s+de\s+[Aa]uteur|Bronnen|Referenties|'
     # Polish
-    r'O\s+[Aa]utorze|[ŹZ]r[oó]d[łl]a|Zastrze[żz]enie'
-    r')\b.*$',
+    r'O\s+[Aa]utorze|[ŹZ]r[oó]d[łl]a|Zastrze[żz]enie|'
+    # Japanese / CJK (no \b word boundary works on CJK, handled by alternation end)
+    r'参考文献|参考リソース|リソース(?:集)?|著者(?:について|紹介)|'
+    r'免責事項|免責|レビュー(?:のお願い)?|おわりに|あとがき|謝辞|索引|用語集|'
+    # Chinese / Korean
+    r'参考资料|参考文献|关于作者|免责声明|致谢|'
+    r'참고\s*문헌|저자\s*소개|면책\s*조항'
+    r')(?:\b|\s|：|:|$).*$',
     re.IGNORECASE | re.MULTILINE,
 )
 
-# Part headings:  # Part 4: Title  /  # Teil 4  /  # Parte 4  etc.
+# Part headings:  # Part 4  /  ## Part 4  /  # Teil 4  /  # パート4  etc.
+# #{1,2}: parts may be written at H1 or H2 depending on the book.
+# \s* (not \s+): Japanese "パート4" has no space before the number.
 _PART_NUMBER_RE = re.compile(
-    r'^#\s+(?:Part|Teil|Parte|Ph[aầ]n|Раздел|Bagian|Partie|Deel|'
-    r'Sección|Bölüm|部分?|篇)\s+(\d+)',
+    r'^#{1,2}\s+(?:Part|Teil|Parte|Ph[aầ]n|Раздел|Bagian|Partie|Deel|'
+    r'Sección|Bölüm|パート|部分?|篇)\s*(\d+)',
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -130,9 +138,20 @@ def split_at_back_matter(content: str) -> Tuple[str, str]:
     return split_back_matter(content)
 
 
+# Japanese part/chapter headings written as 第N部 / 第N章 (number is infixed).
+_JP_PART_RE = re.compile(r'^#{1,2}\s+第\s*(\d+)\s*[部章]', re.MULTILINE)
+
+
+def _all_part_numbers(content: str) -> list:
+    """All top-level part numbers, across keyword (Part/パート…) and 第N部/章 styles."""
+    nums = [int(m.group(1)) for m in _PART_NUMBER_RE.finditer(content)]
+    nums += [int(m.group(1)) for m in _JP_PART_RE.finditer(content)]
+    return nums
+
+
 def get_last_part_number(content: str) -> int:
     """Return the highest Part number found in content (0 if none)."""
-    nums = [int(m.group(1)) for m in _PART_NUMBER_RE.finditer(content)]
+    nums = _all_part_numbers(content)
     return max(nums) if nums else 0
 
 
@@ -150,7 +169,7 @@ def extract_part_outline(content: str) -> str:
     parts = []
     for line in lines:
         stripped = line.strip()
-        if _PART_NUMBER_RE.match(stripped):
+        if _PART_NUMBER_RE.match(stripped) or _JP_PART_RE.match(stripped):
             # Remove leading # and clean up
             parts.append(stripped.lstrip('#').strip())
     if not parts:
@@ -264,6 +283,137 @@ def _fix_continuation_after_back_matter(content: str, report: QAReport) -> str:
 
 # ── Public API ─────────────────────────────────────────────────────────────────
 
+def _heading_level(line: str) -> int:
+    m = re.match(r'^(#{1,6})\s', line)
+    return len(m.group(1)) if m else 0
+
+
+def pull_back_matter_to_end(content: str, report: QAReport = None) -> str:
+    """Move EVERY back-matter section to the very end of the document, in order.
+
+    Generic (handles any heading type, not just Parts): collects each run of
+    back-matter sections and re-appends them after all chapter/part content, so a
+    grafted continuation that landed after the back matter is restored to the body.
+    """
+    lines = content.split('\n')
+    n = len(lines)
+    bm_ranges = []
+    i = 0
+    while i < n:
+        if _BACK_MATTER_RE.match(lines[i]):
+            lvl = _heading_level(lines[i])
+            j = i + 1
+            while j < n:
+                hl = _heading_level(lines[j])
+                if hl and hl <= lvl and not _BACK_MATTER_RE.match(lines[j]):
+                    break
+                j += 1
+            bm_ranges.append((i, j))
+            i = j
+        else:
+            i += 1
+    if len(bm_ranges) == 0:
+        return content
+    # If the only back matter already sits at the tail with nothing after it, skip.
+    last_end = bm_ranges[-1][1]
+    trailing = "".join(lines[last_end:]).strip()
+    if len(bm_ranges) == 1 and not trailing:
+        return content
+
+    remove = set()
+    bm_lines = []
+    for s, e in bm_ranges:
+        bm_lines.extend(lines[s:e])
+        remove.update(range(s, e))
+    body = [l for k, l in enumerate(lines) if k not in remove]
+    while body and not body[-1].strip():
+        body.pop()
+    while bm_lines and not bm_lines[0].strip():
+        bm_lines.pop(0)
+    if report is not None:
+        report.add("error", "Back matter was not at the end; moved all closing "
+                            "sections after the body.", fix_applied=True)
+    return '\n'.join(body + ['', ''] + bm_lines)
+
+
+# 第N章 chapter headings (used by CJK books) at any heading level.
+_JP_CHAPTER_NUM_RE = re.compile(r'^(#{1,4}\s*第\s*)(\d+)(\s*章)', re.MULTILINE)
+
+
+def _renumber_jp_chapters(content: str, report: QAReport = None) -> str:
+    """Renumber 第N章 chapter headings sequentially in document order, removing
+    duplicate numbers (a repeated/grafted block)."""
+    nums = [m.group(2) for m in _JP_CHAPTER_NUM_RE.finditer(content)]
+    if len(nums) == len(set(nums)):
+        return content   # already unique
+    counter = [0]
+
+    def _fix(m):
+        counter[0] += 1
+        return f"{m.group(1)}{counter[0]}{m.group(3)}"
+
+    fixed = _JP_CHAPTER_NUM_RE.sub(_fix, content)
+    if report is not None:
+        report.add("error", "Duplicate 第N章 chapter numbers renumbered sequentially.",
+                   fix_applied=True)
+    return fixed
+
+
+# References-list heading (a bibliography that NUMBERS its entries 1. 2. 3. …).
+# Used to learn which citation numbers are actually defined, so we can strip
+# inline [N] markers that point to a non-existent reference (a model hallucinated
+# an extra citation number).
+_REF_HEADING_RE = re.compile(
+    r'^#{1,3}\s+.*(?:'
+    r'References?|Bibliography|Works\s+Cited|'
+    r'Referencias|R[ée]f[ée]rences|Riferimenti|Refer[êe]ncias|Referenties|'
+    r'Quellen|Literatur(?:verzeichnis)?|[ŹZ]r[oó]d[łl]a|'
+    r'参考文献|参考资料|参考リソース|참고\s*문헌'
+    r')',
+    re.IGNORECASE | re.MULTILINE,
+)
+_REF_ITEM_RE = re.compile(r'^\s*(\d+)[.)]\s+\S', re.MULTILINE)
+_HEADING_LINE_RE = re.compile(r'^#{1,6}\s', re.MULTILINE)
+_INLINE_CITATION_RE = re.compile(r'\[(\d+)\]')
+
+
+def _defined_reference_numbers(content: str) -> set:
+    """Return the set of citation numbers defined in the references list, or an
+    empty set if there is no numbered references section (then we don't touch
+    citations)."""
+    m = _REF_HEADING_RE.search(content)
+    if not m:
+        return set()
+    rest = content[m.end():]
+    nxt = _HEADING_LINE_RE.search(rest)
+    section = rest[:nxt.start()] if nxt else rest
+    return {int(x) for x in _REF_ITEM_RE.findall(section)}
+
+
+def _strip_orphan_citations(content: str, report: QAReport = None) -> str:
+    """Remove inline [N] citation markers whose number has no matching entry in
+    the references list (a hallucinated over-citation). Leaves all valid
+    citations and any [N] when there is no numbered references section."""
+    defined = _defined_reference_numbers(content)
+    if not defined:
+        return content
+    orphans = set()
+
+    def _fix(m):
+        n = int(m.group(1))
+        if n in defined:
+            return m.group(0)
+        orphans.add(n)
+        return ""
+
+    fixed = _INLINE_CITATION_RE.sub(_fix, content)
+    if orphans and report is not None:
+        report.add("error",
+                   f"Removed citations with no matching reference: "
+                   f"{sorted(orphans)}.", fix_applied=True)
+    return fixed
+
+
 def validate_and_fix(content: str) -> Tuple[str, QAReport]:
     """
     Validate book structure, auto-fix known issues.
@@ -271,6 +421,13 @@ def validate_and_fix(content: str) -> Tuple[str, QAReport]:
     passed=True means the book is ready to export (all errors were resolved).
     """
     report = QAReport()
+
+    # Deterministic structural normalisation FIRST: guarantees back matter ends
+    # the book and CJK chapter numbers are unique, regardless of how the model
+    # ordered its output.
+    content = pull_back_matter_to_end(content, report)
+    content = _renumber_jp_chapters(content, report)
+    content = _strip_orphan_citations(content, report)
 
     report.total_h1 = len(_H1_RE.findall(content))
     report.total_h2 = len(_H2_RE.findall(content))

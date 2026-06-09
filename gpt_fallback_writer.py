@@ -41,8 +41,13 @@ def pages_estimate(units, lang_code):
 
 
 def continuation_threshold(lang_code):
-    """Trigger continuation if content is below this."""
-    return 30000 if lang_code in CJK_LANGS else 10000
+    """Trigger continuation if content is below this.
+
+    Must clear the quality gate's 40-page minimum. The gate estimates pages as
+    units // 300 (Latin) / units // 750 (CJK) AND counts fewer units than this
+    writer (it strips markdown/headings), so the threshold carries a margin
+    above the bare 12,000-word / 30,000-char floor."""
+    return 32000 if lang_code in CJK_LANGS else 13000
 
 
 def abort_threshold(lang_code):
@@ -248,14 +253,34 @@ def step2_continue_book(topic, main_body_content, outline_summary=""):
                          uses correct sequential Part numbers
     """
     word_count = len(main_body_content.split())
-    next_part_hint = ""
+
+    # Derive the exact last part heading + the next number so the model extends
+    # the SAME sequence/format instead of restarting at 1 (a frequent failure for
+    # CJK, where it would otherwise switch styles e.g. 第N部 → パート1).
+    last_heading = ""
+    next_num = None
     if outline_summary and outline_summary != "(no Parts found)":
-        next_part_hint = (
-            f"\nCURRENT BOOK OUTLINE (Parts already written — do NOT repeat these):\n"
-            f"{outline_summary}\n\n"
-            f"Continue AFTER the last Part listed above. "
-            f"Number new Parts sequentially from where the outline ends."
-        )
+        lines = [l.strip().lstrip("-").strip() for l in outline_summary.splitlines() if l.strip()]
+        if lines:
+            last_heading = lines[-1]
+            nums = re.findall(r"\d+", last_heading)
+            if nums:
+                next_num = int(nums[0]) + 1
+
+    if last_heading:
+        next_part_hint = f"""
+PARTS ALREADY WRITTEN (do NOT repeat, rewrite, or restart these):
+{outline_summary}
+
+The LAST part written was:  {last_heading}
+Your new parts MUST start at number {next_num} and count UP from there ({next_num}, {next_num + 1}, …).
+Use the EXACT SAME heading format and wording style as the last part above
+(if it begins with 「第…部」 keep using 「第…部」; if 「パート…」 keep 「パート…」 — do not switch styles)."""
+    else:
+        next_part_hint = ""
+
+    example_heading = (last_heading.split(":")[0].split("：")[0].strip() if last_heading
+                       else "Part 7")
 
     prompt = f"""You are continuing to write a non-fiction ebook in {topic['language']}.
 
@@ -264,19 +289,20 @@ The main content so far is {word_count} words, which is too short. \
 A KDP paperback needs 10,000+ words to fill 30+ pages.
 {next_part_hint}
 
-Add at least 3 more full chapters in {topic['language']}. Each chapter must have:
-- A Part heading with # (e.g., # Part 7: Advanced Strategies)
+Add at least 3 more full parts in {topic['language']}, continuing the sequence above.
+Each part must have:
+- A part heading with a single # in the SAME format as the existing parts (the next number after "{example_heading}")
 - 4–5 sections with ## (each section must have 200+ words)
 - Practical content: examples, step-by-step guides, or tables
 - Target: 3,000+ words of additional content
 
 CRITICAL RULES:
-- Do NOT include back matter (Resources, References, About the Author, Disclaimer) — those are added separately after all chapters are written.
-- Do NOT repeat Part numbers that are already in the outline above.
-- Do NOT write a table of contents or title heading.
+- This is a CONTINUATION. Do NOT restart numbering at 1. Do NOT rewrite earlier parts.
+- Do NOT include back matter (Resources, References, About the Author, Disclaimer) — those already exist and are re-attached separately.
+- Do NOT write an introduction, a table of contents, or the book title.
 - Write ENTIRELY in {topic['language']}. Do NOT switch languages.
 
-Write the additional chapters now:"""
+Write the additional parts now, starting at part number {next_num or 'the next sequential number'}:"""
 
     return call_gpt([{"role": "user", "content": prompt}], max_tokens=16000)
 
@@ -653,8 +679,10 @@ def main():
         print(f"  {unit_label.capitalize()}: {units} (~{est} pages)")
 
         # Continue in bounded passes until the 40-page minimum is reached.
+        # Keep this low: each extra pass is another chance for the model to
+        # restart numbering / re-introduce structure (esp. CJK).
         continuation_pass = 0
-        while units < continuation_threshold(lang_code) and continuation_pass < 3:
+        while units < continuation_threshold(lang_code) and continuation_pass < 4:
             continuation_pass += 1
             print(f"  Content short ({units} {unit_label}, ~{est} pages). Adding more chapters...")
             # Split back matter out BEFORE calling continuation so the new

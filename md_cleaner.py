@@ -227,6 +227,13 @@ def _normalize_thematic_breaks(content: str) -> str:
     return re.sub(r'(?m)^---[ \t]*$', '* * *', content)
 
 
+def _normalize_br_tags(content: str) -> str:
+    """Self-close raw <br> tags. The model often emits HTML4 <br> (commonly to
+    fake line breaks inside table cells); unclosed <br> produces invalid XHTML
+    in the EPUB and a fatal epubcheck error. <br/> is valid everywhere."""
+    return re.sub(r'<\s*br\s*/?\s*>', '<br/>', content, flags=re.IGNORECASE)
+
+
 def clean(content: str) -> str:
     """
     Apply all fixes in order and return the cleaned markdown.
@@ -237,4 +244,5 @@ def clean(content: str) -> str:
     content = _remove_inline_toc(content)
     content = _strip_dash_before_chapter(content)
     content = _normalize_thematic_breaks(content)
+    content = _normalize_br_tags(content)
     return content.lstrip('\n')

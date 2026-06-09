@@ -196,246 +196,30 @@ async def generate_pdf(slug: str, request: Request, force: bool = False):
     check_auth(request)
     book_dir = get_book_dir(slug)
     listing_file = book_dir / "listing.json"
-    md_file = book_dir / "ebook.md"
     if not listing_file.exists():
         raise HTTPException(status_code=404, detail="Book not found")
-    if not md_file.exists():
-        raise HTTPException(status_code=404, detail="No ebook.md found")
-
-    data = json.loads(listing_file.read_text())
-    title = data.get("title", slug)
-    safe_name = title.replace(" ", "-").replace("/", "-").replace(":", "-")
-    pdf_path = book_dir / f"{safe_name}-paperback.pdf"
-
-    if pdf_path.exists() and not force:
+    # Return early (and skip the Telegram notify) if the PDF already exists.
+    if not force and list(book_dir.glob("*paperback*.pdf")):
         return {"ok": True, "message": "PDF already exists"}
-    if force:
-        for old_pdf in book_dir.glob("*paperback*.pdf"):
-            old_pdf.unlink(missing_ok=True)
 
-    # Also create metadata.yaml if missing
-    meta_file = book_dir / "metadata.yaml"
-    if not meta_file.exists():
-        lang = data.get("language", "pt-BR")
-        lang_code = "pt-BR" if "Portuguese" in lang else "en" if "English" in lang else "id" if "Indonesian" in lang else lang[:5]
-        meta_file.write_text(
-            f'---\ntitle: "{title}"\n'
-            f'subtitle: "{data.get("subtitle", "")}"\n'
-            f'author: "WK Bui"\nlang: {lang_code}\ndate: "2026"\n---\n'
-        )
-
-    import subprocess
-    import re
     import sys as _sys
     _sys.path.insert(0, str(Path(__file__).parent))
-    import md_cleaner
+    from pdf_builder import build_paperback_pdf
 
-    # Pre-process markdown
-    md_text = md_file.read_text(encoding="utf-8")
-
-    # Step 1 — structural fixes: remove title heading, inline TOC, and ---
-    #          before chapter headings (all three corrupt pandoc TOC page numbers
-    #          or leave near-empty pages in the PDF).
-    md_processed = md_cleaner.clean(md_text)
-
-    # Step 1b — structural validation: detect and fix duplicate Part numbers,
-    #            misplaced continuation chapters, and back matter position.
+    # Single source of truth for the pandoc invocation (fonts, CJK/Thai line
+    # breaking, header, trim size) lives in pdf_builder.build_paperback_pdf.
     try:
-        from book_validator import validate_and_fix
-        md_processed, qa_report = validate_and_fix(md_processed)
-        qa_text = qa_report.summary()
-        logger.info(f"book_validator [{slug}]: {qa_text}")
-        # Persist QA report alongside the PDF
-        (book_dir / "qa-report.txt").write_text(qa_text, encoding="utf-8")
-        if not qa_report.passed:
-            raise HTTPException(
-                status_code=422,
-                detail=f"Book structure issues that could not be auto-fixed:\n{qa_text}"
-            )
-    except HTTPException:
-        raise
-    except Exception as _bv_err:
-        logger.warning(f"book_validator error for {slug}: {_bv_err}")
+        pdf_path = build_paperback_pdf(slug, force=force)
+    except ValueError as exc:
+        msg = str(exc)
+        code = 404 if ("not found" in msg.lower() or "No ebook.md" in msg) else 422
+        raise HTTPException(status_code=code, detail=msg)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
-    # Step 2 — wrap bare URLs in <> so pandoc converts them to \url{}
-    md_processed = re.sub(
-        r'(?<![(<\[])(?<!\]\()https?://[^\s\)>\]]+',
-        r'<\g<0>>',
-        md_processed,
-    )
-
-    # Prepend copyright page (raw LaTeX passthrough — xelatex handles UTF-8 natively)
-    subtitle = data.get("subtitle", "")
-    import time as _time
-    pub_year = _time.strftime('%Y')
-    copyright_block = (
-        "\\newpage\n"
-        "\\thispagestyle{empty}\n\n"
-        f"*{title}*\n\n"
-        + (f"*{subtitle}*\n\n" if subtitle else "")
-        + "---\n\n"
-        f"Copyright © {pub_year} WK Bui\n\n"
-        "All rights reserved. No part of this publication may be reproduced, distributed, "
-        "or transmitted in any form or by any means, including photocopying or electronic methods, "
-        "without the prior written permission of the author.\n\n"
-        "*Disclaimer: This publication is for informational and educational purposes only. "
-        "The author and publisher make no representations or warranties regarding the accuracy "
-        "or completeness of any information contained herein. "
-        "Readers should consult a qualified professional for advice specific to their situation.*\n\n"
-        "\\clearpage\n\n"
-    )
-    md_processed = copyright_block + md_processed
-
-    processed_md = book_dir / "_ebook_processed.md"
-    processed_md.write_text(md_processed, encoding="utf-8")
-
-    # Create LaTeX header for better table/layout handling
-    header_file = book_dir / "_header.tex"
-    header_file.write_text(r"""
-\usepackage{tabularx}
-\usepackage{booktabs}
-\usepackage{adjustbox}
-\usepackage{float}
-\usepackage{longtable}
-\usepackage{array}
-\usepackage{graphicx}
-\usepackage{ragged2e}
-\usepackage{titlesec}
-
-% --- URL line breaking (prevent overflow) ---
-\usepackage{url}
-\usepackage{xurl}
-\urlstyle{same}
-\Urlmuskip=0mu plus 3mu
-
-% --- Readable body text ---
-% We use full justification for the body text, as requested.
-\microtypesetup{protrusion=true,expansion=false}
-
-% Moderate hyphenation to avoid rivers and broken words at the margin.
-\hyphenpenalty=700
-\tolerance=1000
-\emergencystretch=2em
-\hbadness=10000
-\vbadness=10000
-\setlength{\hfuzz}{5pt}
-\overfullrule=0pt
-
-% Allow line breaks at any character in URLs
-\makeatletter
-\g@addto@macro\UrlBreaks{\UrlOrds}
-\makeatother
-\PassOptionsToPackage{breaklinks=true}{hyperref}
-
-% --- Page layout ---
-\raggedbottom
-
-% --- Table overflow prevention ---
-\let\oldlongtable\longtable
-\renewcommand{\longtable}{\scriptsize\oldlongtable}
-\setlength{\tabcolsep}{2pt}
-\renewcommand{\arraystretch}{1.28}
-\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
-\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
-
-% Catch images that are too wide
-\makeatletter
-\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
-\makeatother
-
-% --- Interior images: scale to 72% of line width, centered ---
-\setkeys{Gin}{width=0.72\linewidth,keepaspectratio}
-
-% Center figures, small italic caption, no redundant "Figure N:" prefix
-\usepackage[font=small,labelfont=it,labelformat=empty,justification=centering]{caption}
-
-% Pin images exactly where written in the text (no floating to page top/bottom),
-% so an image never drifts away from its paragraph and leaves a weird gap.
-\floatplacement{figure}{H}
-
-% --- Paragraph spacing ---
-\setlength{\parskip}{0.5em}
-\setlength{\parindent}{0pt}
-
-% --- Headings ---
-% Keep headings ragged-right. Full justification on short headings creates
-% giant word gaps such as "Planificación     de     inversiones".
-\titleformat{\section}
-  {\normalfont\Large\bfseries\RaggedRight}{\thesection}{1em}{}
-\titleformat{\subsection}
-  {\normalfont\large\bfseries\RaggedRight}{\thesubsection}{1em}{}
-\titleformat{\subsubsection}
-  {\normalfont\normalsize\bfseries\RaggedRight}{\thesubsubsection}{1em}{}
-
-% --- Prevent orphans/widows ---
-\widowpenalty=10000
-\clubpenalty=10000
-
-% --- Chapter/section page break rules ---
-% Only # headings (\chapter) force new pages.
-% ## headings (\section) just need enough space.
-\usepackage{needspace}
-\usepackage{etoolbox}
-\preto\section{\needspace{8\baselineskip}}
-\preto\subsection{\needspace{5\baselineskip}}
-\preto\subsubsection{\needspace{4\baselineskip}}
-
-% --- Clean chapter/Part page breaks ---
-% Each # heading (a "Part") ALWAYS starts on a fresh page (default \chapter
-% \clearpage), but with a COMPACT head: no 50pt top gap, no "Chapter N" label.
-\makeatletter
-\def\@makechapterhead#1{%
-  \vspace*{20\p@}%
-  {\parindent \z@ \raggedright \normalfont
-    \huge \bfseries #1\par\nobreak
-    \vskip 24\p@
-  }}
-\def\@makeschapterhead#1{%
-  \vspace*{20\p@}%
-  {\parindent \z@ \raggedright
-    \normalfont \huge \bfseries #1\par\nobreak
-    \vskip 24\p@
-  }}
-\makeatother
-
-% --- Better page breaks ---
-\predisplaypenalty=0
-\postdisplaypenalty=0
-\makeatletter
-\@beginparpenalty=0
-\@endparpenalty=0
-\@itempenalty=-100
-\makeatother
-
-""")
-
-    # KDP paperback: 6x9 inch trim size
-    result = subprocess.run(
-        ["pandoc", str(processed_md), "-o", str(pdf_path),
-         "--pdf-engine=xelatex",
-         "--resource-path", str(book_dir),
-         "--template", "/root/libra/kdp-template.latex",
-         "--metadata-file", str(meta_file),
-         "--toc", "--toc-depth=2",
-         "-H", str(header_file),
-         "--lua-filter", "/root/libra/break-urls.lua",
-         "--lua-filter", "/root/libra/fix-tables.lua",
-         "-V", "geometry:paperwidth=6in,paperheight=9in,top=0.75in,bottom=0.75in,inner=0.75in,outer=0.625in",
-         "-V", "fontsize=10pt",
-         "-V", "mainfont=DejaVu Serif",
-         "-V", "sansfont=DejaVu Sans",
-         "-V", "monofont=DejaVu Sans Mono",
-         "-V", "documentclass=report",
-         "-V", "classoption=openany,oneside"],
-        capture_output=True, text=True, timeout=120
-    )
-    # Cleanup temp files
-    processed_md.unlink(missing_ok=True)
-    if result.returncode != 0:
-        raise HTTPException(status_code=500, detail=f"PDF generation failed: {result.stderr[:500]}")
-
+    title = json.loads(listing_file.read_text()).get("title", slug)
     title_th = await translate_th(title)
-    await notify(f"📄 <b>PDF Generated</b>\n{title}\n({title_th})")
+    await notify(f"\U0001F4C4 <b>PDF Generated</b>\n{title}\n({title_th})")
     return {"ok": True, "message": "PDF generated", "filename": pdf_path.name}
 
 

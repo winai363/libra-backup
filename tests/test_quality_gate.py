@@ -12,6 +12,19 @@ from quality_gate import validate_book, GateReport, MIN_WORDS, MIN_FICTION_WORDS
 KDP_DIR = Path("/root/kdp")
 
 
+@pytest.fixture(autouse=True)
+def _stub_epubcheck(monkeypatch):
+    """The synthetic fixture EPUB is a placeholder, not a real zip, so the
+    external W3C epubcheck tool can't validate it and reports a fatal. These
+    tests exercise validate_book's deterministic logic (word count, sections,
+    references, URLs, cover), not the epubcheck integration — so stub it clean.
+    Real books are still epubchecked by the production pipeline."""
+    monkeypatch.setattr(
+        "quality_gate._epubcheck",
+        lambda book_dir: {"fatals": 0, "errors": 0, "warnings": 0},
+    )
+
+
 def _make_book(tmp_path, words=12000, sections=15, refs=10, fiction=False):
     """Create a minimal valid book for testing."""
     book_dir = tmp_path / "test-book"

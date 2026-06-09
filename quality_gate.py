@@ -255,6 +255,85 @@ def _is_fiction(listing: dict) -> bool:
     )
 
 
+# --- Kindle-format suitability -------------------------------------------------
+# Amazon KDP rejects books "not suited to the Kindle format" — puzzle books,
+# blank journals, pattern books, coloring books, and facing-page translations.
+# Libra is a Kindle-eBook-only pipeline, so these MUST never be generated/uploaded
+# (they belong in paperback-only workflows). Each book that slips through is a
+# guaranteed Amazon rejection + a strike against the account.
+
+# Unambiguous game/puzzle names — safe to match bare (no generic-word collisions).
+_PUZZLE_TERMS = [
+    # English / international
+    r"sudoku", r"crosswords?", r"word ?search(?:es)?", r"word find", r"word fill",
+    r"kakuro", r"kenken", r"nonograms?", r"cryptograms?", r"cryptic crosswords?",
+    r"dot[- ]to[- ]dot", r"spot the difference", r"find the difference",
+    r"seek and find", r"search and find", r"hidden words?", r"hidden pictures?",
+    r"logic puzzles?", r"brain games?", r"brain teasers?", r"anagram",
+    # French
+    r"mots mêlés", r"mots fléchés", r"mots croisés", r"jeux de mots",
+    r"jeux de réflexion", r"casse-têtes?", r"points à relier",
+    # German
+    r"kreuzworträtsel", r"suchsel", r"wortsuche", r"zahlenrätsel", r"rätselbuch",
+    # Spanish
+    r"sopa de letras", r"crucigramas?", r"pasatiempos",
+    # Italian
+    r"parole crociate", r"cruciverba", r"enigmistica", r"giochi di parole",
+    # Dutch
+    r"kruiswoordpuzzels?", r"woordzoekers?",
+    # Polish
+    r"krzyżówk", r"łamigłówk",
+    # Japanese
+    r"クロスワード", r"ナンプレ", r"数独", r"言葉遊び",
+]
+
+# Generic words that are only unsuitable as a *book/notebook* — require a
+# book-type qualifier so we don't false-positive on metaphorical prose
+# ("solve life's puzzles", "the maze of bureaucracy", "journal article").
+_NEEDS_BOOK_QUALIFIER = (
+    r"(?:puzzles?|coloring|colouring|color by number|colour by number|maze|mazes|"
+    r"labyrinth|labyrinthe|coloriage|colorier|malbuch|ausmalbuch|libro para colorear|"
+    r"libro da colorare|kleurboek|kolorowank|塗り絵|ぬりえ|パズル|迷路|"
+    r"activity|activité|aktivität|attività|actividad|"
+    r"cross stitch|knitting|crochet|quilting|sewing|pattern|"
+    r"blank|lined|dot grid|guided|gratitude)"
+)
+_BOOK_QUALIFIER = (
+    r"(?:books?|pads?|journals?|notebooks?|planners?|"
+    r"livres?|cahiers?|carnets?|buch|bücher|heft|libros?|libro|libri|quaderni?|"
+    r"boek|boeken|książk|帳|ノート)"
+)
+
+_PUZZLE_RE = re.compile("|".join(_PUZZLE_TERMS), re.IGNORECASE)
+# qualifier within ~3 words of the generic term, either order
+_QUALIFIED_RE = re.compile(
+    rf"\b{_NEEDS_BOOK_QUALIFIER}\b(?:\W+\w+){{0,3}}\W+{_BOOK_QUALIFIER}\b"
+    rf"|\b{_BOOK_QUALIFIER}\b(?:\W+\w+){{0,3}}\W+{_NEEDS_BOOK_QUALIFIER}\b",
+    re.IGNORECASE,
+)
+
+
+def kindle_unsuitable(listing: dict) -> str | None:
+    """Return a reason string if this book is not suited to the Kindle format
+    (puzzle/coloring/blank-journal/pattern/activity book), else None."""
+    metadata_text = " ".join(
+        [
+            str(listing.get("title", "")),
+            str(listing.get("subtitle", "")),
+            str(listing.get("description", "")),
+            " ".join(map(str, listing.get("categories", []))),
+            " ".join(map(str, listing.get("keywords", []))),
+        ]
+    )
+    m = _PUZZLE_RE.search(metadata_text)
+    if m:
+        return f"puzzle/game content detected ('{m.group(0)}')"
+    m = _QUALIFIED_RE.search(metadata_text)
+    if m:
+        return f"activity/coloring/journal/pattern book detected ('{m.group(0).strip()}')"
+    return None
+
+
 # Status codes where the server clearly exists but is blocking/restricting
 # automated access (bot protection, auth walls, rate limits, method limits).
 # These are NOT dead links — never fail the upload on them.
@@ -328,6 +407,14 @@ def validate_book(
     except (OSError, json.JSONDecodeError) as exc:
         report.error(f"Invalid listing.json: {exc}")
         return report
+
+    unsuitable = kindle_unsuitable(listing)
+    if unsuitable:
+        report.error(
+            f"Not suited to the Kindle format: {unsuitable}. Amazon rejects "
+            "puzzle/coloring/blank-journal/pattern/activity books as eBooks. "
+            "Libra is Kindle-only — do not generate or upload this type."
+        )
 
     content = required["ebook.md"].read_text(encoding="utf-8")
     metadata = required["metadata.yaml"].read_text(encoding="utf-8")

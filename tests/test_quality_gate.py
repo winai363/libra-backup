@@ -7,7 +7,7 @@ from pathlib import Path
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from quality_gate import validate_book, GateReport, MIN_WORDS, MIN_FICTION_WORDS
+from quality_gate import validate_book, GateReport, MIN_WORDS, MIN_FICTION_WORDS, kindle_unsuitable
 
 KDP_DIR = Path("/root/kdp")
 
@@ -132,6 +132,53 @@ def test_fail_too_few_keywords(tmp_path, monkeypatch):
     monkeypatch.setattr("quality_gate._unreachable_urls", lambda urls: [])
     report = validate_book(slug)
     assert not report.passed
+
+
+def test_kindle_unsuitable_flags_puzzle_books():
+    """Puzzle/coloring/journal/pattern/activity books are not Kindle-suitable."""
+    # The real book Amazon rejected (French senior puzzle/activity book).
+    assert kindle_unsuitable({
+        "title": "Carnet d'Activités Cérébrales Grand Format pour Seniors : Jeux de Mots, Sudoku et Mémorisation",
+        "subtitle": "Stimulez votre cerveau chaque jour",
+        "keywords": ["cahier de jeux pour seniors", "sudoku grand format facile"],
+    })
+    # A spread of unsuitable formats across languages.
+    for listing in [
+        {"title": "Easy Sudoku for Adults"},
+        {"title": "Large Print Crossword Puzzle Book"},
+        {"title": "Word Search for Seniors"},
+        {"title": "Adult Coloring Book", "subtitle": "stress relief"},
+        {"title": "Kreuzworträtsel für Senioren"},
+        {"title": "Sopa de Letras para Adultos"},
+        {"title": "Blank Lined Journal", "subtitle": "120 pages"},
+        {"title": "Knitting Pattern Book"},
+    ]:
+        assert kindle_unsuitable(listing), f"should flag: {listing}"
+
+
+def test_kindle_unsuitable_allows_real_text_books():
+    """Text-based workbooks/guides/journaling guides must NOT be flagged."""
+    for listing in [
+        {"title": "AI Augmented Productivity Toolkit", "subtitle": "a workbook for professionals"},
+        {"title": "Anxiety Workbook for New Moms", "subtitle": "a guided self-help workbook"},
+        {"title": "Personal Finance for Beginners",
+         "description": "Navigate the maze of taxes and solve the puzzles of money."},
+        {"title": "How to Start Journaling", "subtitle": "a beginner's guide to journal writing"},
+    ]:
+        assert kindle_unsuitable(listing) is None, f"should NOT flag: {listing}"
+
+
+def test_gate_blocks_puzzle_book(tmp_path, monkeypatch):
+    """validate_book must hard-fail a puzzle/activity book (Amazon rejects these)."""
+    book_dir, slug = _make_book(tmp_path, words=13000, sections=15, refs=10)
+    listing = json.loads((book_dir / "listing.json").read_text())
+    listing["title"] = "Sudoku and Word Search Activity Book for Seniors"
+    (book_dir / "listing.json").write_text(json.dumps(listing))
+    monkeypatch.setattr("quality_gate.KDP_DIR", tmp_path)
+    monkeypatch.setattr("quality_gate._unreachable_urls", lambda urls: [])
+    report = validate_book(slug)
+    assert not report.passed
+    assert any("kindle format" in e.lower() for e in report.errors), report.errors
 
 
 def test_fiction_threshold(tmp_path, monkeypatch):

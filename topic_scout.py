@@ -63,12 +63,24 @@ FOR EACH CANDIDATE — you MUST verify:
 - Does demand evidence exist? (search volume, buyer forums, reddit discussions)
 
 HARD FILTER — only include if ALL pass:
-✅ Non-fiction, practical (how-to, guide, workbook)
+✅ Non-fiction, practical (how-to, guide, text-based workbook with written exercises)
 ✅ Under 500 quality competing books in the target marketplace
 ✅ Under 40 quality books written IN the target language specifically
 ✅ Real buyer demand evidence found (not just "this topic exists")
 ✅ Target working adults 25-55, legally safe topic
 ✅ NOT in existing books list above
+
+❌ HARD REJECT — these are NOT suited to the Kindle eBook format and Amazon will
+   refuse to publish them. NEVER propose any of these, in any language:
+   - Puzzle / game books: sudoku, crosswords, word search, mazes, logic puzzles,
+     brain-teaser/activity books (FR: jeux de mots/mots mêlés/cahier d'activités;
+     DE: Rätsel/Kreuzworträtsel; ES: sopa de letras/pasatiempos; IT: cruciverba;
+     JP: クロスワード/数独/迷路)
+   - Coloring books, dot-to-dot, anything to fill in by hand
+   - Blank/lined journals, notebooks, planners, gratitude journals (no real text content)
+   - Pattern books: knitting/crochet/cross-stitch/sewing/quilting patterns
+   - Facing-page (bilingual side-by-side) translation books
+   The book must be READABLE TEXT a person consumes on a Kindle screen.
 
 Return JSON array of EXACTLY 5 candidates (already filtered to low-competition only):
 [
@@ -187,10 +199,26 @@ def scout(save_candidates_to: Path | None = None) -> dict:
     candidates = discover_candidates(existing_books)
     print(f"[topic_scout] Got {len(candidates)} candidates from GPT-4.1")
 
+    from quality_gate import kindle_unsuitable
+
     scored = []
     for i, c in enumerate(candidates):
         c = _enrich_candidate(c)
         print(f"\n[topic_scout] Scoring {i+1}/{len(candidates)}: {c.get('title','?')} ({c.get('language','?')})")
+
+        # Drop Kindle-incompatible formats (puzzle/coloring/journal/pattern/activity)
+        # before wasting a scoring/generation cycle — Amazon rejects these as eBooks.
+        unsuitable = kindle_unsuitable({
+            "title": c.get("title", ""),
+            "subtitle": c.get("subtitle", ""),
+            "description": f"{c.get('title_en','')} {c.get('description_en','')} {c.get('niche','')}",
+        })
+        if unsuitable:
+            print(f"  SKIP: not suited to Kindle format — {unsuitable}")
+            c["_skipped"] = "kindle_unsuitable"
+            c["_go_no_go"] = "NO-GO"
+            scored.append(c)
+            continue
 
         if _slug_exists(c["slug"]):
             print(f"  SKIP: slug '{c['slug']}' already exists")

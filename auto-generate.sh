@@ -23,6 +23,17 @@ tg_notify() {
     -d "{\"chat_id\": \"${TG_CHAT}\", \"text\": \"$1\", \"parse_mode\": \"HTML\"}" > /dev/null 2>&1
 }
 
+# Send the actual cover image so the user can eyeball the new cover on Telegram.
+# $1 = image path, $2 = caption (HTML). No-op if the file is missing.
+tg_photo() {
+  [ -f "$1" ] || return 0
+  curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendPhoto" \
+    -F "chat_id=${TG_CHAT}" \
+    -F "photo=@$1" \
+    -F "caption=$2" \
+    -F "parse_mode=HTML" > /dev/null 2>&1
+}
+
 tg_notify "🚀 <b>Libra 2.0 SmartPublisher: เริ่มสร้างหนังสือ</b>\n$(date '+%Y-%m-%d %H:%M') ICT"
 TODAY=$(date +%Y-%m-%d)
 
@@ -91,6 +102,7 @@ for BOOK_NUM in $(seq 1 $BOOKS_PER_RUN); do
           fi
           BOOK_TITLE=$(python3 -c "import json; d=json.load(open('/root/kdp/$LATEST_BOOK/listing.json')); print(d.get('title',''))" 2>/dev/null)
           tg_notify "✅ <b>Libra 2.0 SmartPublisher: ผ่าน QA และเข้าคิว KDP</b>\n${BOOK_TITLE}\n\nPaperback 40+ หน้าและ SEO ผ่านครบ"
+          tg_photo "/root/kdp/$LATEST_BOOK/cover.jpg" "🎨 ปกเล่มใหม่: ${BOOK_TITLE}"
         else
           python3 - "$LISTING_FILE" <<'PY'
 import json, sys

@@ -13,6 +13,22 @@ KDP_UPLOAD="${KDP_UPLOAD:-$LIBRA_DIR/kdp_upload.py}"
 UPLOAD_TIMEOUT="${UPLOAD_TIMEOUT:-25m}"
 cd "$LIBRA_DIR"
 
+# Send the book cover to Telegram (used on successful publish, so manual/recovery
+# publishes show the cover too — not just the auto-generate QA-pass path).
+TG_TOKEN=$(grep TELEGRAM_BOT_TOKEN "$LIBRA_DIR/.env" 2>/dev/null | cut -d= -f2)
+TG_CHAT=$(grep TELEGRAM_CHAT_ID "$LIBRA_DIR/.env" 2>/dev/null | cut -d= -f2)
+tg_cover() {  # $1=slug
+    local cover="$KDP_DIR/$1/cover.jpg"
+    [ -n "$TG_TOKEN" ] && [ -n "$TG_CHAT" ] && [ -f "$cover" ] || return 0
+    local title
+    title=$("$PYTHON_BIN" -c "import json,sys; print(json.load(open(sys.argv[1])).get('title',''))" "$KDP_DIR/$1/listing.json" 2>/dev/null)
+    curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendPhoto" \
+        -F chat_id="${TG_CHAT}" \
+        -F photo=@"$cover" \
+        -F caption="🎉 ขึ้นขายบน KDP แล้ว: ${title}" \
+        -o /dev/null 2>/dev/null
+}
+
 # ── ล็อก: รันได้ทีละตัวเท่านั้น (กันคิวรันซ้อนจนแรมแตก) ──
 # ถ้าตัวเก่ายังทำงานอยู่ ตัวใหม่ที่ cron ยิงมาจะเห็นว่าล็อกอยู่ → ข้ามไปเลย
 exec 200>"$LOCK_FILE"
@@ -82,6 +98,7 @@ RC=$?
 if [ $RC -eq 0 ]; then
     sed -i '1d' "$QUEUE_FILE"
     echo "[$(date)] SUCCESS: $SLUG removed from queue" >> "$LOG"
+    tg_cover "$SLUG"
     exit 0
 fi
 

@@ -90,6 +90,9 @@ for BOOK_NUM in $(seq 1 $BOOKS_PER_RUN); do
       BOOK_STATUS=$(python3 -c "import json; d=json.load(open('$LISTING_FILE')); print(d.get('status',''))" 2>/dev/null)
       if [[ "$CREATED_DATE" == "$TODAY" && "$BOOK_STATUS" == "ready" ]]; then
         echo "=== Building paperback and validating: $LATEST_BOOK ===" >> "$LOG_FILE"
+        # Auto-remove dead reference links (404) before validating, so a single
+        # stale URL can't block the whole book from publishing.
+        python3 /root/libra/repair_links.py "$LATEST_BOOK" >> "$LOG_FILE" 2>&1
         curl -fsS -X POST "http://127.0.0.1:8200/api/books/$LATEST_BOOK/generate-pdf" \
           -H "Cookie: libra_token=$TOKEN" >> "$LOG_FILE" 2>&1
         PDF_EXIT=$?

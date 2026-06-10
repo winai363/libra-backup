@@ -38,6 +38,10 @@ fi
 
 echo "Processing $SLUG from queue at $(date)" >> "$LOG"
 
+# Auto-remove dead reference links (404) before the gate, so a single stale URL
+# can't block an otherwise-good book from publishing.
+"$PYTHON_BIN" "$LIBRA_DIR/repair_links.py" "$SLUG" >> "$LOG" 2>&1
+
 # Quality and SEO gate is mandatory for both new titles and updates.
 if ! "$PYTHON_BIN" "$QUALITY_GATE" "$SLUG" --require-pdf --check-urls --require-editorial >> "$LOG" 2>&1; then
     echo "[$(date)] QUALITY_BLOCKED: $SLUG" >> "$LOG"

@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import json
 
 import kdp_upload
-from kdp_upload import is_kdp_publish_confirmed
+from kdp_upload import is_kdp_publish_confirmed, is_title_creation_limit
 
 
 def test_bookshelf_url_confirms_publish():
@@ -37,6 +37,14 @@ def test_pricing_page_without_submission_does_not_confirm_publish():
         "https://kdp.amazon.com/en_US/title-setup/kindle/BOOK/pricing",
         "Save and Publish your Kindle eBook",
     )
+
+
+def test_title_creation_limit_detection():
+    assert is_title_creation_limit(
+        "Title creation limit exceeded. The number of books that can be "
+        "submitted for publishing has been exceeded by this account."
+    )
+    assert not is_title_creation_limit("Your book details were saved")
 
 
 def test_update_preflight_is_local_and_read_only(tmp_path, monkeypatch):

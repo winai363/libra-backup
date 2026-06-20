@@ -135,6 +135,16 @@ def build_dashboard_overview() -> dict:
         except (OSError, json.JSONDecodeError):
             pass
 
+    title_limit = {}
+    title_limit_file = Path(__file__).parent / "data" / "kdp-title-limit.json"
+    if title_limit_file.exists():
+        try:
+            title_limit = json.loads(title_limit_file.read_text())
+            datetime.fromisoformat(title_limit.get("retry_after", ""))
+            title_limit["active"] = bool(title_limit.get("active"))
+        except (OSError, json.JSONDecodeError, ValueError):
+            title_limit = {}
+
     queue_blocker = None
     if queue:
         first = next((book for book in books if book.get("slug") == queue[0]), None)
@@ -150,6 +160,10 @@ def build_dashboard_overview() -> dict:
         "counts": {
             "total": len(books),
             "uploaded": status_counts.get("uploaded", 0),
+            "tracked_asins": sum(
+                1 for book in books
+                if book.get("status") == "uploaded" and book.get("asin")
+            ),
             "ready": status_counts.get("ready", 0),
             "quality_failed": status_counts.get("quality_failed", 0),
             "queued_for_kdp": len(queue),
@@ -170,6 +184,9 @@ def build_dashboard_overview() -> dict:
             "sales_sync": "09:15",
             "timezone": "Asia/Bangkok",
             "learning": "ยอดขายจริง → หา niche ใกล้เคียง + เช็กฤดูกาลก่อนสร้าง",
+            "paused": bool(title_limit.get("active")),
+            "pause_reason": "KDP จำกัดการสร้าง title ใหม่ชั่วคราว" if title_limit.get("active") else "",
+            "retry_after": title_limit.get("retry_after", ""),
         },
     }
 

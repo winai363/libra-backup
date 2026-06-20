@@ -7,6 +7,7 @@ QUEUE_FILE="${QUEUE_FILE:-$LIBRA_DIR/queue.txt}"
 LOCK_FILE="${LOCK_FILE:-$LIBRA_DIR/.queue.lock}"
 LOG="${LOG:-$LIBRA_DIR/queue_log.txt}"
 FAILED_FILE="${FAILED_FILE:-$LIBRA_DIR/queue_failed.txt}"
+TITLE_LIMIT_STATE="${TITLE_LIMIT_STATE:-$LIBRA_DIR/data/kdp-title-limit.json}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 QUALITY_GATE="${QUALITY_GATE:-$LIBRA_DIR/quality_gate.py}"
 KDP_UPLOAD="${KDP_UPLOAD:-$LIBRA_DIR/kdp_upload.py}"
@@ -38,6 +39,25 @@ if ! flock -n 200; then
 fi
 
 if [ ! -f "$QUEUE_FILE" ]; then
+    exit 0
+fi
+
+# Respect KDP's temporary account-level new-title cap. Reopening the same form
+# cannot succeed before the cap resets and risks duplicate drafts.
+if [ -f "$TITLE_LIMIT_STATE" ] && "$PYTHON_BIN" - "$TITLE_LIMIT_STATE" <<'PY'
+import json, sys
+from datetime import datetime
+from pathlib import Path
+try:
+    state = json.loads(Path(sys.argv[1]).read_text())
+    retry_after = datetime.fromisoformat(state.get("retry_after", ""))
+    active = state.get("active", False) and datetime.now() < retry_after
+except Exception:
+    active = False
+raise SystemExit(0 if active else 1)
+PY
+then
+    echo "[$(date)] DEFERRED: KDP title creation limit active — queue preserved" >> "$LOG"
     exit 0
 fi
 
@@ -95,8 +115,14 @@ fi
 timeout -k 30s "$UPLOAD_TIMEOUT" "$PYTHON_BIN" "$KDP_UPLOAD" "$SLUG" "${MODE[@]}" >> "$LOG" 2>&1
 RC=$?
 
+if [ $RC -eq 42 ]; then
+    echo "[$(date)] DEFERRED: KDP title creation limit detected — queue preserved for retry" >> "$LOG"
+    exit 0
+fi
+
 if [ $RC -eq 0 ]; then
     sed -i '1d' "$QUEUE_FILE"
+    rm -f "$TITLE_LIMIT_STATE"
     echo "[$(date)] SUCCESS: $SLUG removed from queue" >> "$LOG"
     tg_cover "$SLUG"
     exit 0

@@ -9,6 +9,25 @@ export HOME="/root"
 LOG_DIR="/root/kdp/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/$(date +%Y-%m-%d).log"
+TITLE_LIMIT_STATE="/root/libra/data/kdp-title-limit.json"
+
+# Do not spend API credits generating more books while Amazon has temporarily
+# capped new title submissions. The queue processor retries after the cap.
+if [ -f "$TITLE_LIMIT_STATE" ] && python3 - "$TITLE_LIMIT_STATE" <<'PY'
+import json, sys
+from datetime import datetime
+from pathlib import Path
+try:
+    state = json.loads(Path(sys.argv[1]).read_text())
+    active = state.get("active", False)
+except Exception:
+    active = False
+raise SystemExit(0 if active else 1)
+PY
+then
+  echo "=== KDP Auto-Generate $(date) — skipped: title creation limit active ===" >> "$LOG_FILE"
+  exit 0
+fi
 
 echo "=== KDP Auto-Generate $(date) — 1 quality-gated book per run ===" >> "$LOG_FILE"
 

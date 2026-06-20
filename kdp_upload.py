@@ -8,7 +8,7 @@ import asyncio
 import json
 import sys
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from playwright.async_api import async_playwright
 import logging
 
@@ -33,6 +33,40 @@ AUTHOR_NAME = ENV.get("AUTHOR_NAME", "")
 SESSION_FILE = Path(__file__).parent / "kdp_session.json"
 TELEGRAM_BOT_TOKEN = ENV.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = ENV.get("TELEGRAM_CHAT_ID", "")
+TITLE_LIMIT_STATE_FILE = Path(__file__).parent / "data" / "kdp-title-limit.json"
+
+
+class TitleCreationLimitError(RuntimeError):
+    """KDP temporarily refuses new titles for this account."""
+
+
+def is_title_creation_limit(page_text: str) -> bool:
+    normalized = " ".join((page_text or "").lower().split())
+    return (
+        "title creation limit exceeded" in normalized
+        or "number of books that can be submitted for publishing has been exceeded" in normalized
+    )
+
+
+def record_title_creation_limit(slug: str, message: str) -> str:
+    """Pause new-title work for 24 hours and return the retry timestamp."""
+    retry_after = datetime.now() + timedelta(hours=24)
+    TITLE_LIMIT_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    TITLE_LIMIT_STATE_FILE.write_text(
+        json.dumps(
+            {
+                "active": True,
+                "slug": slug,
+                "detected_at": datetime.now().isoformat(timespec="seconds"),
+                "retry_after": retry_after.isoformat(timespec="seconds"),
+                "reason": message,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return retry_after.isoformat(timespec="minutes")
 
 PUBLISH_CONFIRMATION_PHRASES = (
     "successfully submitted",
@@ -684,6 +718,23 @@ async def upload_to_kdp(slug: str):
                 logger.info(f"After details save URL: {page.url}")
                 logger.info("✅ Details page saved")
 
+                page_text = await page.locator("body").inner_text(timeout=5000)
+                if is_title_creation_limit(page_text):
+                    message = "KDP title creation limit exceeded"
+                    retry_after = record_title_creation_limit(slug, message)
+                    current = json.loads(listing_file.read_text(encoding="utf-8"))
+                    current["kdp_uploading"] = False
+                    current["kdp_error"] = f"{message}; auto-retry after {retry_after}"
+                    listing_file.write_text(
+                        json.dumps(current, ensure_ascii=False, indent=2),
+                        encoding="utf-8",
+                    )
+                    await notify(
+                        "⏸️ <b>KDP จำกัดการสร้างหนังสือใหม่ชั่วคราว</b>\n"
+                        f"{title}\n\nระบบพักการสร้างและจะลองใหม่หลัง {retry_after}"
+                    )
+                    raise TitleCreationLimitError(message)
+
                 # Wait for content page navigation
                 await page.wait_for_url("**/content**", timeout=30000)
 
@@ -1060,6 +1111,8 @@ async def upload_to_kdp(slug: str):
 
                 return False
 
+        except TitleCreationLimitError:
+            raise
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -1569,5 +1622,9 @@ if __name__ == "__main__":
     elif update_mode:
         result = asyncio.run(update_ebook_content(slug))
     else:
-        result = asyncio.run(upload_to_kdp(slug))
+        try:
+            result = asyncio.run(upload_to_kdp(slug))
+        except TitleCreationLimitError as exc:
+            logger.warning("⏸️ %s", exc)
+            sys.exit(42)
     sys.exit(0 if result else 1)

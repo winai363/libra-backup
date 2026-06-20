@@ -86,7 +86,7 @@
               <h2 class="font-bold text-white">Auto Pipeline</h2>
               <p id="automation-times" class="text-xs text-slate-400 mt-1"></p>
             </div>
-            <span class="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs">AUTO ON</span>
+            <span id="automation-state" class="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs">AUTO ON</span>
           </div>
           <div class="mt-4 flex items-center gap-2 text-xs overflow-x-auto">
             <span class="px-3 py-2 rounded-lg bg-slate-900 text-slate-300 whitespace-nowrap">หา niche ตามฤดูกาล</span>
@@ -171,7 +171,7 @@ function renderOverview(data) {
   const c = data.counts;
   const sales = data.sales;
   const cards = [
-    ['Uploaded to KDP', c.uploaded, `${c.total} เล่มทั้งหมด`, 'text-sky-300'],
+    ['Uploaded to KDP', c.uploaded, `${c.tracked_asins} เล่มมี ASIN tracking`, 'text-sky-300'],
     ['KDP Queue', c.queued_for_kdp, `${c.ready} เล่มพร้อมส่ง`, 'text-amber-300'],
     ['Sales 30d', sales.units_30d, `฿${Number(sales.revenue_30d_thb || 0).toLocaleString('th-TH')} · $${Number(sales.revenue_30d_usd || 0).toFixed(2)}`, 'text-emerald-300'],
     ['QA Failed', c.quality_failed, 'ระบบบล็อกไม่ให้ส่ง KDP', c.quality_failed ? 'text-red-300' : 'text-emerald-300'],
@@ -185,9 +185,18 @@ function renderOverview(data) {
 
   const a = data.automation;
   document.getElementById('automation-times').textContent = `สร้าง ${a.generation.join(' / ')} · ส่ง KDP ${a.kdp_upload.join(' / ')} · Sync ยอด ${a.sales_sync} (${a.timezone})`;
+  const autoState = document.getElementById('automation-state');
+  if (a.paused) {
+    autoState.textContent = 'AUTO PAUSED';
+    autoState.className = 'px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300 text-xs';
+  }
 
   const alert = document.getElementById('queue-alert');
-  if (data.queue_blocker) {
+  if (a.paused) {
+    alert.classList.remove('hidden');
+    alert.innerHTML = `<p class="text-xs font-semibold text-amber-300">${escapeHtml(a.pause_reason)}</p>
+      <p class="text-xs text-amber-200/80 mt-1">พักการสร้างและการส่งคิวเพื่อไม่ให้เกิดรายการซ้ำ · ลองใหม่หลัง ${escapeHtml(a.retry_after)}</p>`;
+  } else if (data.queue_blocker) {
     alert.classList.remove('hidden');
     alert.innerHTML = `<p class="text-xs font-semibold text-red-300">คิว KDP ติดที่ ${escapeHtml(data.queue_blocker.title)}</p>
       <p class="text-xs text-red-200/80 mt-1">${escapeHtml(data.queue_blocker.error)}</p>`;

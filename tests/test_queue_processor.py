@@ -33,6 +33,7 @@ def _fixture(tmp_path, gate_exit=0, upload_exit=0):
         "QUALITY_GATE": str(gate),
         "KDP_UPLOAD": str(uploader),
         "UPLOAD_TIMEOUT": "5s",
+        "TITLE_LIMIT_STATE": str(libra / "data" / "kdp-title-limit.json"),
     }
     return libra, kdp, env
 
@@ -64,3 +65,42 @@ def test_quality_failure_rotates_but_does_not_delete_item(tmp_path):
     assert (libra / "queue.txt").read_text().splitlines() == ["book-two", "book-one"]
     listing = json.loads((kdp / "book-one" / "listing.json").read_text())
     assert listing["status"] == "quality_failed"
+
+
+def test_active_title_limit_preserves_queue_without_calling_uploader(tmp_path):
+    libra, _, env = _fixture(tmp_path, upload_exit=99)
+    state = Path(env["TITLE_LIMIT_STATE"])
+    state.parent.mkdir()
+    state.write_text(json.dumps({
+        "active": True,
+        "retry_after": "2999-01-01T00:00:00",
+    }))
+
+    result = subprocess.run([str(SCRIPT)], env=env, check=False)
+
+    assert result.returncode == 0
+    assert (libra / "queue.txt").read_text().splitlines() == ["book-one", "book-two"]
+
+
+def test_detected_title_limit_exit_preserves_queue(tmp_path):
+    libra, _, env = _fixture(tmp_path, upload_exit=42)
+
+    result = subprocess.run([str(SCRIPT)], env=env, check=False)
+
+    assert result.returncode == 0
+    assert (libra / "queue.txt").read_text().splitlines() == ["book-one", "book-two"]
+
+
+def test_success_clears_expired_title_limit_state(tmp_path):
+    libra, _, env = _fixture(tmp_path, upload_exit=0)
+    state = Path(env["TITLE_LIMIT_STATE"])
+    state.parent.mkdir()
+    state.write_text(json.dumps({
+        "active": True,
+        "retry_after": "2000-01-01T00:00:00",
+    }))
+
+    result = subprocess.run([str(SCRIPT)], env=env, check=False)
+
+    assert result.returncode == 0
+    assert not state.exists()

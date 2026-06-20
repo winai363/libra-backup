@@ -14,3 +14,4 @@ queue_failed.txt
 .cover_check_state
 .cover_retry.lock
 logs/
+data/kdp-title-limit.json

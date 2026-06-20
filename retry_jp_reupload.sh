@@ -8,9 +8,15 @@ set -u
 SLUG="side-hustle-budget-jp"
 DIR="/root/kdp/$SLUG"
 LOG="$DIR/retry_jp_reupload.log"
+DISABLED_MARKER="$DIR/.jp_reupload_disabled"
 CREATED_DATE="2026-06-08"
 MAX_DAYS=14
 cd /root/libra || exit 1
+
+if [ -f "$DISABLED_MARKER" ]; then
+    echo "$(date -u) disabled by user — no retry performed" >> "$LOG"
+    exit 0
+fi
 
 TG_TOKEN=$(grep TELEGRAM_BOT_TOKEN /root/libra/.env | cut -d= -f2)
 TG_CHAT=$(grep TELEGRAM_CHAT_ID /root/libra/.env | cut -d= -f2)

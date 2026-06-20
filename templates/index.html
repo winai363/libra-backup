@@ -12,6 +12,7 @@
   h1, h2, h3, .tab-active, button { font-family: 'Montserrat', sans-serif; }
   .tab-active { border-bottom: 3px solid #f59e0b; color: #f59e0b; }
   .toast { animation: fadeInOut 2s ease-in-out; }
+  .metric-card { background: linear-gradient(145deg, rgba(30,41,59,.96), rgba(15,23,42,.96)); }
   @keyframes fadeInOut {
     0% { opacity: 0; transform: translateY(20px); }
     15% { opacity: 1; transform: translateY(0); }
@@ -44,19 +45,23 @@
 <div id="dashboard" class="hidden">
   <!-- Header -->
   <div class="sticky top-0 bg-slate-900/95 backdrop-blur border-b border-slate-700 z-50">
-    <div class="max-w-2xl mx-auto px-4 py-3">
+    <div class="max-w-6xl mx-auto px-4 py-3">
       <div class="flex items-center justify-between gap-3">
-        <h1 class="text-xl font-bold text-amber-400">Libra</h1>
-        <a href="/libra/profit" class="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-300 text-xs font-medium hover:bg-emerald-500/20">
-          Profit
-        </a>
+        <div>
+          <h1 class="text-xl font-bold text-amber-400">Libra Command Center</h1>
+          <p class="text-[11px] text-slate-500">KDP AutoPublisher · สร้าง ขาย และเรียนรู้จากยอดจริง</p>
+        </div>
+        <div class="flex gap-2">
+          <a href="/libra/status" class="px-3 py-1.5 rounded-lg bg-sky-500/10 text-sky-300 text-xs font-medium hover:bg-sky-500/20">Pipeline</a>
+          <a href="/libra/profit" class="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-300 text-xs font-medium hover:bg-emerald-500/20">Profit</a>
+        </div>
       </div>
     </div>
     <!-- Tabs -->
-    <div class="max-w-2xl mx-auto px-4 flex gap-6">
+    <div class="max-w-6xl mx-auto px-4 flex gap-6 overflow-x-auto">
       <button onclick="switchTab('ready')" id="tab-ready"
         class="pb-3 text-sm font-medium tab-active">
-        Queue <span id="count-ready" class="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full text-xs ml-1">0</span>
+        Ready <span id="count-ready" class="bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full text-xs ml-1">0</span>
       </button>
       <button onclick="switchTab('uploaded')" id="tab-uploaded"
         class="pb-3 text-sm font-medium text-slate-400 hover:text-slate-200">
@@ -69,8 +74,42 @@
     </div>
   </div>
 
+  <div class="max-w-6xl mx-auto px-4 pt-5">
+    <div id="overview-loading" class="text-sm text-slate-500">กำลังโหลดสถานะระบบ...</div>
+    <div id="overview" class="hidden space-y-4">
+      <div id="overview-cards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <section class="lg:col-span-2 bg-slate-800 border border-slate-700 rounded-xl p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <h2 class="font-bold text-white">Auto Pipeline</h2>
+              <p id="automation-times" class="text-xs text-slate-400 mt-1"></p>
+            </div>
+            <span class="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs">AUTO ON</span>
+          </div>
+          <div class="mt-4 flex items-center gap-2 text-xs overflow-x-auto">
+            <span class="px-3 py-2 rounded-lg bg-slate-900 text-slate-300 whitespace-nowrap">หา niche ตามฤดูกาล</span>
+            <span class="text-slate-600">→</span>
+            <span class="px-3 py-2 rounded-lg bg-slate-900 text-slate-300 whitespace-nowrap">สร้าง + QA</span>
+            <span class="text-slate-600">→</span>
+            <span class="px-3 py-2 rounded-lg bg-slate-900 text-slate-300 whitespace-nowrap">ส่ง KDP</span>
+            <span class="text-slate-600">→</span>
+            <span class="px-3 py-2 rounded-lg bg-amber-500/10 text-amber-300 whitespace-nowrap">เรียนรู้จากยอดขาย</span>
+          </div>
+          <div id="queue-alert" class="hidden mt-4 rounded-lg border border-red-900/70 bg-red-950/30 p-3"></div>
+        </section>
+
+        <section class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+          <h2 class="font-bold text-white">Winner Signal</h2>
+          <div id="winner-signal" class="mt-3"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
   <!-- Book list -->
-  <div class="max-w-2xl mx-auto px-4 py-4">
+  <div class="max-w-6xl mx-auto px-4 py-5">
     <div id="book-list" class="space-y-4"></div>
     <div id="empty-state" class="hidden text-center text-slate-500 py-16">
       <p class="text-lg">No books here yet</p>
@@ -114,15 +153,52 @@ async function doLogin() {
 }
 
 async function loadBooks() {
-  const res = await fetch('api/books');
+  const [res, overviewRes] = await Promise.all([fetch('api/books'), fetch('api/dashboard/overview')]);
   if (res.status === 401) {
     document.getElementById('login-page').classList.remove('hidden');
     document.getElementById('dashboard').classList.add('hidden');
     return;
   }
   allBooks = await res.json();
+  if (overviewRes.ok) renderOverview(await overviewRes.json());
   updateCounts();
   renderBooks();
+}
+
+function renderOverview(data) {
+  document.getElementById('overview-loading').classList.add('hidden');
+  document.getElementById('overview').classList.remove('hidden');
+  const c = data.counts;
+  const sales = data.sales;
+  const cards = [
+    ['Uploaded to KDP', c.uploaded, `${c.total} เล่มทั้งหมด`, 'text-sky-300'],
+    ['KDP Queue', c.queued_for_kdp, `${c.ready} เล่มพร้อมส่ง`, 'text-amber-300'],
+    ['Sales 30d', sales.units_30d, `฿${Number(sales.revenue_30d_thb || 0).toLocaleString('th-TH')} · $${Number(sales.revenue_30d_usd || 0).toFixed(2)}`, 'text-emerald-300'],
+    ['QA Failed', c.quality_failed, 'ระบบบล็อกไม่ให้ส่ง KDP', c.quality_failed ? 'text-red-300' : 'text-emerald-300'],
+  ];
+  document.getElementById('overview-cards').innerHTML = cards.map(([label, value, note, color]) => `
+    <div class="metric-card border border-slate-700 rounded-xl p-4">
+      <p class="text-xs text-slate-400">${escapeHtml(label)}</p>
+      <p class="text-2xl font-bold mt-1 ${color}">${escapeHtml(value)}</p>
+      <p class="text-xs text-slate-500 mt-1">${escapeHtml(note)}</p>
+    </div>`).join('');
+
+  const a = data.automation;
+  document.getElementById('automation-times').textContent = `สร้าง ${a.generation.join(' / ')} · ส่ง KDP ${a.kdp_upload.join(' / ')} · Sync ยอด ${a.sales_sync} (${a.timezone})`;
+
+  const alert = document.getElementById('queue-alert');
+  if (data.queue_blocker) {
+    alert.classList.remove('hidden');
+    alert.innerHTML = `<p class="text-xs font-semibold text-red-300">คิว KDP ติดที่ ${escapeHtml(data.queue_blocker.title)}</p>
+      <p class="text-xs text-red-200/80 mt-1">${escapeHtml(data.queue_blocker.error)}</p>`;
+  }
+
+  const winner = (data.winners || [])[0];
+  document.getElementById('winner-signal').innerHTML = winner ? `
+    <p class="text-sm font-medium text-emerald-300">${escapeHtml(winner.title)}</p>
+    <p class="text-xs text-slate-400 mt-1">${winner.units} sale · $${Number(winner.revenue_usd || 0).toFixed(2)} royalty</p>
+    <p class="text-xs text-slate-500 mt-3">Brain จะให้น้ำหนัก niche และภาษาที่ใกล้กับผู้ซื้อจริงในรอบสร้างถัดไป</p>`
+    : '<p class="text-sm text-slate-400">ยังไม่มียอดขาย ระบบจะสำรวจ niche แบบกว้างจนพบสัญญาณแรก</p>';
 }
 
 function updateCounts() {
@@ -366,7 +442,10 @@ fetch('api/books').then(r => {
   if (r.ok) {
     document.getElementById('login-page').classList.add('hidden');
     document.getElementById('dashboard').classList.remove('hidden');
-    r.json().then(data => { allBooks = data; updateCounts(); renderBooks(); });
+    r.json().then(data => {
+      allBooks = data; updateCounts(); renderBooks();
+      fetch('api/dashboard/overview').then(x => x.ok ? x.json() : null).then(x => { if (x) renderOverview(x); });
+    });
   }
 });
 </script>

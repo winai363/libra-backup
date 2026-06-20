@@ -143,7 +143,10 @@ function Table(el)
     widths[i] = clamp(widths[i], floor, 1)
     sum = sum + widths[i]
   end
-  for i = 1, n do widths[i] = widths[i] / sum end
+  -- Scale to 0.96 to leave room for \tabcolsep (2pt each side per column).
+  -- Without this headroom, n*4pt of column padding pushes the table ~5% past \linewidth.
+  local target = math.max(0.88, 0.96 - n * 0.004)
+  for i = 1, n do widths[i] = widths[i] / sum * target end
 
   for i, spec in ipairs(el.colspecs) do
     el.colspecs[i] = { spec[1], widths[i] }

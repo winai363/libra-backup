@@ -21,6 +21,52 @@ KDP_DIR = Path(os.getenv("KDP_DIR", "/root/kdp"))
 AUTHOR = os.getenv("AUTHOR_NAME", "WK Bui")
 GUIDELINES = Path("/root/libra/kdp-writing-guidelines.md").read_text()
 
+# ── Cost tracking ──────────────────────────────────────────────────────────────
+_GPT41_IN  = 2.0  / 1_000_000   # $2/1M input tokens
+_GPT41_OUT = 8.0  / 1_000_000   # $8/1M output tokens
+_SEARCH    = 25.0 / 1_000        # $25/1K web search calls
+_IMAGE     = 0.04                # $0.04/image (gpt-image-1, 1024×)
+
+_USAGE: dict = {}   # reset at start of each write_book()
+
+
+def _accum(usage, searches: int = 0) -> None:
+    if usage is None:
+        return
+    inp = getattr(usage, "input_tokens", None) or getattr(usage, "prompt_tokens", 0)
+    out = getattr(usage, "output_tokens", None) or getattr(usage, "completion_tokens", 0)
+    _USAGE["input_tokens"]  = _USAGE.get("input_tokens",  0) + (inp or 0)
+    _USAGE["output_tokens"] = _USAGE.get("output_tokens", 0) + (out or 0)
+    _USAGE["web_searches"]  = _USAGE.get("web_searches",  0) + searches
+
+
+def _count_searches(output) -> int:
+    return sum(
+        1 for item in output
+        if getattr(item, "type", "") in ("web_search_call", "web_search_preview_call")
+    )
+
+
+def _save_cost_report(book_dir: Path) -> None:
+    inp  = _USAGE.get("input_tokens", 0)
+    out  = _USAGE.get("output_tokens", 0)
+    srch = _USAGE.get("web_searches", 0)
+    imgs = _USAGE.get("images", 0)
+    writer_usd = inp * _GPT41_IN + out * _GPT41_OUT + srch * _SEARCH + imgs * _IMAGE
+    report = {
+        "writer": {
+            "input_tokens": inp,
+            "output_tokens": out,
+            "web_searches": srch,
+            "images": imgs,
+            "cost_usd": round(writer_usd, 4),
+        },
+        "total_usd": round(writer_usd, 4),
+    }
+    (book_dir / "cost-report.json").write_text(
+        json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
+    )
+
 # Languages that don't use spaces as word delimiters — use character count instead
 CJK_LANGS = {'ja', 'zh', 'zh-tw', 'zh-cn', 'ko'}
 
@@ -43,16 +89,20 @@ def pages_estimate(units, lang_code):
 def continuation_threshold(lang_code):
     """Trigger continuation if content is below this.
 
-    Must clear the quality gate's 40-page minimum. The gate estimates pages as
-    units // 300 (Latin) / units // 750 (CJK) AND counts fewer units than this
-    writer (it strips markdown/headings), so the threshold carries a margin
-    above the bare 12,000-word / 30,000-char floor."""
-    return 32000 if lang_code in CJK_LANGS else 13000
+    Target range is 30–50 pages (9,000–15,000 words / 22,500–37,500 CJK chars).
+    Threshold sits at ~35 pages so a short first draft gets one top-up pass.
+    Gate counts fewer units (strips markdown), so add a small margin."""
+    return 26000 if lang_code in CJK_LANGS else 10500
 
 
 def abort_threshold(lang_code):
-    """Abort if content is still below this after continuation."""
-    return 30000 if lang_code in CJK_LANGS else 10000
+    """Abort if content is still below minimum after continuation."""
+    return 22500 if lang_code in CJK_LANGS else 9000
+
+
+def max_threshold(lang_code):
+    """Stop continuation loop before exceeding the 50-page ceiling."""
+    return 37500 if lang_code in CJK_LANGS else 15000
 
 
 def get_existing_books():
@@ -76,6 +126,7 @@ def call_gpt(messages, max_tokens=16000):
         max_tokens=max_tokens,
         temperature=0.7,
     )
+    _accum(response.usage)
     choice = response.choices[0]
     if choice.finish_reason and choice.finish_reason != "stop":
         print(f"  WARNING: GPT finish_reason={choice.finish_reason} (may be truncated)")
@@ -91,6 +142,7 @@ def call_gpt_with_search(prompt, max_tokens=8000):
         input=prompt,
         max_output_tokens=max_tokens,
     )
+    _accum(response.usage, _count_searches(response.output))
     # Extract text from response output items
     texts = []
     for item in response.output:
@@ -210,7 +262,7 @@ WRITING GUIDELINES (MUST follow):
 {GUIDELINES}
 
 Write the COMPLETE book content in Markdown format. Requirements:
-- 10,000+ words minimum and at least 40 actual printed pages at 6×9 format
+- 9,000–15,000 words to fill 30–50 printed pages at 6×9 format. Stop at 15,000 words — do NOT write more.
 - Follow the structure: Parts → Chapters → Sections
 - Include practical examples, step-by-step guides, tables, and bullet points
 - Use the REAL sources above for citations [1], [2], etc. — do NOT invent references
@@ -357,6 +409,7 @@ def step2c_generate_images(book_dir, content, topic):
             img_data = base64.b64decode(response.data[0].b64_json)
             img = PILImage.open(io.BytesIO(img_data))
             img.save(str(img_path), "JPEG", quality=88)
+            _USAGE["images"] = _USAGE.get("images", 0) + 1
             print(f"    Saved: {img_path}")
         except Exception as e:
             print(f"    WARNING: Image generation failed for {filename}: {e}")
@@ -535,6 +588,55 @@ def notify_telegram(message):
         print(f"Telegram notification failed: {e}")
 
 
+def _market_research_md(topic, score) -> str:
+    """Render market-research.md from the research topic_scout already did.
+
+    When a pre-scouted topic is passed via --topic-file, the discovery + scoring
+    (competition counts, demand evidence, timing) was done by topic_scout /
+    market_intelligence — it just lives in the score dict instead of a free-text
+    web-research blob. Persist it so the artifact (required by quality_gate) is a
+    faithful record, not a stub.
+    """
+    score = score or {}
+    lines = [
+        f"# Market Research — {topic.get('title','')}",
+        "",
+        "_Source: topic_scout.py + market_intelligence.py (web-search discovery & scoring)._",
+        "",
+        f"- **Niche:** {topic.get('niche','')}",
+        f"- **Language / Marketplace:** {topic.get('language','')} / {topic.get('marketplace','')}",
+        f"- **Demand timing:** {topic.get('demand_timing','') or 'n/a'}",
+        f"- **Decision:** {score.get('go_no_go','?')} — total score {score.get('total_score','?')}/100",
+    ]
+    royalty = score.get("expected_royalty") or {}
+    if royalty:
+        lines.append(
+            f"- **Royalty estimate:** ${royalty.get('estimated_monthly_royalty_usd','?')}/mo "
+            f"(~{royalty.get('estimated_monthly_units','?')} units @ "
+            f"${royalty.get('estimated_price_usd','?')})"
+        )
+    if score.get("reasoning"):
+        lines += ["", "## Why this topic", str(score["reasoning"])]
+
+    scores = score.get("scores") or {}
+    if scores:
+        lines += ["", "## Scoring evidence"]
+        for name, data in scores.items():
+            if isinstance(data, dict):
+                lines.append(f"- **{name}** ({data.get('score','?')}): {data.get('evidence', data.get('note',''))}")
+            else:
+                lines.append(f"- **{name}**: {data}")
+
+    risks = score.get("risks") or []
+    if risks:
+        lines += ["", "## Risks"] + [f"- {r}" for r in risks]
+
+    if topic.get("description_en"):
+        lines += ["", "## Buyer-facing summary", topic["description_en"]]
+
+    return "\n".join(lines) + "\n"
+
+
 def _validate_topic(topic):
     """Validate that topic has all required fields."""
     required = ["language", "lang_code", "title", "subtitle", "slug", "niche", "description_en"]
@@ -611,6 +713,7 @@ def main():
     print(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}")
 
     existing = get_existing_books()
+    _USAGE.clear()  # reset cost accumulator for this book
 
     try:
         if topic_file and topic_file.exists():
@@ -620,6 +723,10 @@ def main():
             topic = _validate_topic(topic)
             market_research = topic.pop("_market_score_raw", "")
             market_score_data = topic.pop("_market_score", None)
+            # topic_scout ships the research inside the score dict, not as free text —
+            # rebuild market-research.md from it so the quality gate's required file exists.
+            if not market_research:
+                market_research = _market_research_md(topic, market_score_data)
             print(f"  Topic: {topic['title']} ({topic['language']})")
             print(f"  Slug: {topic['slug']}")
             if market_score_data:
@@ -678,11 +785,10 @@ def main():
         unit_label = "chars" if lang_code in CJK_LANGS else "words"
         print(f"  {unit_label.capitalize()}: {units} (~{est} pages)")
 
-        # Continue in bounded passes until the 40-page minimum is reached.
-        # Keep this low: each extra pass is another chance for the model to
-        # restart numbering / re-introduce structure (esp. CJK).
+        # Continue in bounded passes until the 30-page minimum is reached,
+        # but stop before exceeding the 50-page ceiling.
         continuation_pass = 0
-        while units < continuation_threshold(lang_code) and continuation_pass < 4:
+        while units < continuation_threshold(lang_code) and units < max_threshold(lang_code) and continuation_pass < 4:
             continuation_pass += 1
             print(f"  Content short ({units} {unit_label}, ~{est} pages). Adding more chapters...")
             # Split back matter out BEFORE calling continuation so the new
@@ -703,10 +809,24 @@ def main():
 
         if units < abort_threshold(lang_code):
             raise ValueError(f"Book too short ({units} {unit_label}), aborting")
+        if units > max_threshold(lang_code):
+            raise ValueError(f"Book too long ({units} {unit_label}, ~{est} pages), aborting")
 
         # Step 3: Create listing
         print("\n[5/7] Creating listing...")
         listing = step3_write_listing(topic)
+        # Enforce KDP keyword rules (2-50 chars each) before quality gate runs.
+        # seo_optimizer.py also does this but runs after the gate — if keywords
+        # from the model exceed 50 chars, the gate fails before optimizer can fix them.
+        _raw_kws = [k.strip() for k in listing.get("keywords", []) if k.strip()]
+        _clean_kws, _seen = [], set()
+        for _k in _raw_kws:
+            if len(_k) > 50:
+                _k = _k[:50].rsplit(" ", 1)[0].rstrip(",;: ")
+            if 2 <= len(_k) <= 50 and _k.lower() not in _seen:
+                _clean_kws.append(_k)
+                _seen.add(_k.lower())
+        listing["keywords"] = _clean_kws[:7]
         print(f"  Keywords: {', '.join(listing.get('keywords', []))}")
 
         # Step 4: Save files
@@ -774,6 +894,14 @@ def main():
             pricing_engine.print_report(price_result)
         except Exception as e:
             print(f"  WARNING: Pricing engine failed: {e} — will use default $2.99")
+
+        # Save cost report (cover counts as 1 image from cover_generator)
+        _USAGE["images"] = _USAGE.get("images", 0) + 1  # cover
+        _save_cost_report(book_dir)
+        total_usd = _USAGE.get("input_tokens", 0) * _GPT41_IN + _USAGE.get("output_tokens", 0) * _GPT41_OUT + _USAGE.get("web_searches", 0) * _SEARCH + _USAGE.get("images", 0) * _IMAGE
+        print(f"\n[COST] Writing cost: ${total_usd:.3f} USD "
+              f"(in={_USAGE.get('input_tokens',0):,} out={_USAGE.get('output_tokens',0):,} "
+              f"searches={_USAGE.get('web_searches',0)} imgs={_USAGE.get('images',0)})")
 
         # Notify success
         seo_score = seo_result.get("seo_score_after", "?") if "seo_result" in dir() else "?"

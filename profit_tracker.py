@@ -20,6 +20,8 @@ KDP_DIR = LIBRA_DIR.parent / "kdp"
 KENP_RATE_USD = 0.0045
 DEFAULT_EBOOK_PRICE_USD = 2.99
 DEFAULT_EBOOK_ROYALTY_RATE = 0.70
+COST_PER_BOOK_USD = 0.68   # fallback estimate for books without cost-report.json
+THB_RATE = 35.5            # USD → THB exchange rate (update if needed)
 
 
 def _load_json(path: Path, default: Any) -> Any:
@@ -53,13 +55,33 @@ def _days_since(value: Any, today: date) -> int | None:
     return max(0, (today - parsed).days)
 
 
-def _price_usd(listing: dict) -> float:
-    raw = listing.get("ebook_price") or listing.get("price") or DEFAULT_EBOOK_PRICE_USD
-    text = str(raw).replace("$", "").replace("USD", "").strip()
-    try:
-        return float(text)
-    except ValueError:
-        return DEFAULT_EBOOK_PRICE_USD
+def _cost_usd(book_dir: Path) -> float:
+    """Return actual book production cost from cost-report.json, or estimate."""
+    report = _load_json(book_dir / "cost-report.json", {})
+    if report and "total_usd" in report:
+        return float(report["total_usd"])
+    return COST_PER_BOOK_USD
+
+
+def _price_usd(listing: dict, book_dir: Path | None = None) -> float:
+    # 1. ราคาที่บันทึกไว้ใน listing.json (ถ้ามี)
+    raw = listing.get("ebook_price") or listing.get("price")
+    if raw:
+        text = str(raw).replace("$", "").replace("USD", "").strip()
+        try:
+            return float(text)
+        except ValueError:
+            pass
+    # 2. ราคาจริงที่ pricing_engine แนะนำ (ใช้ตอน upload จริง)
+    if book_dir:
+        rec = _load_json(book_dir / "pricing-recommendation.json", {})
+        price = rec.get("recommended_price_usd")
+        if price:
+            try:
+                return float(price)
+            except (TypeError, ValueError):
+                pass
+    return DEFAULT_EBOOK_PRICE_USD
 
 
 def _sum_recent(history: list[dict], field: str, days: int, today: date) -> float:
@@ -74,13 +96,13 @@ def _sum_recent(history: list[dict], field: str, days: int, today: date) -> floa
     return total
 
 
-def _estimated_revenue(history: list[dict], days: int, today: date, listing: dict) -> float:
+def _estimated_revenue(history: list[dict], days: int, today: date, listing: dict, book_dir: Path | None = None) -> float:
     direct = _sum_recent(history, "revenue_usd", days, today)
     if direct:
         return round(direct, 2)
     units = _sum_recent(history, "units_7d", days, today)
     kenp = _sum_recent(history, "kenp_7d", days, today)
-    ebook_revenue = units * _price_usd(listing) * DEFAULT_EBOOK_ROYALTY_RATE
+    ebook_revenue = units * _price_usd(listing, book_dir) * DEFAULT_EBOOK_ROYALTY_RATE
     kenp_revenue = kenp * KENP_RATE_USD
     return round(ebook_revenue + kenp_revenue, 2)
 
@@ -134,16 +156,20 @@ def build_book_profit(slug: str, today: date | None = None) -> dict:
         "units": int(_sum_recent(history, "units_7d", 7, today)),
         "kenp": int(_sum_recent(history, "kenp_7d", 7, today)),
         "impressions": int(_sum_recent(history, "impressions_7d", 7, today)),
-        "revenue_usd": _estimated_revenue(history, 7, today, listing),
+        "revenue_usd": _estimated_revenue(history, 7, today, listing, book_dir),
     }
     totals_30d = {
         "units": int(_sum_recent(history, "units_7d", 30, today)),
         "kenp": int(_sum_recent(history, "kenp_7d", 30, today)),
         "impressions": int(_sum_recent(history, "impressions_7d", 30, today)),
-        "revenue_usd": _estimated_revenue(history, 30, today, listing),
+        "revenue_usd": _estimated_revenue(history, 30, today, listing, book_dir),
     }
     action, reason = _action_for_book(days_live, latest, totals_30d)
 
+    price_usd = _price_usd(listing, book_dir)
+    cost_report = _load_json(book_dir / "cost-report.json", {})
+    cost_usd = round(float(cost_report["total_usd"]) if cost_report and "total_usd" in cost_report else COST_PER_BOOK_USD, 4)
+    cost_is_real = bool(cost_report and "total_usd" in cost_report)
     return {
         "slug": slug,
         "title": listing.get("title", slug),
@@ -154,11 +180,17 @@ def build_book_profit(slug: str, today: date | None = None) -> dict:
         "created_at": listing.get("created_at", ""),
         "live_date": str(_parse_date(live_date) or ""),
         "days_live": days_live,
-        "price_usd": _price_usd(listing),
+        "price_usd": price_usd,
+        "price_thb": round(price_usd * THB_RATE, 0),
+        "cost_usd": cost_usd,
+        "cost_thb": round(cost_usd * THB_RATE, 0),
+        "cost_is_real": cost_is_real,
         "latest_snapshot": latest,
         "snapshots": len(history),
         "totals_7d": totals_7d,
+        "totals_7d_thb": {k: round(v * THB_RATE, 2) if k == "revenue_usd" else v for k, v in totals_7d.items()},
         "totals_30d": totals_30d,
+        "totals_30d_thb": {k: round(v * THB_RATE, 2) if k == "revenue_usd" else v for k, v in totals_30d.items()},
         "action": action,
         "reason": reason,
         "market_score": market.get("overall_score") or market.get("score"),
@@ -175,11 +207,14 @@ def build_portfolio(today: date | None = None) -> dict:
         if slug == "logs":
             continue
         book = build_book_profit(slug, today)
-        if book["status"] in {"uploaded", "ready", "live"} or book["kdp_book_id"]:
+        # Only include books confirmed uploaded to KDP (Live or In Review on Amazon)
+        if book["status"] == "uploaded":
             books.append(book)
 
     total_7d = round(sum(b["totals_7d"]["revenue_usd"] for b in books), 2)
     total_30d = round(sum(b["totals_30d"]["revenue_usd"] for b in books), 2)
+    total_cost_usd = round(sum(b["cost_usd"] for b in books), 2)
+    total_cost_thb = round(total_cost_usd * THB_RATE, 0)
     actions: dict[str, int] = {}
     for b in books:
         actions[b["action"]] = actions.get(b["action"], 0) + 1
@@ -201,9 +236,14 @@ def build_portfolio(today: date | None = None) -> dict:
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "book_count": len(books),
+        "thb_rate": THB_RATE,
         "summary": {
             "estimated_revenue_7d_usd": total_7d,
+            "estimated_revenue_7d_thb": round(total_7d * THB_RATE, 0),
             "estimated_revenue_30d_usd": total_30d,
+            "estimated_revenue_30d_thb": round(total_30d * THB_RATE, 0),
+            "total_cost_usd": total_cost_usd,
+            "total_cost_thb": total_cost_thb,
             "units_30d": sum(b["totals_30d"]["units"] for b in books),
             "kenp_30d": sum(b["totals_30d"]["kenp"] for b in books),
             "books_with_data": sum(1 for b in books if b["snapshots"] > 0),

@@ -16,6 +16,28 @@ from openai import RateLimitError
 
 
 KDP_DIR = Path("/root/kdp")
+
+_GPT41_IN  = 2.0  / 1_000_000
+_GPT41_OUT = 8.0  / 1_000_000
+_SEARCH    = 25.0 / 1_000
+
+
+def _append_step_cost(slug: str, step: str, response) -> None:
+    usage = getattr(response, "usage", None)
+    inp  = (getattr(usage, "input_tokens", 0) or getattr(usage, "prompt_tokens", 0)) if usage else 0
+    out  = (getattr(usage, "output_tokens", 0) or getattr(usage, "completion_tokens", 0)) if usage else 0
+    srch = sum(1 for item in response.output
+               if getattr(item, "type", "") in ("web_search_call", "web_search_preview_call"))
+    cost_usd = inp * _GPT41_IN + out * _GPT41_OUT + srch * _SEARCH
+    report_path = KDP_DIR / slug / "cost-report.json"
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        report = {}
+    report[step] = {"input_tokens": inp, "output_tokens": out, "web_searches": srch, "cost_usd": round(cost_usd, 4)}
+    total = sum(s.get("cost_usd", 0) for s in report.values() if isinstance(s, dict) and "cost_usd" in s)
+    report["total_usd"] = round(total, 4)
+    report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
 # factual_reliability and citation_quality are the noisiest dimensions — the
 # reviewer fact-checks against external knowledge and swings ±2 on identical
 # content, so we require 7 (solid, minor-improvements-possible) rather than 8.
@@ -184,6 +206,10 @@ Scoring rules:
             time.sleep(65)
     if response is None:
         raise RuntimeError("Editorial review produced no response")
+
+    # Track cost and append to cost-report.json
+    _append_step_cost(slug, "editorial", response)
+
     text = getattr(response, "output_text", "") or ""
     if not text:
         chunks = []

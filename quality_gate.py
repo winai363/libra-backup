@@ -15,10 +15,13 @@ from urllib.parse import urlparse
 
 
 KDP_DIR = Path("/root/kdp")
-MIN_WORDS = 10_000
-MIN_CJK_CHARS = 30_000
-MIN_FICTION_WORDS = 20_000
-MIN_PAGES = 40
+MIN_WORDS = 9_000
+MIN_CJK_CHARS = 22_500
+MIN_FICTION_WORDS = 9_000
+MIN_PAGES = 30
+MAX_PAGES = 50
+MAX_WORDS = 15_000
+MAX_CJK_CHARS = 37_500
 MIN_REFERENCES = 8
 MIN_SECTIONS = 12
 MIN_CHARS_PER_PAGE = 200   # catastrophic content-drop floor (lowest real book ≈880)
@@ -285,6 +288,25 @@ _PUZZLE_TERMS = [
     r"krzyżówk", r"łamigłówk",
     # Japanese
     r"クロスワード", r"ナンプレ", r"数独", r"言葉遊び",
+    # Product-type planners & journals — compound phrases that are always
+    # blank fill-in products regardless of context (no book-qualifier needed).
+    # e.g. "AI Productivity Planner", "Guided Journal", "Diario Guidato"
+    r"(?:ai|productivity|daily|weekly|monthly|annual|study|meal|budget|"
+    r"mindfulness|wellness|self[- ]?care|goal|habit|gratitude|"
+    r"planner\s+di|planner\s+per)\s+planner",
+    r"(?:guided|gratitude|bullet|habit|goal|daily|weekly|mindfulness|"
+    r"self[- ]?care|manifestation|prayer|dream)\s+journal",
+    r"(?:guided|interactiv|illustrat|fill[- ]?in)\s+diary",
+    # Italian-specific: "diario guidato", "pianificatore"
+    r"diario\s+guidato", r"pianificatore\s+(?:ai|di\s+produttività|giornaliero|settimanale)",
+    # Spanish: "diario guiado", "planificador"
+    r"diario\s+guiado", r"planificador\s+(?:diario|semanal|de\s+hábitos)",
+    # German: "geführtes Tagebuch", "Tagesplaner", "Wochenplaner"
+    r"geführtes?\s+tagebuch", r"tages[- ]?planer", r"wochen[- ]?planer",
+    # French: "journal guidé", "planificateur"
+    r"journal\s+guidé", r"planificateur\s+(?:quotidien|hebdomadaire|d.habitudes)",
+    # Portuguese: "diário guiado", "planejador"
+    r"diário\s+guiado", r"planejador\s+(?:diário|semanal)",
 ]
 
 # Generic words that are only unsuitable as a *book/notebook* — require a
@@ -300,8 +322,11 @@ _NEEDS_BOOK_QUALIFIER = (
 )
 _BOOK_QUALIFIER = (
     r"(?:books?|pads?|journals?|notebooks?|planners?|"
-    r"livres?|cahiers?|carnets?|buch|bücher|heft|libros?|libro|libri|quaderni?|"
-    r"boek|boeken|książk|帳|ノート)"
+    r"livres?|cahiers?|carnets?|buch|bücher|heft|"
+    r"libros?|libro|libri|quaderni?|diario|diari|taccuino|agenda|"
+    r"tagebuch|planer|notizbuch|kalender|"
+    r"diário|caderno|planejador|"
+    r"boek|boeken|książk|日記|手帳|帳|ノート)"
 )
 
 _PUZZLE_RE = re.compile("|".join(_PUZZLE_TERMS), re.IGNORECASE)
@@ -438,6 +463,12 @@ def validate_book(
         report.error(
             f"Book is too short: {units:,} {unit_name}; minimum is "
             f"{minimum_units:,} for at least {MIN_PAGES} estimated pages."
+        )
+    maximum_units = MAX_CJK_CHARS if lang_code in CJK_CODES else MAX_WORDS
+    if units > maximum_units:
+        report.error(
+            f"Book is too long: {units:,} {unit_name}; maximum is "
+            f"{maximum_units:,} for at most {MAX_PAGES} estimated pages."
         )
 
     headings = re.findall(r"(?m)^#{1,3}\s+(.+)$", content)

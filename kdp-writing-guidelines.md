@@ -75,6 +75,22 @@ These rules prevent the three most common PDF defects: wrong TOC page numbers, b
 - Minimum 8 references from your web research
 - Include the actual URL for each reference so readers can verify
 
+## Statistics & Factual Claims — CRITICAL RULE
+**NEVER write a specific percentage, number, or statistic unless it appears VERBATIM in your researched sources above.**
+
+❌ FORBIDDEN (unless in your sources exactly):
+- "74% of remote workers report…"
+- "Productivity increases by 40% when…"
+- "Studies show 3 out of 5 professionals…"
+- Any precise figure you are not 100% certain came from a source you found
+
+✅ ALLOWED — use qualitative language when no exact number is available:
+- "Research suggests that remote workers often report higher productivity…"
+- "Experts consistently find that structured routines improve focus…"
+- "Many studies indicate a meaningful link between X and Y…"
+
+The editorial review will web-search your statistics. Any number that can't be verified = citation_quality drops to 5-6 = book rejected. When in doubt, cut the number and write qualitatively.
+
 ## Vancouver Citation Format
 
 ```

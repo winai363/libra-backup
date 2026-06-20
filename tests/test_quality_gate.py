@@ -182,8 +182,8 @@ def test_gate_blocks_puzzle_book(tmp_path, monkeypatch):
 
 
 def test_fiction_threshold(tmp_path, monkeypatch):
-    """Fiction books require MIN_FICTION_WORDS = 20000."""
-    book_dir, slug = _make_book(tmp_path, words=15000, sections=15, refs=10, fiction=True)
+    """Fiction books shorter than MIN_FICTION_WORDS should fail the gate."""
+    book_dir, slug = _make_book(tmp_path, words=MIN_FICTION_WORDS - 1000, sections=10, refs=10, fiction=True)
     listing = json.loads((book_dir / "listing.json").read_text())
     listing["categories"] = ["Fiction > Romance", "Fiction > Historical"]
     (book_dir / "listing.json").write_text(json.dumps(listing))

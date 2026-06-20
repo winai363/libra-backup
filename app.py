@@ -109,6 +109,71 @@ def get_books():
     return books
 
 
+def build_dashboard_overview() -> dict:
+    """Summarize the current autonomous publishing loop for the main dashboard."""
+    books = get_books()
+    status_counts: dict[str, int] = {}
+    for book in books:
+        status = book.get("status") or "unknown"
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+    queue_file = Path(__file__).parent / "queue.txt"
+    queue = []
+    if queue_file.exists():
+        queue = [line.strip() for line in queue_file.read_text().splitlines() if line.strip()]
+
+    from profit_tracker import build_portfolio
+    from winner_signals import get_winners
+
+    portfolio = build_portfolio()
+    winners = get_winners()
+    sales_state_file = KDP_DIR / "sales-sync-state.json"
+    sales_state = {}
+    if sales_state_file.exists():
+        try:
+            sales_state = json.loads(sales_state_file.read_text())
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    queue_blocker = None
+    if queue:
+        first = next((book for book in books if book.get("slug") == queue[0]), None)
+        if first and first.get("kdp_error"):
+            queue_blocker = {
+                "slug": first["slug"],
+                "title": first.get("title", first["slug"]),
+                "error": str(first["kdp_error"]).splitlines()[0][:220],
+            }
+
+    return {
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "counts": {
+            "total": len(books),
+            "uploaded": status_counts.get("uploaded", 0),
+            "ready": status_counts.get("ready", 0),
+            "quality_failed": status_counts.get("quality_failed", 0),
+            "queued_for_kdp": len(queue),
+        },
+        "queue": queue,
+        "queue_blocker": queue_blocker,
+        "sales": {
+            "units_30d": portfolio["summary"]["units_30d"],
+            "revenue_30d_usd": portfolio["summary"]["estimated_revenue_30d_usd"],
+            "revenue_30d_thb": portfolio["summary"]["estimated_revenue_30d_thb"],
+            "books_with_data": portfolio["summary"]["books_with_data"],
+            "last_sync": sales_state.get("updated_at", ""),
+        },
+        "winners": winners[:3],
+        "automation": {
+            "generation": ["01:00", "05:00"],
+            "kdp_upload": ["02:30", "06:30"],
+            "sales_sync": "09:15",
+            "timezone": "Asia/Bangkok",
+            "learning": "ยอดขายจริง → หา niche ใกล้เคียง + เช็กฤดูกาลก่อนสร้าง",
+        },
+    }
+
+
 def check_auth(request: Request):
     token = request.cookies.get("libra_token")
     if not TOKEN or not token or not secrets.compare_digest(token, TOKEN):
@@ -156,6 +221,12 @@ async def list_books(request: Request, status: str = None):
     if status:
         books = [b for b in books if b.get("status") == status]
     return books
+
+
+@app.get("/api/dashboard/overview")
+async def dashboard_overview(request: Request):
+    check_auth(request)
+    return build_dashboard_overview()
 
 
 @app.get("/api/books/{slug}/epub")

@@ -10,18 +10,40 @@
 </style>
 </head>
 <body class="min-h-screen">
-  <div class="max-w-5xl mx-auto p-4 md:p-6">
+  <div class="max-w-6xl mx-auto p-4 md:p-6">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
       <div>
         <h1 class="text-2xl font-bold text-amber-400">Libra Profit Dashboard</h1>
-        <p class="text-slate-400 text-sm">Portfolio traction, estimated revenue, and next actions</p>
+        <p class="text-slate-400 text-sm">หนังสือที่ส่งขึ้น KDP แล้ว (Live / In Review) · ต้นทุนและรายได้เป็น USD และบาทไทย</p>
       </div>
-      <a href="/libra/" class="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 text-sm hover:bg-slate-700">Back to Books</a>
+      <div class="flex items-center gap-3">
+        <span id="thb-rate" class="text-xs text-slate-500"></span>
+        <a href="/libra/" class="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 text-sm hover:bg-slate-700">Back to Books</a>
+      </div>
     </div>
 
     <div id="loading" class="text-slate-400">Loading...</div>
     <div id="content" class="hidden space-y-6">
-      <div class="grid grid-cols-2 md:grid-cols-5 gap-3" id="summary"></div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="summary"></div>
+
+      <!-- Cost vs Revenue strip -->
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+        <div>
+          <p class="text-xs text-slate-400">ต้นทุนรวมทั้งพอร์ต</p>
+          <p class="text-xl font-bold text-red-400" id="total-cost-thb">-</p>
+          <p class="text-xs text-slate-500" id="total-cost-usd">-</p>
+        </div>
+        <div>
+          <p class="text-xs text-slate-400">รายได้ 30 วัน (ประมาณ)</p>
+          <p class="text-xl font-bold text-emerald-400" id="total-rev-thb">-</p>
+          <p class="text-xs text-slate-500" id="total-rev-usd">-</p>
+        </div>
+        <div>
+          <p class="text-xs text-slate-400">รายได้ 30 วัน - ต้นทุนรวม</p>
+          <p class="text-xl font-bold" id="profit-thb">-</p>
+          <p class="text-xs text-slate-500" id="profit-note">-</p>
+        </div>
+      </div>
 
       <section class="bg-slate-800 border border-slate-700 rounded-xl p-4">
         <h2 class="font-bold text-white mb-3">Needs Attention</h2>
@@ -30,15 +52,17 @@
 
       <section class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
         <div class="p-4 border-b border-slate-700">
-          <h2 class="font-bold text-white">All Books</h2>
-          <p class="text-xs text-slate-400 mt-1">Revenue is estimated from recorded snapshots. No snapshot = no real KDP sales data yet.</p>
+          <h2 class="font-bold text-white">Books Uploaded to KDP</h2>
+          <p class="text-xs text-slate-400 mt-1">รายได้ประมาณจาก snapshot ที่บันทึกไว้ · ต้นทุน = ต้นทุนจริงจาก API (เล่มใหม่) หรือประมาณ ฿24 (เล่มเก่า)</p>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
             <thead class="bg-slate-900/60 text-slate-400">
               <tr>
                 <th class="text-left p-3">Book</th>
-                <th class="text-right p-3">30d Rev</th>
+                <th class="text-right p-3">ราคา</th>
+                <th class="text-right p-3">ต้นทุน</th>
+                <th class="text-right p-3">รายได้ 30d</th>
                 <th class="text-right p-3">Units</th>
                 <th class="text-right p-3">KENP</th>
                 <th class="text-left p-3">Action</th>
@@ -54,16 +78,12 @@
 <script>
 function escapeHtml(value) {
   return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 }
 
-function money(value) {
-  return '$' + Number(value || 0).toFixed(2);
-}
+function usd(value) { return '$' + Number(value || 0).toFixed(2); }
+function thb(value) { return '฿' + Number(value || 0).toLocaleString('th-TH', {maximumFractionDigits: 0}); }
 
 function badge(action) {
   const colors = {
@@ -82,10 +102,7 @@ function badge(action) {
 
 async function load() {
   const res = await fetch('/libra/api/profit/portfolio', { credentials: 'include' });
-  if (res.status === 401) {
-    window.location.href = '/libra/';
-    return;
-  }
+  if (res.status === 401) { window.location.href = '/libra/'; return; }
   const data = await res.json();
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('content').classList.remove('hidden');
@@ -94,20 +111,40 @@ async function load() {
 
 function render(data) {
   const s = data.summary;
-  const cards = [
-    ['Books', data.book_count],
-    ['With Data', s.books_with_data],
-    ['7d Revenue', money(s.estimated_revenue_7d_usd)],
-    ['30d Revenue', money(s.estimated_revenue_30d_usd)],
-    ['30d KENP', s.kenp_30d],
-  ];
-  document.getElementById('summary').innerHTML = cards.map(([label, value]) => `
-    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
-      <p class="text-xs text-slate-400">${label}</p>
-      <p class="text-xl font-bold text-white mt-1">${escapeHtml(value)}</p>
-    </div>
-  `).join('');
+  const rate = data.thb_rate || 35.5;
+  document.getElementById('thb-rate').textContent = `อัตรา $1 = ฿${rate}`;
 
+  // Summary cards
+  const cards = [
+    ['Uploaded Books', data.book_count],
+    ['With Data', s.books_with_data],
+    ['7d Revenue', `${thb(s.estimated_revenue_7d_thb)}\n${usd(s.estimated_revenue_7d_usd)}`],
+    ['30d Revenue', `${thb(s.estimated_revenue_30d_thb)}\n${usd(s.estimated_revenue_30d_usd)}`],
+  ];
+  document.getElementById('summary').innerHTML = cards.map(([label, value]) => {
+    const lines = String(value).split('\n');
+    return `<div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+      <p class="text-xs text-slate-400">${label}</p>
+      <p class="text-xl font-bold text-white mt-1">${escapeHtml(lines[0])}</p>
+      ${lines[1] ? `<p class="text-xs text-slate-500">${escapeHtml(lines[1])}</p>` : ''}
+    </div>`;
+  }).join('');
+
+  // Cost vs revenue strip
+  const totalCostThb = s.total_cost_thb || 0;
+  const totalRevThb = s.estimated_revenue_30d_thb || 0;
+  const profitThb = totalRevThb - totalCostThb;
+  document.getElementById('total-cost-thb').textContent = thb(totalCostThb);
+  document.getElementById('total-cost-usd').textContent = usd(s.total_cost_usd) + ' (~฿24/เล่ม)';
+  document.getElementById('total-rev-thb').textContent = thb(totalRevThb);
+  document.getElementById('total-rev-usd').textContent = usd(s.estimated_revenue_30d_usd) + ' (ประมาณจาก snapshot)';
+  const profitEl = document.getElementById('profit-thb');
+  profitEl.textContent = thb(profitThb);
+  profitEl.className = 'text-xl font-bold ' + (profitThb >= 0 ? 'text-emerald-400' : 'text-red-400');
+  document.getElementById('profit-note').textContent = profitThb >= 0
+    ? 'คืนทุนแล้ว 🎉' : `ต้องการรายได้เพิ่มอีก ${thb(Math.abs(profitThb))}`;
+
+  // Attention section
   const attention = data.attention || [];
   document.getElementById('attention').innerHTML = attention.length
     ? attention.map(book => `
@@ -117,25 +154,42 @@ function render(data) {
           ${badge(book.action)}
         </div>
         <p class="text-slate-400 text-xs mt-1">${escapeHtml(book.reason)}</p>
-      </div>
-    `).join('')
+      </div>`).join('')
     : '<p class="text-slate-400 text-sm">No urgent action right now.</p>';
 
-  document.getElementById('books').innerHTML = (data.books || []).map(book => `
-    <tr class="hover:bg-slate-700/30">
-      <td class="p-3 min-w-[280px]">
+  // Books table
+  document.getElementById('books').innerHTML = (data.books || []).map(book => {
+    const rev30thb = (book.totals_30d_thb || {}).revenue_usd || 0;
+    const rev30usd = book.totals_30d.revenue_usd || 0;
+    const costThb = book.cost_thb || 0;
+    const costUsd = book.cost_usd || 0;
+    const priceThb = book.price_thb || 0;
+    const priceUsd = book.price_usd || 0;
+    return `<tr class="hover:bg-slate-700/30">
+      <td class="p-3 min-w-[260px]">
         <p class="font-medium text-white">${escapeHtml(book.title)}</p>
-        <p class="text-xs text-slate-500">${escapeHtml(book.slug)} · ${escapeHtml(book.language)} · ${book.days_live ?? '?'} days</p>
+        <p class="text-xs text-slate-500">${escapeHtml(book.language)} · ${book.days_live ?? '?'} วัน</p>
       </td>
-      <td class="p-3 text-right">${money(book.totals_30d.revenue_usd)}</td>
+      <td class="p-3 text-right">
+        <p class="text-white">${thb(priceThb)}</p>
+        <p class="text-xs text-slate-500">${usd(priceUsd)}</p>
+      </td>
+      <td class="p-3 text-right">
+        <p class="text-red-300">${thb(costThb)}</p>
+        <p class="text-xs text-slate-500">${usd(costUsd)} ${book.cost_is_real ? '<span class="text-emerald-600">●</span>' : '<span class="text-slate-600" title="ประมาณการ">~</span>'}</p>
+      </td>
+      <td class="p-3 text-right">
+        <p class="${rev30thb > 0 ? 'text-emerald-300' : 'text-slate-400'}">${thb(rev30thb)}</p>
+        <p class="text-xs text-slate-500">${usd(rev30usd)}</p>
+      </td>
       <td class="p-3 text-right">${book.totals_30d.units}</td>
       <td class="p-3 text-right">${book.totals_30d.kenp}</td>
-      <td class="p-3 min-w-[260px]">
+      <td class="p-3 min-w-[240px]">
         ${badge(book.action)}
         <p class="text-xs text-slate-400 mt-1">${escapeHtml(book.reason)}</p>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 }
 
 load().catch(err => {

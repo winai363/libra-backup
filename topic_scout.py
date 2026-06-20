@@ -44,6 +44,10 @@ DISCOVERY_PROMPT = """You are a KDP niche analyst. Use web search to find 5 HIGH
 PRIMARY GOAL: Find niches where REAL buyers are searching but FEW quality books exist.
 A niche with 10,000 buyers and 20 competing books beats a niche with 100,000 buyers and 5,000 books.
 
+{proven_winners}
+
+{seasonal_context}
+
 Existing books to AVOID duplicating:
 {existing_books}
 
@@ -58,7 +62,7 @@ SEARCH STRATEGY — run ALL these searches:
 8. self-help OR productivity OR finance OR parenting kindle niche gap 2026 non-English
 
 FOR EACH CANDIDATE — you MUST verify:
-- Search the niche on amazon.{tld}: how many books appear with 10+ reviews and 4+ stars?
+- Search the niche on amazon.{{tld}} (the target marketplace, e.g. amazon.es): how many books appear with 10+ reviews and 4+ stars?
 - If >500 quality competing books → REJECT this niche, pick another
 - Does demand evidence exist? (search volume, buyer forums, reddit discussions)
 
@@ -69,6 +73,11 @@ HARD FILTER — only include if ALL pass:
 ✅ Real buyer demand evidence found (not just "this topic exists")
 ✅ Target working adults 25-55, legally safe topic
 ✅ NOT in existing books list above
+✅ TIMING: if the niche is seasonal/deadline-driven (taxes, New Year, back-to-school,
+   holidays), its buying window must be OPEN or arriving within ~3 months given the
+   publishing lead time above — REJECT a seasonal niche whose window just closed
+   (e.g. an annual tax-RETURN guide right after the filing deadline). Evergreen
+   niches pass anytime.
 
 ❌ HARD REJECT — these are NOT suited to the Kindle eBook format and Amazon will
    refuse to publish them. NEVER propose any of these, in any language:
@@ -95,6 +104,7 @@ Return JSON array of EXACTLY 5 candidates (already filtered to low-competition o
     "title_en": "English translation of title",
     "description_en": "2-sentence English description of what the book covers",
     "demand_evidence": "Specific evidence: search volume, Reddit/forum discussions, buyer search terms found",
+    "demand_timing": "evergreen, OR the specific upcoming demand window with its date (e.g. 'Spanish IVA trimestral deadline ~20 Jul' or 'New Year resolutions, peaks late Dec–Jan')",
     "verified_competing_books": <integer — actual count of quality books (10+ reviews, 4+ stars) you found>,
     "verified_books_in_language": <integer — quality books specifically in this language>,
     "competition_note": "Why this is low competition — what gap exists"
@@ -116,7 +126,29 @@ def get_existing_books() -> str:
     return "\n".join(lines) if lines else "(none yet)"
 
 
-def discover_candidates(existing_books: str) -> list[dict]:
+PUBLISH_LEAD_DAYS = 14  # write + QA + upload + KDP review before a book is live
+
+
+def _seasonal_context() -> str:
+    """Tell the model today's date and the publishing lead time, so it can favour
+    niches whose demand window is open or arriving — and skip ones that just closed."""
+    from datetime import datetime, timedelta
+    today = datetime.now()
+    live_by = today + timedelta(days=PUBLISH_LEAD_DAYS)
+    return (
+        "TIMING CONTEXT (demand is often seasonal — match supply to the calendar):\n"
+        f"- Today is {today:%Y-%m-%d} ({today:%B %d, %Y}).\n"
+        f"- A book picked now goes live around {live_by:%Y-%m-%d} "
+        f"(~{PUBLISH_LEAD_DAYS}-day write/QA/upload/review lead time).\n"
+        "- PREFER niches with a demand spike that is OPEN now or arriving within ~3 "
+        "months of the live date (deadlines, holidays, season changes, annual events). "
+        "A timely book beats a generic one.\n"
+        "- AVOID seasonal niches whose window just passed — that demand collapses until "
+        "next year. Evergreen niches are fine anytime."
+    )
+
+
+def discover_candidates(existing_books: str, proven_winners: str = "") -> list[dict]:
     """Ask GPT-4.1 with web search to find 5 candidate topics."""
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     # language_hint: push toward under-represented languages in existing library
@@ -128,6 +160,8 @@ def discover_candidates(existing_books: str) -> list[dict]:
         existing_books=existing_books,
         language_hint=language_hint,
         niche_hint=niche_hint,
+        proven_winners=proven_winners or "PROVEN WINNERS: none yet.",
+        seasonal_context=_seasonal_context(),
     )
 
     response = client.responses.create(
@@ -160,6 +194,7 @@ def _enrich_candidate(c: dict) -> dict:
     c.setdefault("niche", "")
     c.setdefault("marketplace", "amazon.com")
     c.setdefault("description_en", "")
+    c.setdefault("demand_timing", "")
     slug = c.get("slug", "")
     slug = re.sub(r'[^a-z0-9\-]', '-', slug.lower().strip())
     slug = re.sub(r'-{2,}', '-', slug).strip('-')
@@ -171,19 +206,35 @@ def _slug_exists(slug: str) -> bool:
     return (KDP_DIR / slug).exists()
 
 
-def _opportunity_score(c: dict) -> float:
+def _opportunity_score(c: dict, proven: tuple[set, set] | None = None) -> float:
     """
     Weighted ranking score that prioritises low competition over raw total.
     competition (20pts) × 2.5 + language_saturation (10pts) × 2.0 + demand (20pts) × 1.0
     This ensures a blue-ocean topic with moderate demand ranks above a saturated
     topic with very high demand.
+
+    Learning-loop boost: a candidate that serves a PROVEN buyer (same language as a
+    book that already sold, or sharing words with a winning niche/title) gets a
+    bonus so adjacent "double-down" topics rank above cold new niches — exploiting
+    verified demand without overriding the hard competition/language gates.
     """
     ms = c.get("_market_score", {})
     scores = ms.get("scores", {})
     comp   = scores.get("competition",        {}).get("score", 0)
     lang   = scores.get("language_saturation",{}).get("score", 0)
     demand = scores.get("demand",             {}).get("score", 0)
-    return comp * 2.5 + lang * 2.0 + demand * 1.0
+    base = comp * 2.5 + lang * 2.0 + demand * 1.0
+
+    boost = 0.0
+    if proven:
+        proven_langs, proven_words = proven
+        if c.get("language", "").lower() in proven_langs:
+            boost += 6.0
+        text = f"{c.get('title','')} {c.get('title_en','')} {c.get('niche','')}".lower()
+        if any(w in text for w in proven_words):
+            boost += 6.0
+    c["_winner_boost"] = boost
+    return base + boost
 
 
 def scout(save_candidates_to: Path | None = None) -> dict:
@@ -193,10 +244,18 @@ def scout(save_candidates_to: Path | None = None) -> dict:
     Raises RuntimeError if no GO topic found.
     """
     from market_intelligence import score_topic, THRESHOLD, COMPETITION_MIN, LANGUAGE_SAT_MIN, print_summary
+    from winner_signals import get_winners, proven_sets, format_for_prompt
+
+    # Learning loop: let books that already sold steer discovery toward adjacent topics.
+    winners = get_winners()
+    proven = proven_sets(winners) if winners else None
+    if winners:
+        print(f"[topic_scout] {len(winners)} proven winner(s) feeding discovery: "
+              f"{', '.join(w['slug'] for w in winners[:6])}")
 
     existing_books = get_existing_books()
     print(f"[topic_scout] Discovering candidates (existing: {existing_books.count(chr(10))+1} books)...")
-    candidates = discover_candidates(existing_books)
+    candidates = discover_candidates(existing_books, format_for_prompt(winners))
     print(f"[topic_scout] Got {len(candidates)} candidates from GPT-4.1")
 
     from quality_gate import kindle_unsuitable
@@ -208,10 +267,18 @@ def scout(save_candidates_to: Path | None = None) -> dict:
 
         # Drop Kindle-incompatible formats (puzzle/coloring/journal/pattern/activity)
         # before wasting a scoring/generation cycle — Amazon rejects these as eBooks.
+        # Include both native-language title/subtitle AND English fields so the
+        # detector catches e.g. "Planner di Produttività" (Italian) or "Diario Guidato"
+        # that wouldn't appear in the English description_en.
         unsuitable = kindle_unsuitable({
             "title": c.get("title", ""),
             "subtitle": c.get("subtitle", ""),
-            "description": f"{c.get('title_en','')} {c.get('description_en','')} {c.get('niche','')}",
+            "description": (
+                f"{c.get('title','')} {c.get('subtitle','')} "
+                f"{c.get('title_en','')} {c.get('description_en','')} {c.get('niche','')}"
+            ),
+            "categories": [],
+            "keywords": [],
         })
         if unsuitable:
             print(f"  SKIP: not suited to Kindle format — {unsuitable}")
@@ -231,12 +298,13 @@ def scout(save_candidates_to: Path | None = None) -> dict:
             c["_market_score"] = result
             c["_total_score"] = result["total_score"]
             c["_go_no_go"] = result["go_no_go"]
-            c["_opportunity_score"] = _opportunity_score(c)
+            c["_opportunity_score"] = _opportunity_score(c, proven)
             comp  = result["scores"]["competition"]["score"]
             lang  = result["scores"]["language_saturation"]["score"]
             print_summary(result)
             print(f"  Opportunity score: {c['_opportunity_score']:.1f} "
-                  f"(competition={comp}/20, lang_gap={lang}/10)")
+                  f"(competition={comp}/20, lang_gap={lang}/10"
+                  f"{', winner_boost +%.0f' % c['_winner_boost'] if c.get('_winner_boost') else ''})")
             if result["go_no_go"] == "NO-GO":
                 reasons = []
                 if comp < COMPETITION_MIN:
@@ -289,6 +357,7 @@ def to_writer_topic(c: dict) -> dict:
         "niche":          c.get("niche", ""),
         "description_en": c.get("description_en", ""),
         "title_en":       c.get("title_en", c["title"]),
+        "demand_timing":  c.get("demand_timing", ""),
         "_market_score":  c.get("_market_score"),
     }
 

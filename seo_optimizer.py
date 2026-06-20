@@ -25,6 +25,28 @@ load_dotenv("/root/libra/.env")
 KDP_DIR = Path("/root/kdp")
 LIBRA_DIR = Path(__file__).parent
 
+_GPT41_IN  = 2.0  / 1_000_000
+_GPT41_OUT = 8.0  / 1_000_000
+_SEARCH    = 25.0 / 1_000
+
+
+def _append_step_cost(slug: str, step: str, response) -> None:
+    usage = getattr(response, "usage", None)
+    inp  = (getattr(usage, "input_tokens", 0) or getattr(usage, "prompt_tokens", 0)) if usage else 0
+    out  = (getattr(usage, "output_tokens", 0) or getattr(usage, "completion_tokens", 0)) if usage else 0
+    srch = sum(1 for item in response.output
+               if getattr(item, "type", "") in ("web_search_call", "web_search_preview_call"))
+    cost_usd = inp * _GPT41_IN + out * _GPT41_OUT + srch * _SEARCH
+    report_path = KDP_DIR / slug / "cost-report.json"
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
+    except (OSError, json.JSONDecodeError):
+        report = {}
+    report[step] = {"input_tokens": inp, "output_tokens": out, "web_searches": srch, "cost_usd": round(cost_usd, 4)}
+    total = sum(s.get("cost_usd", 0) for s in report.values() if isinstance(s, dict) and "cost_usd" in s)
+    report["total_usd"] = round(total, 4)
+    report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
+
 SEO_PROMPT = """You are a KDP SEO specialist. Analyze competing books and optimize this listing.
 
 BOOK TO OPTIMIZE:
@@ -167,6 +189,8 @@ def optimize(slug: str, dry_run: bool = False) -> dict:
 
     if response is None:
         raise RuntimeError("SEO optimizer got no response")
+
+    _append_step_cost(slug, "seo", response)
 
     raw = ""
     for item in response.output:

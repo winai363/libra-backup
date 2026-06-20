@@ -150,10 +150,10 @@ def build_paperback_pdf(slug: str, force: bool = False) -> Path:
 % --- Readable body text ---
 \microtypesetup{protrusion=true,expansion=false}
 
-% Moderate hyphenation to avoid rivers and broken words at the margin.
-\hyphenpenalty=700
-\tolerance=1000
-\emergencystretch=2em
+% Allow hyphenation especially for long compound words (German, etc.)
+\hyphenpenalty=200
+\tolerance=1400
+\emergencystretch=3em
 \hbadness=10000
 \vbadness=10000
 \setlength{\hfuzz}{5pt}

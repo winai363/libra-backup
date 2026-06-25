@@ -129,7 +129,25 @@ def compute_alerts(report: dict) -> dict:
         if len(live) >= 2:
             live_dups[slug] = [e["asin"] for e in live]
     live_orphans = [e for e in report["orphans"] if e["status"] == "LIVE"]
-    return {"live_duplicates": live_dups, "live_orphans": live_orphans}
+
+    # Takedown watch: a tracked book now shown BLOCKED on the bookshelf.
+    blocked = [e for e in report["entries"]
+               if e["status"] == "BLOCKED" and (e.get("slug") or e.get("duplicate_of"))]
+
+    # Vanished watch: a book our listing.json records as LIVE that no longer
+    # appears on the bookshelf at all (possible silent takedown). Guard against a
+    # partial fetch — only trust this when the roster looks complete.
+    gone = []
+    if report["total_rows"] >= 20:
+        present = {e.get("slug") for e in report["entries"] if e.get("slug")}
+        for lf in KDP_DIR.glob("*/listing.json"):
+            d = _load_json(lf, {})
+            slug = lf.parent.name
+            if d.get("live_status") == "LIVE" and slug not in present:
+                gone.append({"slug": slug, "asin": d.get("asin"), "title_guess": d.get("title", slug)})
+
+    return {"live_duplicates": live_dups, "live_orphans": live_orphans,
+            "blocked": blocked, "gone": gone}
 
 
 # ---------- bookshelf scrape ----------
@@ -371,12 +389,22 @@ def maybe_alert(report: dict) -> None:
         if e["asin"] not in ack:
             new_lines.append(f"👻 <b>เล่ม LIVE ไม่มี listing</b>: {e['asin']} — {e['title_guess'][:60]}")
             new_asins.add(e["asin"])
+    for e in alerts["blocked"]:
+        key = e.get("asin") or e.get("book_id")
+        if key not in ack:
+            new_lines.append(f"🚫 <b>โดน BLOCKED (Amazon takedown?)</b>: {e['asin']} — {e['title_guess'][:55]}")
+            new_asins.add(key)
+    for e in alerts["gone"]:
+        key = e.get("asin") or e.get("slug")
+        if key not in ack:
+            new_lines.append(f"❓ <b>เคย LIVE แต่หายจากชั้น</b>: {e['slug']} ({e.get('asin')})")
+            new_asins.add(key)
 
     if not new_lines:
-        _log("alert: no new live-duplicates/orphans")
+        _log("alert: no new live-duplicates / orphans / blocked / vanished")
         return
     msg = "📕 <b>Libra KDP roster เจอปัญหาใหม่</b>\n\n" + "\n".join(new_lines) + \
-          "\n\nรัน kdp_unpublish.py / สร้าง listing เพื่อแก้"
+          "\n\nตรวจ bookshelf / รัน kdp_unpublish.py / สร้าง listing เพื่อแก้"
     _telegram(msg)
     _log(f"alert: pinged Bui about {len(new_asins)} new item(s)")
     ack |= new_asins

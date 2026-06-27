@@ -4,6 +4,7 @@
 __pycache__/
 *.pyc
 kdp_session.json
+kdp_session.json.bak-*
 queue.txt
 queue_log.txt
 queue_failed.txt
@@ -15,3 +16,7 @@ queue_failed.txt
 .cover_retry.lock
 logs/
 data/kdp-title-limit.json
+data/category_health.json
+data/category_health.md
+data/category_health_state.json
+data/new-title-submissions.log

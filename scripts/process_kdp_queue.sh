@@ -12,6 +12,12 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 QUALITY_GATE="${QUALITY_GATE:-$LIBRA_DIR/quality_gate.py}"
 KDP_UPLOAD="${KDP_UPLOAD:-$LIBRA_DIR/kdp_upload.py}"
 UPLOAD_TIMEOUT="${UPLOAD_TIMEOUT:-25m}"
+# Cap how many BRAND-NEW titles we submit to KDP per calendar day. Updates to
+# existing books don't count (they don't trip Amazon's new-title limit). Pacing
+# new submissions is what keeps us under the account cap so we stop getting
+# auto-paused. Raise this once the account has more publishing history.
+DAILY_NEW_TITLE_CAP="${DAILY_NEW_TITLE_CAP:-1}"
+NEW_TITLE_LOG="${NEW_TITLE_LOG:-$LIBRA_DIR/data/new-title-submissions.log}"
 cd "$LIBRA_DIR"
 
 # Send the book cover to Telegram (used on successful publish, so manual/recovery
@@ -111,6 +117,18 @@ then
     MODE=(--update)
 fi
 
+# ── เพดานส่งเล่มใหม่/วัน: กัน Amazon title-creation limit ไม่ให้ชนซ้ำ ──
+# นับเฉพาะ "เล่มใหม่" (MODE ว่าง) ที่ส่งสำเร็จวันนี้; ถ้าครบเพดานแล้วให้คงคิวไว้
+# แล้วค่อยส่งพรุ่งนี้ แทนที่จะกระหน่ำส่งจน KDP สั่งพักทั้งบัญชี
+if [ ${#MODE[@]} -eq 0 ]; then
+    NEW_TODAY=$(awk -F'\t' -v d="$(date +%F)" '$1==d{n++} END{print n+0}' "$NEW_TITLE_LOG" 2>/dev/null)
+    NEW_TODAY=${NEW_TODAY:-0}
+    if [ "$NEW_TODAY" -ge "$DAILY_NEW_TITLE_CAP" ]; then
+        echo "[$(date)] THROTTLED: ส่งเล่มใหม่ครบ $DAILY_NEW_TITLE_CAP/วันแล้ว — $SLUG คงไว้ในคิว รอพรุ่งนี้" >> "$LOG"
+        exit 0
+    fi
+fi
+
 # ── Timeout: ถ้าเล่มไหนค้างเกิน 25 นาที ส่ง SIGTERM แล้ว SIGKILL ตามใน 30 วิ ──
 timeout -k 30s "$UPLOAD_TIMEOUT" "$PYTHON_BIN" "$KDP_UPLOAD" "$SLUG" "${MODE[@]}" >> "$LOG" 2>&1
 RC=$?
@@ -123,6 +141,11 @@ fi
 if [ $RC -eq 0 ]; then
     sed -i '1d' "$QUEUE_FILE"
     rm -f "$TITLE_LIMIT_STATE"
+    # บันทึกเฉพาะเล่มใหม่ เพื่อให้เพดาน/วันนับถูก (update ไม่ต้องนับ)
+    if [ ${#MODE[@]} -eq 0 ]; then
+        mkdir -p "$(dirname "$NEW_TITLE_LOG")"
+        printf '%s\t%s\n' "$(date +%F)" "$SLUG" >> "$NEW_TITLE_LOG"
+    fi
     echo "[$(date)] SUCCESS: $SLUG removed from queue" >> "$LOG"
     tg_cover "$SLUG"
     exit 0
@@ -135,5 +158,17 @@ if [ $RC -eq 124 ] || [ $RC -eq 137 ]; then
     pkill -9 -f "/usr/local/lib/python3.12/dist-packages/playwright/driver" 2>/dev/null
 fi
 
-echo "[$(date)] RETAINED: $SLUG remains first in queue (exit=$RC)" >> "$LOG"
+# Upload failed (not success/deferred/throttle). Do NOT keep it at the head of
+# the queue — a single book that fails every run (e.g. localized categories the
+# KDP picker can't match, or a flaky modal) would otherwise block every book
+# behind it forever (head-of-line jam). Record the failure and rotate it to the
+# back so the rest of the queue keeps shipping; it gets retried after the others.
+printf '%s\t%s\t%s\n' "$(date -Is)" "$SLUG" "upload_failed_rc${RC}" >> "$FAILED_FILE"
+if [ "$(wc -l < "$QUEUE_FILE")" -gt 1 ]; then
+    sed -i '1d' "$QUEUE_FILE"
+    printf '%s\n' "$SLUG" >> "$QUEUE_FILE"
+    echo "[$(date)] ROTATED: $SLUG moved to back of queue (exit=$RC) — others can ship" >> "$LOG"
+else
+    echo "[$(date)] RETAINED: $SLUG is the only queued book (exit=$RC)" >> "$LOG"
+fi
 exit "$RC"

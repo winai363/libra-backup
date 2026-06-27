@@ -179,7 +179,7 @@ def build_dashboard_overview() -> dict:
         },
         "winners": winners[:3],
         "automation": {
-            "generation": ["01:00", "05:00"],
+            "generation": ["01:00"],
             "kdp_upload": ["02:30", "06:30"],
             "sales_sync": "09:15",
             "timezone": "Asia/Bangkok",

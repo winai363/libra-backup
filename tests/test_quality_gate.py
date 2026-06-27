@@ -123,10 +123,10 @@ def test_fail_keyword_too_long(tmp_path, monkeypatch):
 
 
 def test_fail_too_few_keywords(tmp_path, monkeypatch):
-    """Fewer than 7 keywords should fail."""
+    """Fewer than 5 keywords should fail."""
     book_dir, slug = _make_book(tmp_path, words=12000, sections=15, refs=10)
     listing = json.loads((book_dir / "listing.json").read_text())
-    listing["keywords"] = listing["keywords"][:5]
+    listing["keywords"] = listing["keywords"][:4]
     (book_dir / "listing.json").write_text(json.dumps(listing))
     monkeypatch.setattr("quality_gate.KDP_DIR", tmp_path)
     monkeypatch.setattr("quality_gate._unreachable_urls", lambda urls: [])

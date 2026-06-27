@@ -55,6 +55,15 @@ def suspicious_segment(segment: str) -> str | None:
     return None
 
 
+def _queued_slugs() -> set[str]:
+    """Slugs waiting in the KDP upload queue — these are about to be submitted and
+    must be screened even though they have no live_status yet."""
+    qf = Path("/root/libra/queue.txt")
+    if not qf.exists():
+        return set()
+    return {ln.strip() for ln in qf.read_text(encoding="utf-8").splitlines() if ln.strip()}
+
+
 def scan(include_review: bool = False, include_unpublished: bool = False) -> list[dict]:
     findings: list[dict] = []
     allowed_status = {"LIVE"}
@@ -62,13 +71,16 @@ def scan(include_review: bool = False, include_unpublished: bool = False) -> lis
         allowed_status.add("IN_REVIEW")
     if include_unpublished:
         allowed_status.add("UNPUBLISHED")
+    queued = _queued_slugs()
     for listing_file in sorted(KDP.glob("*/listing.json")):
         try:
             listing = json.loads(listing_file.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             continue
         live_status = listing.get("live_status")
-        if live_status not in allowed_status:
+        # Always screen books queued for upload (no live_status yet) — that's where
+        # localized categories jam the pipeline before a book ever goes live.
+        if live_status not in allowed_status and listing_file.parent.name not in queued:
             continue
         categories = listing.get("categories") or []
         bad = []

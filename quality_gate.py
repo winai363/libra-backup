@@ -535,12 +535,12 @@ def validate_book(
         report.error("SEO description must contain 150-4,000 characters.")
     valid_keywords = (
         isinstance(keywords, list)
-        and len(keywords) == 7
+        and 5 <= len(keywords) <= 7
         and all(isinstance(keyword, str) and 2 <= len(keyword.strip()) <= 50 for keyword in keywords)
     )
     if not valid_keywords:
-        report.error("Exactly 7 SEO keyword phrases are required; each must contain 2-50 characters.")
-    elif len({keyword.strip().casefold() for keyword in keywords}) != 7:
+        report.error("5-7 SEO keyword phrases are required; each must contain 2-50 characters.")
+    elif len({keyword.strip().casefold() for keyword in keywords}) != len(keywords):
         report.error("SEO keyword phrases must be unique.")
     if not isinstance(categories, list) or len(categories) < 2:
         report.error("At least 2 relevant KDP categories are required.")

@@ -38,13 +38,13 @@ def _fixture(tmp_path, gate_exit=0, upload_exit=0):
     return libra, kdp, env
 
 
-def test_upload_failure_retains_first_queue_item(tmp_path):
+def test_upload_failure_rotates_first_queue_item(tmp_path):
     libra, _, env = _fixture(tmp_path, upload_exit=1)
 
     result = subprocess.run([str(SCRIPT)], env=env, check=False)
 
     assert result.returncode == 1
-    assert (libra / "queue.txt").read_text().splitlines() == ["book-one", "book-two"]
+    assert (libra / "queue.txt").read_text().splitlines() == ["book-two", "book-one"]
 
 
 def test_upload_success_removes_only_completed_item(tmp_path):

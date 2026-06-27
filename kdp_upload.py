@@ -6,10 +6,13 @@ Usage: python3 kdp_upload.py <slug>
 
 import asyncio
 import json
+import re
 import sys
 from pathlib import Path
 from datetime import datetime, timedelta
 from playwright.async_api import async_playwright
+
+from kdp_categories import set_categories
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -114,7 +117,8 @@ async def wait_for_pricing_page(page, timeout_seconds: int = 900) -> bool:
                 if error_text:
                     raise RuntimeError(f"KDP content processing error: {error_text[:300]}")
 
-            preparing = await page.query_selector('text="Preparing your files"')
+            body_txt = (await page.evaluate("() => document.body.innerText || ''")) or ""
+            preparing = "reparing" in body_txt and "file" in body_txt.lower()
             if preparing:
                 if waited % 30 == 0:
                     logger.info("KDP is preparing files (%ss elapsed)", waited)
@@ -124,7 +128,12 @@ async def wait_for_pricing_page(page, timeout_seconds: int = 900) -> bool:
                 )
                 if save_btn and await save_btn.get_attribute("disabled") is None:
                     logger.info("File preparation dialog cleared; retrying Save and Continue")
-                    await save_btn.click()
+                    # Short timeout + swallow: if an overlay still covers the button
+                    # we keep looping rather than aborting the whole wait on a 30s click timeout.
+                    try:
+                        await save_btn.click(timeout=5000)
+                    except Exception:
+                        pass
             await page.wait_for_timeout(10000)
             waited += 10
         except RuntimeError:
@@ -270,6 +279,66 @@ async def notify(message: str):
         logger.error(f"Telegram notify failed: {e}")
 
 
+async def set_reading_age(page, min_age, max_age, logger=None) -> bool:
+    """Set the KDP "Reading interest age" range (juvenile / young-adult titles).
+
+    Amazon locks these dropdowns whenever the title is flagged as adult content,
+    and an old upload may carry a stale 18+/adult flag that keeps the locked,
+    2-option placeholder selects in place. So we first force the "Sexually
+    Explicit … = No" radio, which clears the lock and reveals the real
+    Baby–17 selects, then drive them via select_option (same React-native trick
+    the category cascade uses). Returns True if both values stuck.
+    """
+    def _log(m):
+        (logger.info if logger else print)(m)
+    # Clear any stale adult-content lock so the age selects unlock.
+    try:
+        await page.evaluate("""() => {
+            const r = document.querySelector('input[name="data[is_adult_content]-radio"][value="false"]');
+            if (r) r.click();
+        }""")
+        await page.wait_for_timeout(1200)
+    except Exception as e:
+        _log(f"  reading-age: could not toggle adult-content radio: {e}")
+    ok = True
+    for which, val in (("start", str(min_age)), ("end", str(max_age))):
+        sel = f'select#data-reading-interest-age-{which}-input-native:not([disabled])'
+        try:
+            await page.select_option(sel, value=val, timeout=5000)
+            got = await page.eval_on_selector(sel, "el => el.value")
+            if got != val:
+                ok = False
+                _log(f"  reading-age {which}: wanted {val}, got {got!r}")
+        except Exception as e:
+            ok = False
+            _log(f"  reading-age {which}: {str(e)[:100]}")
+    if ok:
+        _log(f"✓ Reading interest age set: {min_age}-{max_age}")
+    return ok
+
+
+def juvenile_reading_age(categories):
+    """Derive a KDP reading-interest-age {min,max} from a book's category paths,
+    or None for adult titles (which must leave the age range blank).
+
+    KDP flags juvenile titles ("Reading Interest Age is missing") whenever a book
+    sits in Children's eBooks or Teen & Young Adult but has no age range. The
+    pipeline picks categories but never set an age, so every kids/teen book got
+    flagged. We infer a sensible range from the categories themselves: an explicit
+    "Ages 6-8" bucket if present, else a broad default per juvenile band."""
+    joined = " | ".join(categories or []).lower()
+    m = re.search(r"ages?\s*(\d+)\s*[-–]\s*(\d+)", joined)
+    if m:
+        return {"min": int(m.group(1)), "max": int(m.group(2))}
+    if "baby-2" in joined:
+        return {"min": 0, "max": 2}
+    if "young adult" in joined or "teen & young adult" in joined:
+        return {"min": 13, "max": 17}
+    if "children's ebooks" in joined or "children's books" in joined or "childrens" in joined:
+        return {"min": 3, "max": 8}
+    return None
+
+
 async def set_ai_disclosure(page, require_selections: bool = False) -> None:
     """Set mandatory KDP AI disclosure for GPT text and AI-generated cover art.
 
@@ -374,7 +443,9 @@ async def upload_to_kdp(slug: str):
     listing = json.loads(listing_file.read_text())
     title = listing.get("title", slug)
     subtitle = listing.get("subtitle", "")
-    description = listing.get("description", "")
+    # Prefer the whitelisted-HTML blurb (hook/bullets/CTA) when present; the
+    # KDP CKEditor renders HTML. Fall back to the plain description.
+    description = listing.get("description_html") or listing.get("description", "")
     keywords = listing.get("keywords", [])
     categories = listing.get("categories", [])
     language = listing.get("language", "English")
@@ -646,56 +717,49 @@ async def upload_to_kdp(slug: str):
                 else:
                     logger.warning("⚠️ No keywords found in listing.json")
 
-                # Category: open modal, search for AI category, and select relevant checkboxes
+                # Category: drive the 2026 React cascade modal, fuzzy-matching the
+                # book's intended category paths against Amazon's real category tree
+                # (see kdp_categories.set_categories). Replaces the old "click the
+                # first 2 visible checkboxes" logic that mis-filed every book.
                 try:
-                    cat_btn = await page.query_selector('button:has-text("Choose categories"), button:has-text("Change categories")')
-                    if cat_btn:
-                        await cat_btn.click()
-                        await page.wait_for_timeout(2000)
-                        
-                        categories_list = listing.get("categories", [])
-                        if categories_list:
-                            # Try to search for the category if KDP search box is present
-                            search_input = page.locator('input[type="search"], input[placeholder*="Search"]')
-                            if await search_input.count() > 0:
-                                await search_input.first.fill(categories_list[0])
-                                await page.keyboard.press("Enter")
-                                await page.wait_for_timeout(2000)
-                            else:
-                                # Fallback: try to select 'Nonfiction' or first option
-                                try:
-                                    await page.select_option('select', label="Non-Fiction", force=True)
-                                    await page.wait_for_timeout(1000)
-                                except:
-                                    try:
-                                        await page.select_option('select', index=1, force=True)
-                                        await page.wait_for_timeout(1000)
-                                    except:
-                                        pass
-
-                        # Click up to 2 visible checkboxes
-                        checkboxes = page.locator('input[type="checkbox"]:visible')
-                        count = await checkboxes.count()
-                        clicked = 0
-                        for i in range(count):
-                            if clicked >= 2: break
-                            # Don't uncheck if already checked
-                            is_checked = await checkboxes.nth(i).is_checked()
-                            if not is_checked:
-                                await checkboxes.nth(i).click(force=True)
-                                clicked += 1
-                        
-                        logger.info(f"✓ Selected {clicked} categories")
-                        await page.wait_for_timeout(500)
-                        
-                        save_cat = await page.query_selector('button:has-text("Save categories")')
-                        if save_cat:
-                            await save_cat.click()
-                            await page.wait_for_timeout(1000)
+                    cats = listing.get("categories", [])
+                    # Snap onto KDP's real tree (idempotent for already-real paths)
+                    # so books whose listing predates the resolver still upload with
+                    # valid, tickable categories instead of GPT's invented nesting.
+                    try:
+                        from category_resolver import resolve_paths
+                        cats = resolve_paths(cats) or cats
+                    except Exception as _re:
+                        logger.warning(f"⚠️ category resolver skipped: {_re}")
+                    if cats:
+                        applied = await set_categories(page, cats, logger)
+                        logger.info(f"✓ Categories applied: {len(applied)} — {applied}")
                     else:
-                        logger.info("✓ Category already set")
+                        logger.info("✓ No categories in listing; skipping")
                 except Exception as e:
                     logger.warning(f"⚠️ Category step failed: {e}")
+
+                # Dismiss any lingering category-modal popover. When 0 categories
+                # match (e.g. a category path the KDP tree doesn't contain), the
+                # modal's Cancel can leave an 'a-popover-floating-close' backdrop
+                # that intercepts the very next click and times it out for 30s,
+                # failing the whole upload. Escape clears it. (The update flow
+                # already does this; the new-title flow was missing it.)
+                try:
+                    await page.keyboard.press("Escape")
+                    await page.wait_for_timeout(800)
+                except Exception:
+                    pass
+
+                # Reading interest age — juvenile/YA titles need a range or KDP flags
+                # "Reading Interest Age is missing". Explicit listing value wins;
+                # otherwise auto-derive from the categories (adult titles → None).
+                try:
+                    ria = listing.get("reading_interest_age") or juvenile_reading_age(cats)
+                    if ria and ria.get("min") is not None and ria.get("max") is not None:
+                        await set_reading_age(page, ria["min"], ria["max"], logger)
+                except Exception as e:
+                    logger.warning(f"⚠️ Reading-age step failed: {e}")
 
                 # Language dropdown (Amazon uses custom JS dropdown)
                 lang_map_kdp = {"English": "english", "German": "german", "Spanish": "spanish", "French": "french", "Italian": "italian", "Portuguese": "portuguese"}
@@ -1597,6 +1661,225 @@ async def update_cover(slug: str) -> bool:
             await browser.close()
 
 
+async def update_metadata(slug: str, skip_categories: bool = False) -> bool:
+    """Update an already-published book's Amazon metadata ONLY — keywords, HTML
+    description, and categories (via the React-cascade setter) — then republish.
+
+    Unlike upload_to_kdp(), this does NOT re-upload the EPUB or re-run the content
+    quality gate, so it works on live books whose content wouldn't pass current
+    gates. Navigates details → content → pricing → publish, changing nothing on
+    the content page beyond the required confirmations.
+    """
+    book_dir = KDP_DIR / slug
+    listing_file = book_dir / "listing.json"
+    if not listing_file.exists():
+        logger.error(f"No listing.json for {slug}")
+        return False
+
+    data = json.loads(listing_file.read_text())
+    title = data.get("title", slug)
+    description = data.get("description_html") or data.get("description", "")
+    keywords_list = data.get("keywords", [])
+    cats = data.get("categories", [])
+    # Resolve GPT paths onto KDP's real tree (idempotent for already-real paths).
+    try:
+        from category_resolver import resolve_paths
+        cats = resolve_paths(cats) or cats
+    except Exception:
+        pass
+    book_id = data.get("kdp_book_id")
+    if not book_id:
+        logger.error("No kdp_book_id in listing.json — cannot update metadata.")
+        return False
+
+    logger.info(f"=== UPDATE METADATA: {title} ===")
+
+    async with async_playwright() as p:
+        if not SESSION_FILE.exists():
+            logger.error("No session file — run kdp_login_full.py first")
+            return False
+        ua = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+        browser = await p.chromium.launch(headless=True)
+        context = await browser.new_context(storage_state=str(SESSION_FILE), user_agent=ua)
+        page = await context.new_page()
+        await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => false})")
+
+        try:
+            details_url = f"https://kdp.amazon.com/en_US/title-setup/kindle/{book_id}/details"
+            await page.goto(details_url, wait_until="domcontentloaded", timeout=60000)
+            await page.wait_for_timeout(3000)
+
+            if "signin" in page.url or "/ap/" in page.url:
+                logger.warning("Session expired — re-logging in...")
+                await browser.close()
+                import subprocess as _sp
+                login_r = _sp.run(["python3", str(Path(__file__).parent / "kdp_login_full.py")],
+                                  capture_output=True, text=True, timeout=120)
+                if "Session saved" not in login_r.stdout:
+                    logger.error(f"Re-login failed: {login_r.stdout[-200:]}")
+                    return False
+                browser = await p.chromium.launch(headless=True)
+                context = await browser.new_context(storage_state=str(SESSION_FILE), user_agent=ua)
+                page = await context.new_page()
+                await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => false})")
+                await page.goto(details_url, wait_until="domcontentloaded", timeout=60000)
+                await page.wait_for_timeout(3000)
+                if "signin" in page.url or "/ap/" in page.url:
+                    logger.error("Still on signin page after re-login")
+                    return False
+
+            if "bookshelf" in page.url and "title-setup" not in page.url:
+                logger.warning("⏳ Redirected to bookshelf — book still In Review, cannot edit yet")
+                return False
+
+            logger.info(f"On details page: {page.url}")
+            import json as _json
+
+            # ── Description (HTML blurb) ──────────────────────────────────────
+            if description:
+                desc_js = _json.dumps(description)
+                await page.evaluate(f'''() => {{
+                    const desc = {desc_js};
+                    if (typeof CKEDITOR !== "undefined") {{
+                        for (const n in CKEDITOR.instances) CKEDITOR.instances[n].setData(desc);
+                    }}
+                    const h = document.querySelector('input[name="data[description]"]');
+                    if (h) {{ h.value = desc; h.dispatchEvent(new Event("change", {{bubbles:true}})); }}
+                }}''')
+                await page.wait_for_timeout(800)
+
+            # ── Keywords (7 backend slots) ────────────────────────────────────
+            for i in range(min(7, len(keywords_list))):
+                kw = keywords_list[i]
+                await page.evaluate(f'''() => {{
+                    const el = document.querySelector('input[name="data[keywords][{i}]"]');
+                    if (el) {{ el.value = {_json.dumps(kw)}; el.dispatchEvent(new Event("change", {{bubbles:true}})); }}
+                }}''')
+            logger.info(f"✓ Filled {min(7, len(keywords_list))} keywords")
+
+            # ── Reading interest age (juvenile / YA titles only) ──────────────
+            # Explicit listing value wins; otherwise auto-derive from categories so
+            # kids/teen books never ship without an age range.
+            ria = data.get("reading_interest_age") or juvenile_reading_age(cats)
+            if ria and ria.get("min") is not None and ria.get("max") is not None:
+                await set_reading_age(page, ria["min"], ria["max"], logger)
+
+            # ── Categories (React cascade) ────────────────────────────────────
+            if cats and not skip_categories:
+                applied = await set_categories(page, cats, logger)
+                logger.info(f"✓ Categories applied: {len(applied)} — {applied}")
+                # Let the modal fully close so its backdrop can't intercept the
+                # Save and Continue click that follows.
+                await page.wait_for_timeout(2500)
+                try:
+                    await page.keyboard.press("Escape")
+                except Exception:
+                    pass
+                await page.wait_for_timeout(800)
+
+            # ── details → content ─────────────────────────────────────────────
+            waited = 0
+            while waited < 60:
+                btn = await page.query_selector('button:has-text("Save and Continue"), input[value*="Save and Continue"]')
+                if btn and not await btn.get_attribute("disabled"):
+                    try:
+                        await btn.click(timeout=8000)
+                    except Exception:
+                        # A lingering category-modal backdrop can intercept the click;
+                        # dispatch it directly via JS to bypass the overlay.
+                        await btn.evaluate("el => el.click()")
+                    logger.info("✓ details: Save and Continue")
+                    break
+                await page.wait_for_timeout(5000); waited += 5
+            # Fail fast if the details page didn't advance (a validation error keeps
+            # us on /details; proceeding would hang in wait_for_pricing_page for 15m).
+            advanced = False
+            for _ in range(8):
+                await page.wait_for_timeout(2000)
+                if "/details" not in page.url:
+                    advanced = True
+                    break
+            if not advanced:
+                await page.screenshot(path=f"/tmp/kdp_meta_stuck_{slug}.png")
+                raise RuntimeError(f"details page did not advance (validation error?) url={page.url}")
+
+            # ── content page: required confirmations, then → pricing ──────────
+            if "content" in page.url:
+                try:
+                    await page.evaluate("""() => {
+                        for (const cb of document.querySelectorAll('div[role="checkbox"]')) {
+                            if (cb.getAttribute('aria-checked') === 'true') continue;
+                            const txt = (cb.closest('label') || cb.parentElement || cb).textContent || '';
+                            if (!txt.toLowerCase().includes('confirm')) continue;
+                            const key = Object.keys(cb).find(k => k.startsWith('__reactFiber'));
+                            if (key) { let f = cb[key]; while (f) { const pr = f.memoizedProps||f.pendingProps||{};
+                                if (pr.onClick) { pr.onClick({type:'click',target:cb,currentTarget:cb,stopPropagation:()=>{},preventDefault:()=>{}}); break; } f = f.return; } }
+                        }
+                    }""")
+                except Exception:
+                    pass
+                await set_ai_disclosure(page)
+                await page.wait_for_timeout(500)
+                waited = 0
+                while waited < 120:
+                    btn = await page.query_selector('button:has-text("Save and Continue"), input[value*="Save and Continue"]')
+                    if btn and not await btn.get_attribute("disabled"):
+                        try:
+                            await btn.click(timeout=8000)
+                        except Exception:
+                            await btn.evaluate("el => el.click()")
+                        logger.info("✓ content: Save and Continue")
+                        break
+                    await page.wait_for_timeout(5000); waited += 5
+
+            await wait_for_pricing_page(page)
+
+            # ── pricing → publish ─────────────────────────────────────────────
+            republished = False
+            logger.info(f"Pre-publish URL: {page.url}")
+            if "pricing" in page.url:
+                save_price = await page.query_selector('button:has-text("Save and Publish"), button:has-text("Publish")')
+                if not save_price:
+                    raise RuntimeError("Save and Publish button not found")
+                if await save_price.get_attribute("disabled") is not None:
+                    raise RuntimeError("Save and Publish remained disabled")
+                try:
+                    await save_price.click(timeout=8000)
+                except Exception:
+                    await save_price.evaluate("el => el.click()")
+                logger.info("✓ Clicked Save and Publish; waiting for confirmation")
+                if await wait_for_publish_confirmation(page):
+                    republished = True
+                else:
+                    raise RuntimeError(f"KDP did not confirm after Save and Publish (url={page.url})")
+
+            if not republished:
+                raise RuntimeError(f"Metadata update not confirmed (url={page.url})")
+
+            data["kdp_uploading"] = False
+            data["metadata_updated_at"] = datetime.now().isoformat(timespec="seconds")
+            data["update_submission_confirmed_at"] = datetime.now().isoformat(timespec="seconds")
+            data["status"] = "uploaded"
+            data["kdp_error"] = ""
+            listing_file.write_text(json.dumps(data, ensure_ascii=False, indent=2))
+            logger.info("✅ Metadata update complete!")
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Metadata update failed: {e}")
+            try:
+                fd = json.loads(listing_file.read_text(encoding="utf-8"))
+                fd["kdp_uploading"] = False
+                fd["kdp_error"] = str(e)[:300]
+                listing_file.write_text(json.dumps(fd, ensure_ascii=False, indent=2), encoding="utf-8")
+            except Exception:
+                pass
+            return False
+        finally:
+            await browser.close()
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print(
@@ -1608,6 +1891,7 @@ if __name__ == "__main__":
     slug = sys.argv[1]
     update_mode = "--update" in sys.argv
     cover_mode = "--cover" in sys.argv
+    meta_mode = "--meta" in sys.argv
     preflight_mode = "--preflight-update" in sys.argv
     inspect_mode = "--inspect-title" in sys.argv
 
@@ -1619,6 +1903,8 @@ if __name__ == "__main__":
         result = preflight_update(slug)
     elif cover_mode:
         result = asyncio.run(update_cover(slug))
+    elif meta_mode:
+        result = asyncio.run(update_metadata(slug, skip_categories="--no-categories" in sys.argv))
     elif update_mode:
         result = asyncio.run(update_ebook_content(slug))
     else:

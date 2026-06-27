@@ -20,6 +20,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI, RateLimitError
 
+from metadata_polish import sanitize_keywords, to_html_description
+
 load_dotenv("/root/libra/.env")
 
 KDP_DIR = Path("/root/kdp")
@@ -81,13 +83,16 @@ Return ONLY valid JSON:
     "keyword phrase 7"
   ],
   "categories": [
-    "Best category path 1 — lowest book count, still highly relevant",
-    "Best category path 2 — second best option"
+    "Best category path 1 — LOWEST competition (target the category whose #100 book has a weak Best Sellers Rank, so a few sales/day can win a #1 badge), still highly relevant",
+    "Best category path 2 — second-lowest competition, relevant",
+    "Best category path 3 — third option, relevant"
   ],
-  "category_book_counts": [<estimated books in category 1>, <estimated books in category 2>],
+  "_categories_rule": "CRITICAL: category paths MUST use the official Amazon Kindle Store browse-category names IN ENGLISH (e.g. 'Business & Money > Accounting > Taxation', 'Health, Fitness & Dieting > Mental Health > Anxiety Disorders', 'Self-Help > Time Management'), even when the book and its keywords are in another language. The KDP category picker only offers English names — non-English category paths cannot be selected and will be discarded.",
+  "_audience_consistency_rule": "CRITICAL: keep ALL 3 categories within ONE audience band — never mix. If the book is for children, every category must be under 'Children's eBooks > …'. If it is for teens/young adults, every category must be under 'Teen & Young Adult > …'. If it is for adults, none may be Children's or Teen & Young Adult. Mixing a juvenile category with an adult one (e.g. 'Self-Help > Emotions' together with 'Teen & Young Adult > …') makes KDP reject the listing as having conflicting Adult and Young Adult categories.",
+  "category_book_counts": [<est. books in cat 1>, <est. books in cat 2>, <est. books in cat 3>],
   "optimized_title": "Improved title if needed (keep in {language}, return original if already good)",
   "optimized_subtitle": "Improved subtitle if needed (keep in {language})",
-  "optimized_description": "Full SEO-optimized description in {language} (700-1500 chars). Must include top buyer-intent phrases naturally. Use short paragraphs.",
+  "optimized_description": "Full SEO-optimized description in {language} (700-1500 chars), written for CONVERSION in this exact structure: LINE 1 = a single punchy hook sentence (no label). Then a blank line. Then 2-3 short paragraphs of benefit-driven prose (blank line between each). Then a blank line and 3-5 benefit bullet lines each starting with '- '. Then a blank line and a final one-line call-to-action. Include top buyer-intent phrases naturally. Plain text only — no HTML, no markdown headers.",
   "top_competitors": [
     {{"title": "...", "bsr": "...", "price": "...", "review_count": "..."}}
   ],
@@ -98,13 +103,17 @@ Return ONLY valid JSON:
   "changes_made": ["change 1", "change 2"]
 }}
 
-Keyword rules (MUST follow):
+Keyword rules (MUST follow — Amazon 2026):
 - Exactly 7 phrases
 - Each 2-50 characters
 - Localized buyer-intent phrases in {language} (not English unless marketplace is US/UK)
-- No brand names or competitor author names
+- NO Amazon program names (Kindle Unlimited, KDP Select, Prime Reading)
+- NO subjective/claim words (bestseller, free, #1, top rated, new release, award winning)
+- NO brand names or competitor author names
+- NO commas, quotes, or punctuation inside a phrase (wastes characters)
+- Do NOT just repeat the title; each phrase should add NEW search words a buyer would type
 - Cover different intent angles: beginner, advanced, specific use-case, gift, workbook
-- Must NOT repeat the exact title verbatim"""
+- COSMO 2026 indexes intent: each phrase should map to a distinct who/when/why/use-case"""
 
 
 def _extract_json(text: str) -> dict:
@@ -201,21 +210,44 @@ def optimize(slug: str, dry_run: bool = False) -> dict:
 
     result = _extract_json(raw)
 
-    # Validate & clean keywords (2-50 chars, exactly 7)
-    kws = [str(k).strip() for k in result.get("keywords", []) if str(k).strip()]
-    kws = [k for k in kws if 2 <= len(k) <= 50][:7]
-    if len(kws) < 7:
-        # Pad with existing keywords if needed
-        for k in current_keywords:
-            if k not in kws and 2 <= len(k) <= 50:
-                kws.append(k)
-            if len(kws) == 7:
-                break
-    result["keywords"] = kws
+    # Validate categories first (up to 3 now — Amazon allows 3 per format).
+    cats = [str(c).strip() for c in result.get("categories", []) if str(c).strip()][:3]
+    cats = cats if cats else categories
+    # Snap GPT's paths onto KDP's REAL category tree. GPT names the right concepts
+    # but invents the nesting/leaf (e.g. "Arts & Photography > Painting > Watercolor"
+    # vs the real "Arts & Photography > Art > Painting > General"), which made books
+    # ship with 0–2 of 3 categories. The resolver is deterministic and falls back to
+    # the original path when a top-level isn't in the snapshot yet.
+    try:
+        from category_resolver import resolve_paths
+        resolved = resolve_paths(cats)
+        if resolved and resolved != cats:
+            print(f"[seo_optimizer] categories resolved to KDP tree:\n  from {cats}\n  to   {resolved}")
+        cats = resolved or cats
+    except Exception as e:
+        print(f"[seo_optimizer] category resolver skipped: {e}")
+    result["categories"] = cats
 
-    # Validate categories
-    cats = [str(c).strip() for c in result.get("categories", []) if str(c).strip()][:2]
-    result["categories"] = cats if cats else categories
+    # Keywords: take the LLM's, pad from existing, then enforce Amazon 2026 rules
+    # deterministically (drop program names / hype claims / generic / title-dupes,
+    # strip punctuation). The sanitizer is the final word — GPT compliance is unverified.
+    kws = [str(k).strip() for k in result.get("keywords", []) if str(k).strip()]
+    for k in current_keywords:
+        if k not in kws:
+            kws.append(k)
+    clean_kws, dropped_kws = sanitize_keywords(
+        kws, title=title, subtitle=subtitle, categories=result["categories"]
+    )
+    result["keywords"] = clean_kws
+    if dropped_kws:
+        result["keywords_dropped"] = dropped_kws
+        print(f"[seo_optimizer] keyword sanitizer dropped {len(dropped_kws)}: "
+              + ", ".join(f"{p!r}({r})" for p, r in dropped_kws[:5]))
+
+    # Build whitelisted-HTML description for the KDP blurb box (hook/bullets/CTA).
+    plain_desc = result.get("optimized_description", "")
+    if plain_desc:
+        result["description_html"] = to_html_description(plain_desc)
 
     analysis = {
         "slug": slug,
@@ -228,9 +260,14 @@ def optimize(slug: str, dry_run: bool = False) -> dict:
     out_path.write_text(json.dumps(analysis, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"[seo_optimizer] Analysis saved: {out_path}")
 
-    # Update listing.json
-    if not dry_run and result.get("seo_score_after", 0) > result.get("seo_score_before", 0):
-        updated = listing.copy()
+    # Update listing.json. The SEO score decides whether to ADOPT the LLM's new
+    # keywords/categories/description — but the deterministic polish (keyword
+    # sanitizing + HTML blurb) ALWAYS applies, so every book that passes through
+    # here ships Amazon-2026-compliant metadata regardless of the score verdict.
+    improved = result.get("seo_score_after", 0) > result.get("seo_score_before", 0)
+    updated = listing.copy()
+
+    if improved:
         updated["keywords"] = result["keywords"]
         if result.get("categories"):
             updated["categories"] = result["categories"]
@@ -238,20 +275,37 @@ def optimize(slug: str, dry_run: bool = False) -> dict:
             updated["description"] = result["optimized_description"]
         if result.get("optimized_subtitle") and result["optimized_subtitle"] != subtitle:
             updated["subtitle"] = result["optimized_subtitle"]
+    else:
+        # Keep original content, but still sanitize whatever keywords it has.
+        kept_clean, _ = sanitize_keywords(
+            updated.get("keywords", []), title=updated.get("title", ""),
+            subtitle=updated.get("subtitle", ""), categories=updated.get("categories", []),
+        )
+        if kept_clean:
+            updated["keywords"] = kept_clean
+
+    # Always (re)build the HTML blurb from the final description.
+    final_desc = updated.get("description", "")
+    if final_desc:
+        updated["description_html"] = to_html_description(final_desc)
+
+    if dry_run:
+        print("[seo_optimizer] DRY RUN — would write:")
+        print(f"  Keywords ({len(updated.get('keywords', []))}): {updated.get('keywords', [])}")
+        print(f"  Categories ({len(updated.get('categories', []))}): {updated.get('categories', [])}")
+        print(f"  HTML blurb: {updated.get('description_html', '')[:160]}...")
+        print(f"  SEO score: {result.get('seo_score_before','?')} → {result.get('seo_score_after','?')} (adopt={improved})")
+    else:
         listing_path.write_text(
             json.dumps(updated, indent=2, ensure_ascii=False), encoding="utf-8"
         )
-        print(f"[seo_optimizer] listing.json updated (SEO score {result['seo_score_before']} → {result['seo_score_after']})")
-        changes = result.get("changes_made", [])
-        for c in changes:
-            print(f"  • {c}")
-    elif dry_run:
-        print(f"[seo_optimizer] DRY RUN — would update listing.json:")
-        print(f"  Keywords: {result['keywords']}")
-        print(f"  Categories: {result.get('categories', [])}")
-        print(f"  SEO score: {result.get('seo_score_before','?')} → {result.get('seo_score_after','?')}")
-    else:
-        print(f"[seo_optimizer] No improvement detected (score {result.get('seo_score_before','?')} → {result.get('seo_score_after','?')}), keeping original")
+        verdict = (f"adopted LLM SEO (score {result.get('seo_score_before','?')} → "
+                   f"{result.get('seo_score_after','?')})" if improved
+                   else "kept original content, applied deterministic polish")
+        print(f"[seo_optimizer] listing.json updated — {verdict}")
+        if improved:
+            for c in result.get("changes_made", []):
+                print(f"  • {c}")
 
     return analysis
 

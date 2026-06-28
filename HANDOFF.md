@@ -1,16 +1,16 @@
 ## Last Handoff — libra
 
-**เมื่อ:** 2026-06-27 16:50
+**เมื่อ:** 2026-06-27 23:04
 **ทำโดย:** codex
-**Task:** Set up automated Libra KDP category health management
+**Task:** Restore KDP open items for Libra review books
 
 ### สิ่งที่ทำ
-Set up Libra KDP category health management. Added category_health_manager.py to validate LIVE/IN_REVIEW/queued listings against KDP tree, localized taxonomy, unsafe category drift, juvenile reading age, and open-items restore readiness; writes data/category_health.json and .md and notifies Telegram on status changes. Installed daily 08:55 cron after existing taxonomy scan. Verified manager status ok blockers=0 warnings=24 and tests 25 passed. No KDP production submit was performed.
+Restored KDP open items for teen-anxiety-workbook-french and bilingual-english-spanish-kids-vocab, submitted metadata/category updates through KDP, verified category health ok with 0 blockers and open items restored.
 
 ### Git state ตอน finish
 - Branch: `main`
-- Last commit: `e114beb Add KDP category language scanner`
-- Uncommitted files: 26
+- Last commit: `7a8ae88 kdp: sync category health and metadata tooling`
+- Uncommitted files: 0
 
 ### ขั้นต่อไป
 _อ่านจาก summary ด้านบน — ถ้าไม่มีระบุ แสดงว่างานนี้เสร็จสมบูรณ์แล้ว_

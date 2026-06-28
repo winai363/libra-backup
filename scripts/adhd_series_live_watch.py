@@ -22,6 +22,7 @@ BOOKS = {
     "adhd-adults-focus-work-relationships-es": "Enfoque",
 }
 FREE_PROMO = (date(2026, 7, 2), date(2026, 7, 6))
+PROMO_SOURCE = "KDP promotion-manager verified 2026-06-28"
 
 
 def _env(k):
@@ -93,6 +94,7 @@ def main():
     seen_kenp = state.get("seen_kenp", 0)
     seen_units = state.get("seen_units", 0)
     last_sent = state.get("last_sent_date", "")
+    last_status = state.get("last_status", {})
 
     in_promo = FREE_PROMO[0] <= today <= FREE_PROMO[1]
     milestones = []
@@ -101,9 +103,16 @@ def main():
     if tot_units > 0 and seen_units == 0:
         milestones.append("🎉 ขายเล่มแรกของซีรีส์!")
 
+    status_changes = []
+    for slug, name in BOOKS.items():
+        old = last_status.get(slug)
+        new = rs.get(slug, "?")
+        if old and old != new:
+            status_changes.append(f"• {name}: {old} → {new}")
+
     new_activity = d_kenp > 0 or d_units > 0 or bool(milestones)
     is_monday = today.weekday() == 0
-    should_send = new_activity or in_promo or (is_monday and last_sent != today.isoformat())
+    should_send = new_activity or bool(status_changes) or in_promo or (is_monday and last_sent != today.isoformat())
 
     if should_send:
         hdr = "📚 TDAH en Adultos (KDP experiment B) — อัปเดต " + today.isoformat()
@@ -116,12 +125,21 @@ def main():
                    f"  (วันนี้ +{int(d_units)} ขาย / +{int(d_kenp)} KU)")
         body = "\n".join(lines)
         ms = ("\n\n" + "\n".join(milestones)) if milestones else ""
-        tail = "\n\n💡 ถ้า KU/รีวิวเริ่มมา = สัญญาณพร้อมเปิดแอด $3 (billing ตั้งไว้แล้ว)" if (tot_kenp > 0 or tot_units > 0) else ""
-        tg(f"{hdr}{promo}{summary}\n{body}{ms}{tail}")
+        st = ("\n\nสถานะเปลี่ยน:\n" + "\n".join(status_changes)) if status_changes else ""
+        tail = ("\n\n💡 ตอนนี้ยังไม่ยิงแอด: ใช้ Free Promo ก่อนเพื่อลดการเบิร์นงบ "
+                "แล้วค่อยประเมินหลังเห็น KU/ดาวน์โหลด/รีวิวจริง")
+        tg(f"{hdr}{promo}{summary}\n{body}{ms}{st}{tail}")
         state["last_sent_date"] = today.isoformat()
 
     state["seen_kenp"] = max(seen_kenp, tot_kenp)
     state["seen_units"] = max(seen_units, tot_units)
+    state["last_status"] = {slug: rs.get(slug, "?") for slug in BOOKS}
+    state["free_promo"] = {
+        "lead_slug": "adhd-self-help-adults-es",
+        "start": FREE_PROMO[0].isoformat(),
+        "end": FREE_PROMO[1].isoformat(),
+        "source": PROMO_SOURCE,
+    }
     STATE.write_text(json.dumps(state, ensure_ascii=False, indent=2))
     print(f"sent={should_send} kenp={tot_kenp} units={tot_units} promo={in_promo} new={new_activity}")
 

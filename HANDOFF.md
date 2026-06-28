@@ -1,15 +1,15 @@
 ## Last Handoff — libra
 
-**เมื่อ:** 2026-06-27 23:04
+**เมื่อ:** 2026-06-28 23:20
 **ทำโดย:** codex
-**Task:** Restore KDP open items for Libra review books
+**Task:** Commit remaining Libra handoff cleanup
 
 ### สิ่งที่ทำ
-Restored KDP open items for teen-anxiety-workbook-french and bilingual-english-spanish-kids-vocab, submitted metadata/category updates through KDP, verified category health ok with 0 blockers and open items restored.
+Committed remaining Libra HANDOFF.md cleanup. Libra backup pushed 373eb63, Etsy and Libra worktrees clean, py_compile checks passed. No production KDP/Ads changes.
 
 ### Git state ตอน finish
 - Branch: `main`
-- Last commit: `7a8ae88 kdp: sync category health and metadata tooling`
+- Last commit: `373eb63 Record latest Libra handoff`
 - Uncommitted files: 0
 
 ### ขั้นต่อไป

@@ -155,8 +155,17 @@ def build_dashboard_overview() -> dict:
                 "error": str(first["kdp_error"]).splitlines()[0][:220],
             }
 
+    adhd_watch_file = KDP_DIR / ".adhd-series-watch-state.json"
+    adhd_series = {}
+    if adhd_watch_file.exists():
+        try:
+            adhd_series = json.loads(adhd_watch_file.read_text())
+        except (OSError, json.JSONDecodeError):
+            pass
+
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "adhd_series": adhd_series,
         "counts": {
             "total": len(books),
             "uploaded": status_counts.get("uploaded", 0),

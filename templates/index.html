@@ -79,7 +79,7 @@
     <div id="overview" class="hidden space-y-4">
       <div id="overview-cards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-3">
         <section class="lg:col-span-2 bg-slate-800 border border-slate-700 rounded-xl p-4">
           <div class="flex items-start justify-between gap-3">
             <div>
@@ -103,6 +103,11 @@
         <section class="bg-slate-800 border border-slate-700 rounded-xl p-4">
           <h2 class="font-bold text-white">Winner Signal</h2>
           <div id="winner-signal" class="mt-3"></div>
+        </section>
+
+        <section class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+          <h2 class="font-bold text-white">Active Experiments</h2>
+          <div id="active-experiments" class="mt-3"></div>
         </section>
       </div>
     </div>
@@ -208,6 +213,28 @@ function renderOverview(data) {
     <p class="text-xs text-slate-400 mt-1">${winner.units} sale · $${Number(winner.revenue_usd || 0).toFixed(2)} royalty</p>
     <p class="text-xs text-slate-500 mt-3">Brain จะให้น้ำหนัก niche และภาษาที่ใกล้กับผู้ซื้อจริงในรอบสร้างถัดไป</p>`
     : '<p class="text-sm text-slate-400">ยังไม่มียอดขาย ระบบจะสำรวจ niche แบบกว้างจนพบสัญญาณแรก</p>';
+
+  const adhd = data.adhd_series;
+  if (adhd && Object.keys(adhd).length > 0) {
+    let adhdHtml = '<p class="text-xs font-semibold text-sky-300 mb-1">ADHD KDP Series</p>';
+    if (adhd.free_promo) {
+      adhdHtml += `<p class="text-xs text-amber-300 bg-amber-500/10 rounded px-2 py-1 mb-2 inline-block">Free Promo: ${escapeHtml(adhd.free_promo.start)} to ${escapeHtml(adhd.free_promo.end)}</p>`;
+    }
+    adhdHtml += '<div class="space-y-1">';
+    for (const [slug, status] of Object.entries(adhd.last_status || {})) {
+      const colorClass = status === 'LIVE' ? 'text-emerald-400' : 'text-slate-400';
+      adhdHtml += `<div class="flex justify-between items-center gap-1 text-[11px]"><span class="text-slate-300 truncate" title="${escapeHtml(slug)}">${escapeHtml(slug)}</span><span class="${colorClass} font-semibold shrink-0">${escapeHtml(status)}</span></div>`;
+    }
+    adhdHtml += '</div>';
+    
+    if (adhd.seen_units > 0 || adhd.seen_kenp > 0) {
+      adhdHtml += `<p class="text-[11px] text-emerald-300 mt-2">Units: ${adhd.seen_units} | KENP: ${adhd.seen_kenp}</p>`;
+    }
+    
+    document.getElementById('active-experiments').innerHTML = adhdHtml;
+  } else {
+    document.getElementById('active-experiments').innerHTML = '<p class="text-sm text-slate-400">No active experiments tracked.</p>';
+  }
 }
 
 function updateCounts() {

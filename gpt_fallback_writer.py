@@ -231,7 +231,7 @@ YOUR TASK — use web search to find REAL sources:
 2. Search in BOTH English AND {topic['language']} for broader coverage
 3. Find real statistics, research findings, and expert recommendations
 4. Look for official guidelines from governments, health organizations, or industry bodies
-5. Find at least 8-12 credible sources
+5. Find at least 12-15 credible sources (extra sources are a safety buffer: some URLs may later prove dead and get removed, and the book must still keep 8+ live references)
 
 For each source provide:
 - Title of the article/page
@@ -268,7 +268,7 @@ Write the COMPLETE book content in Markdown format. Requirements:
 - Use the REAL sources above for citations [1], [2], etc. — do NOT invent references
 - End with these back matter sections in order:
   1. Resources section (useful websites/tools related to the topic)
-  2. Vancouver-style references appendix (REAL URLs from research only)
+  2. Vancouver-style references appendix (REAL URLs from research only) — include AT LEAST 10 numbered references, each with a working URL, so the book stays above the 8-reference minimum even if one or two links are later found dead and removed
   3. About the Author (2–3 sentences about WK Bui as a writer focused on practical self-improvement and education)
   4. A warm, heartfelt 2–3 sentence review request — ask the reader to leave an honest review on Amazon, explaining it helps other readers discover the book
   5. Disclaimer (legal disclaimer appropriate to the topic)

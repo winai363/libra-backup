@@ -72,8 +72,12 @@ for BOOK_NUM in $(seq 1 $BOOKS_PER_RUN); do
   SCOUT_EXIT=$?
 
   if [ $SCOUT_EXIT -ne 0 ] || [ ! -f "$TOPIC_FILE" ]; then
-    echo ">>> [topic_scout] Discovery failed (exit=$SCOUT_EXIT) — falling back to writer's built-in research" >> "$LOG_FILE"
-    TOPIC_ARG=""
+    # 2026-07-02: no ungated fallback. If the market gates say "nothing worth
+    # building today", building an ungated topic anyway just dilutes the catalog
+    # and burns a KDP new-title slot (velocity risk). Skip today instead.
+    echo ">>> [topic_scout] Discovery failed (exit=$SCOUT_EXIT) — no GO topic passed market gates; skipping today (no ungated fallback)" >> "$LOG_FILE"
+    tg_notify "⏸️ <b>Libra: วันนี้ไม่สร้างหนังสือ</b>\ntopic_scout ไม่พบหัวข้อที่ผ่านด่านตลาด (demand/competition/language) — ข้ามวันนี้ ดีกว่าฝืนสร้างเล่มที่ไม่มีคนซื้อ"
+    continue
   else
     TOPIC_TITLE=$(python3 -c "import json; d=json.load(open('$TOPIC_FILE')); print(d.get('title','?'))" 2>/dev/null)
     TOPIC_LANG=$(python3 -c "import json; d=json.load(open('$TOPIC_FILE')); print(d.get('language','?'))" 2>/dev/null)
@@ -92,7 +96,8 @@ for BOOK_NUM in $(seq 1 $BOOKS_PER_RUN); do
   if [ $GPT_EXIT -ne 0 ]; then
     echo ">>> GPT-4.1 failed (exit=$GPT_EXIT) for book $BOOK_NUM — retrying once..." >> "$LOG_FILE"
     sleep 10
-    python3 /root/libra/gpt_fallback_writer.py >> "$LOG_FILE" 2>&1
+    # keep the gated topic on retry — never let a retry pick its own ungated topic
+    python3 /root/libra/gpt_fallback_writer.py $TOPIC_ARG >> "$LOG_FILE" 2>&1
     GPT_EXIT=$?
     if [ $GPT_EXIT -ne 0 ]; then
       echo ">>> GPT-4.1 retry also failed (exit=$GPT_EXIT)" >> "$LOG_FILE"

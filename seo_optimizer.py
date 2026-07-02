@@ -103,9 +103,12 @@ Return ONLY valid JSON:
   "changes_made": ["change 1", "change 2"]
 }}
 
+Title/subtitle rule (MUST follow — Amazon 2026):
+- optimized title + optimized subtitle COMBINED must stay under 200 characters total
+
 Keyword rules (MUST follow — Amazon 2026):
 - Exactly 7 phrases
-- Each 2-50 characters
+- Each 2-50 characters, where the 50 limit is counted in UTF-8 BYTES (accented characters cost 2 bytes — keep accented-language phrases under ~45 letters or Amazon ignores the whole slot)
 - Localized buyer-intent phrases in {language} (not English unless marketplace is US/UK)
 - NO Amazon program names (Kindle Unlimited, KDP Select, Prime Reading)
 - NO subjective/claim words (bestseller, free, #1, top rated, new release, award winning)

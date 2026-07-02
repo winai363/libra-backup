@@ -225,6 +225,16 @@ def _opportunity_score(c: dict, proven: tuple[set, set] | None = None) -> float:
     demand = scores.get("demand",             {}).get("score", 0)
     base = comp * 2.5 + lang * 2.0 + demand * 1.0
 
+    # Unit-economics term: expected monthly royalty (GPT competitor estimate),
+    # capped at $50/mo so a noisy estimate can't dominate the market gates.
+    # Production cost is ~$0.20/book so break-even is trivial — this term exists
+    # to rank "sellable" above "merely uncontested" among GO topics.
+    try:
+        royalty = float((ms.get("expected_royalty") or {}).get("estimated_monthly_royalty_usd") or 0)
+    except (TypeError, ValueError):
+        royalty = 0.0
+    base += min(max(royalty, 0.0), 50.0) / 5.0   # up to +10 points
+
     boost = 0.0
     if proven:
         proven_langs, proven_words = proven
@@ -243,7 +253,7 @@ def scout(save_candidates_to: Path | None = None) -> dict:
     Ranking is weighted toward low competition + language gap.
     Raises RuntimeError if no GO topic found.
     """
-    from market_intelligence import score_topic, THRESHOLD, COMPETITION_MIN, LANGUAGE_SAT_MIN, print_summary
+    from market_intelligence import score_topic, THRESHOLD, COMPETITION_MIN, LANGUAGE_SAT_MIN, DEMAND_MIN, print_summary
     from winner_signals import get_winners, proven_sets, format_for_prompt
 
     # Learning loop: let books that already sold steer discovery toward adjacent topics.
@@ -311,6 +321,9 @@ def scout(save_candidates_to: Path | None = None) -> dict:
                     reasons.append(f"competition {comp}/20 < {COMPETITION_MIN}")
                 if lang < LANGUAGE_SAT_MIN:
                     reasons.append(f"lang_saturation {lang}/10 < {LANGUAGE_SAT_MIN}")
+                demand_s = result["scores"]["demand"]["score"]
+                if demand_s < DEMAND_MIN:
+                    reasons.append(f"demand {demand_s}/20 < {DEMAND_MIN} (no proven buyers)")
                 if reasons:
                     print(f"  BLOCKED by hard gate: {', '.join(reasons)}")
         except Exception as e:

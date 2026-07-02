@@ -110,8 +110,15 @@ def sanitize_keywords(keywords, title="", subtitle="", categories=None):
         if not phrase:
             dropped.append((original, "empty-after-clean"))
             continue
-        if len(phrase) > 50:
-            phrase = phrase[:50].rsplit(" ", 1)[0].strip() or phrase[:50]
+        # Amazon's 50-per-slot limit is byte-counted (UTF-8): accented chars cost
+        # 2 bytes, so a 49-char Spanish phrase can overflow and the WHOLE slot is
+        # ignored. Trim by bytes at a word boundary.
+        while len(phrase.encode("utf-8")) > 50:
+            trimmed = phrase.rsplit(" ", 1)[0].strip()
+            if not trimmed or trimmed == phrase:
+                phrase = phrase[:len(phrase) - 1].strip()
+            else:
+                phrase = trimmed
         if len(phrase) < 2:
             dropped.append((original, "too-short"))
             continue

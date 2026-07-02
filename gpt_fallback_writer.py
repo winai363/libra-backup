@@ -432,10 +432,11 @@ Niche: {topic['niche']}
 SEO REQUIREMENTS:
 - Keep the title natural and accurate; do not keyword-stuff or make unsupported bestseller claims
 - Subtitle must state the reader, problem, and practical outcome
+- Title + subtitle COMBINED must stay under 200 characters total (KDP metadata guideline; longer reads as keyword stuffing)
 - Description: 700-1,500 characters, persuasive but accurate, with short readable paragraphs
-- Exactly 7 unique localized long-tail keyword phrases, 2-50 characters each
+- Exactly 7 unique localized long-tail keyword phrases, 2-50 characters each (50 counted in UTF-8 BYTES — accented characters cost 2 bytes, so keep accented-language phrases under ~45 letters)
 - Keywords must represent distinct search intents and must not repeat the title verbatim
-- Exactly 2 highly relevant KDP category paths in the target language/marketplace
+- Exactly 2 highly relevant KDP category paths written IN ENGLISH using the official Amazon Kindle Store browse-category names (e.g. "Computers & Technology > Hardware > Mobile Devices", "Health, Fitness & Dieting > Mental Health > Anxiety Disorders"), even though the book itself is in {topic['language']}. The KDP category picker only offers English names — non-English category paths cannot be selected and will jam the uploader.
 - No competitor author names, trademarks used for traffic, pricing, or temporary claims
 
 Return JSON only (no markdown):

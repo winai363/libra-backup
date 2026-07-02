@@ -531,6 +531,21 @@ def validate_book(
         report.error("SEO title must contain 3-200 characters.")
     if len(subtitle) > 200:
         report.error("SEO subtitle exceeds 200 characters.")
+    # KDP metadata guideline: title + subtitle combined should stay under 200
+    # characters. Amazon accepts longer at publish but treats it as keyword
+    # stuffing risk (suppression), so warn — don't brick the pipeline.
+    if len(title) + len(subtitle) > 200:
+        report.warning(
+            f"Title + subtitle combined is {len(title) + len(subtitle)} characters "
+            "(KDP guideline: under 200). Consider shortening the subtitle."
+        )
+    # Amazon counts keyword slots in UTF-8 bytes; an over-limit slot is ignored entirely.
+    if isinstance(keywords, list):
+        for keyword in keywords:
+            if isinstance(keyword, str) and len(keyword.encode("utf-8")) > 50:
+                report.warning(
+                    f"Keyword '{keyword}' exceeds 50 UTF-8 bytes — Amazon will ignore this slot."
+                )
     if not 150 <= len(description) <= 4000:
         report.error("SEO description must contain 150-4,000 characters.")
     valid_keywords = (

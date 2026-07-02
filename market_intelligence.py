@@ -17,6 +17,10 @@ KDP_DIR = LIBRA_DIR.parent / "kdp"
 THRESHOLD = 65          # minimum total score out of 100 to proceed
 COMPETITION_MIN = 12    # competition must score >= 12/20 (20=blue ocean, 12=moderate-low)
 LANGUAGE_SAT_MIN = 5    # language_saturation must score >= 5/10 (real gap in target language)
+DEMAND_MIN = 8          # demand must score >= 8/20 — BSR-anchored proof that buyers exist
+                        # (added 2026-07-02: catalog of 39 LIVE books sold ~0 because gates
+                        # only measured "gap", never "proven buyers"; a blue ocean with no
+                        # fish is still worthless)
 
 HIGH_RISK_KEYWORDS = [
     "medical advice", "cure", "treat", "diagnose", "prescription",
@@ -50,9 +54,11 @@ Return ONLY valid JSON:
 {{
   "demand": {{
     "score": <0-20>,
+    "note": "Anchor the score on Best Sellers Rank (BSR) evidence, not vibes. Rubric for amazon.com Kindle: 16-20 = 3+ comparable books with BSR <100,000 (each selling ~1+/day); 11-15 = 3+ comparable books with BSR <300,000; 6-10 = only 1-2 books under BSR 300,000 or several in 300k-700k; 0-5 = no comparable book under BSR ~700,000 (no proven buyers — do not be generous). For smaller marketplaces (de/fr/es/it/nl/pl/co.jp) the same sales velocity sits at roughly HALF those BSR numbers — use <50k / <150k / <350k. Search the actual product pages of the closest competitors and read their BSR.",
     "evidence": "<what search found: bestseller ranks, category depth, buyer search terms>",
     "amazon_category_depth": "<how many books in the niche>",
-    "top_competitor_bsr": "<bestseller rank of #1 competitor if found, else null>"
+    "top_competitor_bsr": "<bestseller rank of #1 competitor if found, else null>",
+    "comparable_bsrs": [<BSR integers of comparable books found, best first>]
   }},
   "buyer_intent": {{
     "score": <0-15>,
@@ -200,6 +206,13 @@ def score_topic(topic: dict) -> dict:
         data["risks"] = list(data.get("risks", [])) + [
             f"Language market saturated: score {lang_sat_score}/10 < required {LANGUAGE_SAT_MIN} "
             f"(~{data['language_saturation'].get('estimated_books_in_language','?')} books already in {topic['language']})"
+        ]
+    demand_score = data["demand"]["score"]
+    if demand_score < DEMAND_MIN:
+        go_no_go = "NO-GO"
+        data["risks"] = list(data.get("risks", [])) + [
+            f"No proven buyers: demand score {demand_score}/20 < required {DEMAND_MIN} "
+            f"(top competitor BSR: {data['demand'].get('top_competitor_bsr', '?')})"
         ]
 
     result = {

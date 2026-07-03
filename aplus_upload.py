@@ -268,16 +268,39 @@ async def run(slug: str, dry_run: bool, stop_after: int):
                 print(f"  drop: {dropped}", flush=True)
             await hub.wait_for_timeout(8000)
             await shot(hub, slug, "4_image_uploaded")
-            # confirm modal ("Add") / crop dialog
+            # fill alt text while the Add Image modal is still open (the modal
+            # has its own required alt field on some marketplaces)
+            malt = hub.locator('input[placeholder*="alt" i]')
+            if await malt.count() and await malt.last.is_visible():
+                try:
+                    await malt.last.fill(content["alt_text"])
+                except Exception:
+                    pass
+            # confirm modal ("Add") / crop dialog — iterate matches LAST-first:
+            # the modal sits on top, but earlier hidden "Add" buttons (module
+            # picker) match the same role+name and used to swallow the click.
+            confirmed = False
             for label in ("Add", "Apply", "Save", "Use image", "Upload"):
                 btn2 = hub.get_by_role("button", name=label, exact=True)
-                if await btn2.count() and await btn2.first.is_visible():
+                for k in range(await btn2.count() - 1, -1, -1):
+                    el = btn2.nth(k)
+                    if not await el.is_visible():
+                        continue
                     try:
-                        await btn2.first.click()
+                        await el.click()
                         await hub.wait_for_timeout(4000)
+                        confirmed = True
                         break
                     except Exception:
-                        pass
+                        continue
+                if confirmed:
+                    break
+            # the modal must be GONE before touching fields behind it
+            if await hub.get_by_text("Add Image", exact=True).count():
+                still = hub.get_by_text("Add Image", exact=True)
+                if await still.first.is_visible():
+                    await shot(hub, slug, "4_modal_stuck")
+                    raise RuntimeError("Add Image modal did not close")
             await shot(hub, slug, "4_image_done")
 
             alt = hub.get_by_label("Image keywords", exact=False)

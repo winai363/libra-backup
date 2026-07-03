@@ -368,7 +368,14 @@ async def run(slug: str, dry_run: bool, stop_after: int):
             if not await apply_b.count():
                 apply_b = hub.get_by_text("Apply content", exact=False)
             await apply_b.first.click()
-            await hub.wait_for_timeout(4000)
+            await hub.wait_for_timeout(3000)
+            # if a previous (failed) content is already applied to this ASIN,
+            # an "Override existing content?" modal appears — confirm it
+            override = hub.get_by_role("button", name="Override", exact=False)
+            if await override.count() and await override.first.is_visible():
+                await override.first.click()
+                print("  override existing content: confirmed", flush=True)
+                await hub.wait_for_timeout(3000)
             await shot(hub, slug, "5_asin_applied")
             applied_hdr = await hub.get_by_text(
                 re.compile(r"Applied ASINs \((\d+)\)")).first.inner_text()
@@ -401,6 +408,28 @@ async def run(slug: str, dry_run: bool, stop_after: int):
             await hub.wait_for_timeout(5000)
             await shot(hub, slug, "6_submitted")
             body_txt = await hub.locator("body").inner_text()
+            if "Content validation failed" in body_txt:
+                # surface WHICH field Amazon flags: open Fix content and dump
+                # invalid elements before failing
+                fix = hub.get_by_role("button", name="Fix content", exact=False)
+                if await fix.count():
+                    await fix.first.click()
+                    await hub.wait_for_timeout(4000)
+                    await shot(hub, slug, "6_fix_content")
+                    bad = await hub.evaluate("""() => {
+                        const sels = ['[aria-invalid="true"]', '.a-form-error',
+                            '[class*="error" i] input', 'input:invalid',
+                            '[class*="invalid" i]'];
+                        const out = [];
+                        for (const s of sels)
+                            document.querySelectorAll(s).forEach(e => out.push(
+                                s + ' :: ' + (e.getAttribute('aria-label') ||
+                                e.getAttribute('placeholder') || e.name ||
+                                e.className || e.tagName).slice(0, 120)));
+                        return out.slice(0, 20);
+                    }""")
+                    print("  invalid elements:", json.dumps(bad, indent=1))
+                raise RuntimeError("content validation failed")
             if "Submit for approval" in body_txt and "submitted" not in \
                     body_txt.lower():
                 raise RuntimeError("submit confirmation did not go through")

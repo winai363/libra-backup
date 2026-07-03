@@ -83,20 +83,37 @@ def _darken(rgb, k=0.45):
     return tuple(int(c * k) for c in rgb)
 
 
+# Amazon A+ community guidelines reject health-claim verbs ("These keywords
+# violate our community guidelines: prevenire."). Multilingual word families,
+# matched on word boundaries.
+_CLAIM_WORDS = re.compile(
+    r"\b("
+    r"prevent\w*|cure[sd]?|curing|treat(?:s|ed|ing|ment\w*)?|heal(?:s|ed|ing)?"
+    r"|remed\w+|diagnos\w+"
+    r"|prevenire|prevenzione|curare|guarire|trattare|trattament\w*|rimedi\w*"
+    r"|prevenir|prevención|prevencion|curar|sanar|tratar|tratamient\w*"
+    r"|remedio\w*|diagnóstico\w*"
+    r"|prévenir|prévention|guérir|soigner|traiter|traitement\w*|remède\w*"
+    r"|vorbeug\w*|verhinder\w*|heilen|behandel\w*|behandlung\w*|heilmittel"
+    r"|voorkomen|genezen|prevenção|remédio\w*"
+    r")\b", re.IGNORECASE)
+
+
 def extract_bullets(listing: dict, n=3, max_len=90):
     """Prefer <li> items from description_html; fall back to sentences.
     html.unescape is mandatory — leaked entities like l&#x27;ansia fail
-    Amazon's A+ content validation."""
+    Amazon's A+ content validation. Bullets containing health-claim verbs
+    are dropped (A+ keyword filter rejects them)."""
     import html as _html
     html = listing.get("description_html") or ""
     items = [_html.unescape(re.sub(r"<[^>]+>", "", m)).strip()
              for m in re.findall(r"<li>(.*?)</li>", html, re.S)]
     items = [i for i in items if 15 <= len(i) <= 160]
-    if len(items) < n:
-        text = _html.unescape(re.sub(r"<[^>]+>", " ",
-                                     listing.get("description") or ""))
-        sents = [s.strip() for s in re.split(r"(?<=[.!?…])\s+", text)]
-        items += [s for s in sents[1:] if 25 <= len(s) <= 160][: n - len(items)]
+    text = _html.unescape(re.sub(r"<[^>]+>", " ",
+                                 listing.get("description") or ""))
+    sents = [s.strip() for s in re.split(r"(?<=[.!?…])\s+", text)]
+    items += [s for s in sents[1:] if 25 <= len(s) <= 160]
+    items = [i for i in items if not _CLAIM_WORDS.search(i)]
     out = []
     for i in items[:n]:
         if len(i) > max_len:

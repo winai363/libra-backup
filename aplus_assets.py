@@ -84,13 +84,17 @@ def _darken(rgb, k=0.45):
 
 
 def extract_bullets(listing: dict, n=3, max_len=90):
-    """Prefer <li> items from description_html; fall back to sentences."""
+    """Prefer <li> items from description_html; fall back to sentences.
+    html.unescape is mandatory — leaked entities like l&#x27;ansia fail
+    Amazon's A+ content validation."""
+    import html as _html
     html = listing.get("description_html") or ""
-    items = [re.sub(r"<[^>]+>", "", m).strip()
+    items = [_html.unescape(re.sub(r"<[^>]+>", "", m)).strip()
              for m in re.findall(r"<li>(.*?)</li>", html, re.S)]
     items = [i for i in items if 15 <= len(i) <= 160]
     if len(items) < n:
-        text = re.sub(r"<[^>]+>", " ", listing.get("description") or "")
+        text = _html.unescape(re.sub(r"<[^>]+>", " ",
+                                     listing.get("description") or ""))
         sents = [s.strip() for s in re.split(r"(?<=[.!?…])\s+", text)]
         items += [s for s in sents[1:] if 25 <= len(s) <= 160][: n - len(items)]
     out = []

@@ -884,11 +884,13 @@ def generate_cover(
     cfg = COVER.get(genre, COVER["default"])
     family = cfg["family"]
 
-    # Per-book palette variant (deterministic from title) → no cloned batches.
+    # Per-book palette variant (deterministic from slug+title) → no cloned
+    # batches, and two books with near-identical titles still differ.
     variants = VARIANTS.get(family)
     if variants:
         import hashlib
-        idx = int(hashlib.md5(title.encode("utf-8")).hexdigest(), 16) % len(variants)
+        seed = f"{Path(book_dir).name}|{title}"
+        idx = int(hashlib.md5(seed.encode("utf-8")).hexdigest(), 16) % len(variants)
         cfg = {**cfg, **variants[idx]}
 
     img = Image.new("RGB", (W, H), (255, 255, 255))

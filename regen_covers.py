@@ -30,13 +30,16 @@ def regen(slug: str) -> dict:
         bak = bdir / "cover.pre-redesign.jpg"
         if not bak.exists():               # keep the FIRST backup only
             bak.write_bytes(cover.read_bytes())
-    genre = cg.detect_genre(d.get("title", ""), d.get("categories", []),
+    # 4 books were renamed on KDP after upload — the cover must carry the
+    # title buyers actually see (actual_live_title), not the stale local one.
+    live_title = d.get("actual_live_title") or d.get("title", slug)
+    genre = cg.detect_genre(live_title, d.get("categories", []),
                             d.get("keywords", []))
     fam = cg.COVER.get(genre, cg.COVER["default"])["family"]
     try:
         cg.generate_cover(
             book_dir=bdir,
-            title=d.get("title", slug),
+            title=live_title,
             subtitle=d.get("subtitle", ""),
             author=d.get("author", "WK Bui"),
             categories=d.get("categories", []),

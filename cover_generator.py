@@ -132,6 +132,9 @@ _GENRE_KEYWORDS: dict[str, list[str]] = {
         "trauma", "fear", "worry", "panic", "breath", "relaxation",
         "adhd", "adhs", "tdah", "neurodiv", "aufmerksamkeit", "overwhelm",
         "achtsamkeit", "entspannung", "wohlbefinden", "sleep", "sommeil",
+        "anxiété", "anxiete", "ansiedad", "ansia", "angoisse", "estrés",
+        "ansiedade", "slaap", "nachtrust", "schlaf", "sonno", "estresse",
+        "sérénité", "serenita", "benessere", "bienestar", "bien-être",
         "不安", "ストレス", "瞑想", "マインドフルネス", "メンタル", "心の健康",
         "癒し", "焦虑", "压力", "冥想",
     ],
@@ -206,6 +209,13 @@ _GENRE_KEYWORDS: dict[str, list[str]] = {
 }
 
 
+# Ties/priority: specific audience niches must beat generic category noise
+# (Amazon browse paths inject English words like "Business & Money" into every
+# book's metadata — the TITLE is the real signal).
+_GENRE_PRIORITY = ["seniors", "children", "food", "creative", "wellness",
+                   "finance", "tech", "selfhelp", "business", "default"]
+
+
 def detect_genre(title: str, categories: list[str], keywords: list[str]) -> str:
     """Return the best-matching genre key for the given book metadata.
 
@@ -213,20 +223,29 @@ def detect_genre(title: str, categories: list[str], keywords: list[str]) -> str:
       • multi-word or non-ASCII keyword → substring match
       • short ASCII keyword (≤3 chars: ai, ia, ki, tax, iva) → whole-word only
       • longer ASCII keyword → substring (catches plurals: impuesto→impuestos)
+    Title hits weigh 3×; categories/keywords 1× (they carry English browse-path
+    noise). Ties resolve by _GENRE_PRIORITY (specific beats generic).
     """
     import re
-    text = " ".join([title] + (categories or []) + (keywords or [])).lower()
-    tokens = set(re.findall(r"[a-zà-ÿ0-9]+", text))
 
-    def hit(w: str) -> bool:
-        if " " in w or not w.isascii():
-            return w in text
-        if len(w) <= 3:
-            return w in tokens
-        return w in text
+    def _hits(blob: str, words) -> int:
+        text = blob.lower()
+        tokens = set(re.findall(r"[a-zà-ÿ0-9]+", text))
+        n = 0
+        for w in words:
+            if " " in w or not w.isascii():
+                n += w in text
+            elif len(w) <= 3:
+                n += w in tokens
+            else:
+                n += w in text
+        return n
 
-    scores = {g: sum(1 for w in words if hit(w)) for g, words in _GENRE_KEYWORDS.items()}
-    best = max(scores, key=lambda g: scores[g])
+    rest = " ".join((categories or []) + (keywords or []))
+    scores = {g: 3 * _hits(title, words) + _hits(rest, words)
+              for g, words in _GENRE_KEYWORDS.items()}
+    best = min((g for g in scores if scores[g] == max(scores.values())),
+               key=_GENRE_PRIORITY.index)
     return best if scores[best] > 0 else "default"
 
 
@@ -237,15 +256,23 @@ def _hex(h):
     return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4))
 
 
+# 2026-07 redesign, encoded from bestseller research (Kindlepreneur 20k study,
+# MakeMyBookCover top-50 cookbook data, Greenleaf/Miblart 2026 trends, Reedsy):
+#   • pale pastels + thin type are OUT — muted-but-SATURATED fields, heavy sans
+#   • title is the hero: white-on-dark or near-black-on-light, ≥7:1 contrast
+#   • one hero element, ≥20% quiet space, no serif titles at thumbnail size
+#   • ES tax guides = institutional flat colour + yellow accent + "2026" badge
+#   • DE senior guides = white ground, huge dark type, one strong accent
+#   • cookbooks: 84% light backgrounds, ONE hero dish/drink
 COVER: dict[str, dict] = {
-    "finance": dict(family="authority", title_font=FONT_PLAYFAIR, title_var=800,
-                    bg_top="#faf5e9", bg_bot="#f0e7d4", ink="#10243f",
-                    accent="#c19a46", sub="#46505c",
-                    strap="GUÍA PRÁCTICA", motif="euro"),
-    "business": dict(family="authority", title_font=FONT_PLAYFAIR, title_var=800,
+    "finance": dict(family="authority", title_font=FONT_ARCHIVO, title_var=None,
+                    bg_top="#0d3b66", bg_bot="#092a4a", ink="#ffffff",
+                    accent="#ffd400", sub="#cfe0f0",
+                    strap="GUÍA PRÁCTICA", motif="year_badge"),
+    "business": dict(family="authority", title_font=FONT_ARCHIVO, title_var=None,
                      bg_top="#0e2a47", bg_bot="#091d33", ink="#ffffff",
                      accent="#d4af37", sub="#cfd6e2",
-                     strap="STRATEGY GUIDE", motif="none", dark=True),
+                     strap="STRATEGY GUIDE", motif="year_badge", dark=True),
     "tech": dict(family="modern", title_font=FONT_ANTON, title_var=None,
                  bg_top="#5b2ee5", bg_bot="#e04696", ink="#ffffff",
                  accent="#c8ff3d", sub="#ffffff"),
@@ -253,17 +280,17 @@ COVER: dict[str, dict] = {
                     bg_top="#2746b0", bg_bot="#101d57", ink="#ffffff",
                     accent="#ffc832", sub="#dbe6ff"),
     "wellness": dict(family="calm", title_font=FONT_MONTSERRAT, title_var=900,
-                     bg_top="#9db4c0", bg_bot="#6c8a9a", ink="#26343c",
-                     accent="#c97b5a", band="#f6f3ec", sub="#26343c"),
+                     bg_top="#0f4c5c", bg_bot="#093542", ink="#ffffff",
+                     accent="#e8a13c", band="#f4f1e6", sub="#10333e"),
     "selfhelp": dict(family="calm", title_font=FONT_MONTSERRAT, title_var=900,
-                     bg_top="#7fb0a3", bg_bot="#3f7d70", ink="#15302a",
-                     accent="#e8a13c", band="#f4f1e6", sub="#15302a"),
+                     bg_top="#a34a32", bg_bot="#7c3423", ink="#ffffff",
+                     accent="#ffd166", band="#f6efe4", sub="#5a2a1c"),
     "seniors": dict(family="senior", title_font=FONT_ARCHIVO, title_var=None,
-                    bg_top="#1565c0", bg_bot="#0d4a93", ink="#ffffff",
-                    accent="#ffb300", band="#ffffff", sub="#0d3a73"),
-    "food": dict(family="photo", title_font=FONT_OSWALD, title_var=600,
-                 panel="#14402e", ink="#ffffff", accent="#ffd166",
-                 sub="#def5e8"),
+                    bg_top="#ffffff", bg_bot="#f4f4f2", ink="#16181d",
+                    accent="#d62828", band="#eceae4", sub="#33363d"),
+    "food": dict(family="photo", title_font=FONT_ANTON, title_var=None,
+                 panel="#faf6ee", ink="#1d1f1e", accent="#d95d39",
+                 sub="#4a4d4a"),
     "creative": dict(family="illustration", title_font=FONT_PLAYFAIR, title_var=700,
                      panel="#ffffff", ink="#2a2a33", accent="#c2566b",
                      sub="#55555f"),
@@ -286,19 +313,21 @@ VARIANTS: dict[str, list[dict]] = {
         dict(bg_top="#2563eb", bg_bot="#6d28d9", accent="#a3e635"),  # royal→purple / lime
         dict(bg_top="#0f172a", bg_bot="#059669", accent="#fbbf24"),  # slate→emerald / amber
     ],
+    # muted-but-SATURATED deep fields, white title (≥7:1), light band for sub.
     "calm": [
-        dict(bg_top="#9db4c0", bg_bot="#6c8a9a", ink="#26343c", accent="#c97b5a", band="#f6f3ec"),  # dusty blue
-        dict(bg_top="#a7c4a0", bg_bot="#6f9676", ink="#26342a", accent="#c97b5a", band="#f6f3ec"),  # sage
-        dict(bg_top="#b8a9d0", bg_bot="#8b78b0", ink="#2e2a3a", accent="#e0a13c", band="#f6f1ec"),  # lavender
-        dict(bg_top="#7fb0a3", bg_bot="#3f7d70", ink="#15302a", accent="#e8a13c", band="#f4f1e6"),  # teal
-        dict(bg_top="#d3a9a4", bg_bot="#a87d77", ink="#3a2a28", accent="#6a8a7a", band="#f6f0ec"),  # dusty rose
-        dict(bg_top="#8ea3bf", bg_bot="#5d6f93", ink="#222a3a", accent="#d98c5f", band="#f3f1ea"),  # periwinkle
+        dict(bg_top="#0f4c5c", bg_bot="#093542", ink="#ffffff", accent="#e8a13c", band="#f4f1e6", sub="#10333e"),  # deep teal
+        dict(bg_top="#a34a32", bg_bot="#7c3423", ink="#ffffff", accent="#ffd166", band="#f6efe4", sub="#5a2a1c"),  # terracotta
+        dict(bg_top="#215e4c", bg_bot="#153f33", ink="#ffffff", accent="#f0c75e", band="#f1efe2", sub="#1b4a3c"),  # deep sage
+        dict(bg_top="#1d2d5c", bg_bot="#111b3d", ink="#ffffff", accent="#e9c46a", band="#eef0f6", sub="#1d2d5c"),  # indigo night (sleep)
+        dict(bg_top="#5c3a5e", bg_bot="#402944", ink="#ffffff", accent="#f2b880", band="#f5f0ee", sub="#4a2f4c"),  # plum
+        dict(bg_top="#b07d2b", bg_bot="#8a5f1b", ink="#ffffff", accent="#1d3557", band="#f7f2e4", sub="#5f430f"),  # mustard/ochre
     ],
+    # institutional flat colour, white or near-black title, one loud accent.
     "authority": [
-        dict(bg_top="#faf5e9", bg_bot="#f0e7d4", ink="#10243f", accent="#c19a46", sub="#46505c"),  # cream
-        dict(bg_top="#0e2a47", bg_bot="#091d33", ink="#ffffff", accent="#d4af37", sub="#cfd6e2"),  # navy
-        dict(bg_top="#14532d", bg_bot="#0a3d20", ink="#f5f0e1", accent="#d4af37", sub="#cfe2d2"),  # forest
-        dict(bg_top="#f3ece0", bg_bot="#e6dac4", ink="#3a1d24", accent="#9c5b3b", sub="#5a4a44"),  # warm sand
+        dict(bg_top="#0d3b66", bg_bot="#092a4a", ink="#ffffff", accent="#ffd400", sub="#cfe0f0"),  # corporate blue / yellow
+        dict(bg_top="#9d2226", bg_bot="#711317", ink="#ffffff", accent="#ffd400", sub="#f3d5d5"),  # deep red / yellow
+        dict(bg_top="#14532d", bg_bot="#0a3d20", ink="#ffffff", accent="#ffd166", sub="#cfe2d2"),  # forest / gold
+        dict(bg_top="#f6f4ef", bg_bot="#ecebe4", ink="#16181d", accent="#d62828", sub="#43464d"),  # white / red (Warentest-style)
     ],
 }
 
@@ -309,6 +338,72 @@ _HIGHLIGHT = {
     "automation", "automatisierung", "automatización", "productivity",
     "productividad", "productivité", "produktivität",
 }
+
+
+# ── Language guess (title words) → localized genre-label strap ──────────────
+_LANG_HINTS = [
+    ("es", {"para", "de", "guía", "cómo", "en", "los", "las", "del", "tu"}),
+    ("fr", {"pour", "les", "des", "guide", "cahier", "votre", "vos", "et"}),
+    ("de", {"für", "und", "der", "die", "das", "mit", "im", "ihre"}),
+    ("it", {"per", "il", "della", "come", "gli", "tuo", "con"}),
+    ("nl", {"voor", "het", "een", "met", "je", "naar"}),
+]
+
+
+def _guess_lang(title: str, subtitle: str = "") -> str:
+    words = set((title + " " + (subtitle or "")).lower()
+                .replace(":", " ").replace(",", " ").split())
+    best, hits = "en", 0
+    for lang, hints in _LANG_HINTS:
+        n = len(words & hints)
+        if n > hits:
+            best, hits = lang, n
+    return best
+
+
+_STRAP_GUIDE = {"es": "GUÍA PRÁCTICA", "fr": "GUIDE PRATIQUE",
+                "de": "PRAXIS-RATGEBER", "it": "GUIDA PRATICA",
+                "nl": "PRAKTISCHE GIDS", "en": "PRACTICAL GUIDE"}
+
+_STRAP_STEPS = {"es": "PASO A PASO", "fr": "ÉTAPE PAR ÉTAPE",
+                "de": "SCHRITT FÜR SCHRITT", "it": "PASSO DOPO PASSO",
+                "nl": "STAP VOOR STAP", "en": "STEP BY STEP"}
+
+
+def _split_year(title: str):
+    """Pull a 202x year token out of the title → (title_without_year, year).
+    Bestseller tax/guide covers show the year as a loud badge, not buried in
+    the title line."""
+    import re as _re
+    m = _re.search(r"\b(20[2-3]\d)\b", title)
+    if not m:
+        return title, None
+    year = m.group(1)
+    cleaned = (title[:m.start()] + title[m.end():])
+    cleaned = _re.sub(r"\s{2,}", " ", cleaned).strip(" :,-–—")
+    return (cleaned or title), year
+
+
+def _year_badge(draw, year: str, accent, dark_text):
+    """Filled accent circle, top-right — recency signal for guide niches."""
+    r = 150
+    cx, cy = W - MARGIN - r + 30, 300
+    draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=accent)
+    f = _font(FONT_ARCHIVO, 92)
+    draw.text((cx, cy), year, font=f, fill=dark_text, anchor="mm")
+
+
+def _short_sub(subtitle: str, max_chars: int = 95) -> str:
+    """Covers only carry the promise, not the whole listing subtitle
+    (research: ≤12 words; long subtitles die at thumbnail). Cut at the
+    first clause break past nothing, else at a word boundary."""
+    if not subtitle or len(subtitle) <= max_chars:
+        return subtitle
+    for sep in (": ", " — ", " – ", ". ", ", "):
+        pos = subtitle.find(sep, 30, max_chars)
+        if pos != -1:
+            return subtitle[:pos].strip()
+    return subtitle[:max_chars].rsplit(" ", 1)[0].rstrip(",;:") + "…"
 
 
 # ── Font loading + measurement ──────────────────────────────────────────────
@@ -537,11 +632,13 @@ def _ai_image(prompt: str):
 def _food_prompt(title, keywords):
     kw = ", ".join((keywords or [])[:6])
     return (
-        "Professional overhead food photography, ONE single appetising hero dish "
-        f"that fits this cookbook: {title}. {kw}. Bright natural daylight, fresh "
-        "vibrant ingredients, styled on a warm rustic surface, sharp focus, "
-        "magazine quality, warm appetite colours (red, orange, green, yellow). "
-        "No text, no words, no letters, no hands, no utensils labels anywhere."
+        "Professional food photography, ONE single appetising hero subject "
+        f"(one dish or one drink in one glass) that fits this cookbook: {title}. "
+        f"{kw}. Centered composition with the subject filling the frame, LIGHT "
+        "bright background (white, cream or pale pastel), natural daylight, "
+        "fresh vibrant garnish, slight warm colour grade, sharp focus, magazine "
+        "quality. Strictly one subject — no grids, no multiple dishes, no "
+        "collage. No text, no words, no letters, no hands anywhere."
     )
 
 
@@ -608,17 +705,24 @@ def _render_authority(draw, img, cfg, title, subtitle, author, genre):
     _gradient(img, _hex(cfg["bg_top"]), _hex(cfg["bg_bot"]))
     from PIL import ImageDraw
     draw = ImageDraw.Draw(img)
-    sp, sv, si, sr = _body_face(cfg["strap"])
-    y = _strap(draw, cfg["strap"], 230, _font(FONT_BEBAS, 58), acc)
-    tp, tv, ti, tr = _choose_title_face(genre, title)
-    f, lines, sz, lh, lead = _fit(draw, title, tp, tv, ti, tr, CW, H * 0.40,
-                                  start=156, min_s=78, max_lines=4)
-    y = _draw_block(draw, lines, y + 70, f, lh, lead, ink)
-    draw.rectangle([CX - 170, y + 34, CX + 170, y + 44], fill=acc)
-    _subtitle(draw, subtitle, y + 100, sub)
-    if cfg.get("motif") == "euro":
-        draw.text((CX, H - 470), "€", font=_font(FONT_BEBAS, 120), fill=acc, anchor="ma")
-        draw.ellipse([CX - 78, H - 480, CX + 78, H - 320], outline=acc, width=9)
+    light_bg = _relative_luminance(_hex(cfg["bg_top"])) > 0.5
+    badge_text = _hex(cfg["bg_bot"]) if not light_bg else (255, 255, 255)
+    # year out of the title line, into a loud badge (recency signal)
+    title_line, year = _split_year(title)
+    if cfg.get("motif") == "year_badge" and year:
+        _year_badge(draw, year, acc, badge_text)
+    lang = _guess_lang(title, subtitle)
+    strap = _STRAP_GUIDE.get(lang, cfg.get("strap", "PRACTICAL GUIDE"))
+    y = _strap(draw, strap, 230, _font(FONT_BEBAS, 58), acc)
+    tp, tv, ti, tr = _choose_title_face(genre, title_line)
+    latin = not (_is_thai(title_line) or _is_cjk(title_line))
+    text = title_line.upper() if latin else title_line
+    f, lines, sz, lh, lead = _fit(draw, text, tp, tv, ti, tr, CW, H * 0.46,
+                                  start=180, min_s=96, max_lines=5,
+                                  leading_f=0.10 if latin else 0.16)
+    y = _draw_block(draw, lines, y + 80, f, lh, lead, ink)
+    draw.rectangle([CX - 170, y + 40, CX + 170, y + 54], fill=acc)
+    _subtitle(draw, _short_sub(subtitle), y + 120, sub, max_lines=2)
     _author(draw, author, ink)
 
 
@@ -636,8 +740,15 @@ def _render_modern(draw, img, cfg, title, subtitle, author, genre):
     colors = [neon if any(w.strip(":,.;").lower() in _HIGHLIGHT for w in ln.split())
               else white for ln in lines]
     y = _draw_block(draw, lines, 470, f, lh, lead, white, colors=colors)
-    _subtitle(draw, subtitle, y + 80, white, band=(0, 0, 0), max_lines=3)
+    _subtitle(draw, _short_sub(subtitle), y + 80, white, band=(0, 0, 0),
+              max_lines=2)
     _author(draw, author, white)
+
+
+_WORKBOOK_WORDS = {
+    "workbook", "cuaderno", "cahier", "arbeitsbuch", "quaderno", "werkboek",
+    "diario", "journal", "diary",
+}
 
 
 def _render_calm(draw, img, cfg, title, subtitle, author, genre):
@@ -646,65 +757,87 @@ def _render_calm(draw, img, cfg, title, subtitle, author, genre):
     _gradient(img, _hex(cfg["bg_top"]), _hex(cfg["bg_bot"]))
     from PIL import ImageDraw
     draw = ImageDraw.Draw(img)
-    for r in (520, 400, 280):                       # soft breathing-wave motif
-        draw.arc([CX - r, 150 - r, CX + r, 150 + r], 0, 180, fill=cream, width=8)
+    # single hairline motif — one quiet ring, not a wall of arcs
+    draw.arc([CX - 430, -290, CX + 430, 570], 15, 165, fill=acc, width=6)
+    y = 300
+    # format badge — bestseller workbooks flag WORKBOOK/CUADERNO loudly
+    wb = next((w for w in title.replace(":", " ").replace(",", " ").split()
+               if w.lower().strip(".") in _WORKBOOK_WORDS), None)
+    if wb:
+        bf = _font(FONT_LATO_BLACK, 54)
+        bw = _line_w(draw, wb.upper(), bf)
+        draw.rounded_rectangle([CX - bw // 2 - 36, y, CX + bw // 2 + 36, y + 96],
+                               radius=48, fill=acc)
+        badge_ink = (_hex(cfg["bg_bot"]) if _relative_luminance(acc) > 0.35
+                     else cream)
+        draw.text((CX, y + 48), wb.upper(), font=bf, fill=badge_ink, anchor="mm")
+        y += 150
     tp, tv, ti, tr = _choose_title_face(genre, title)
-    f, lines, sz, lh, lead = _fit(draw, title, tp, tv, ti, tr, CW, H * 0.32,
-                                  start=150, min_s=80, max_lines=4, leading_f=0.18)
-    y = _draw_block(draw, lines, 560, f, lh, lead, ink)
-    draw.rectangle([CX - 150, y + 30, CX + 150, y + 40], fill=acc)
-    _subtitle(draw, subtitle, y + 96, ink, band=cream, max_lines=3)
+    f, lines, sz, lh, lead = _fit(draw, title, tp, tv, ti, tr, CW, H * 0.42,
+                                  start=170, min_s=92, max_lines=5, leading_f=0.14)
+    y = _draw_block(draw, lines, y + 90, f, lh, lead, ink)
+    draw.rectangle([CX - 150, y + 34, CX + 150, y + 46], fill=acc)
+    _subtitle(draw, _short_sub(subtitle), y + 110, _hex(cfg["sub"]),
+              band=cream, max_lines=2)
     _author(draw, author, cream)
 
 
 def _render_senior(draw, img, cfg, title, subtitle, author, genre):
-    white, acc = _hex(cfg["ink"]), _hex(cfg["accent"])
+    """White ground + huge near-black type + one strong accent — the DE
+    Ratgeber trust look (Stiftung-Warentest-style). A cover that itself looks
+    easy to read IS the product proof for this audience."""
+    ink, acc = _hex(cfg["ink"]), _hex(cfg["accent"])
     band = _hex(cfg["band"])
     _gradient(img, _hex(cfg["bg_top"]), _hex(cfg["bg_bot"]))
     from PIL import ImageDraw
     draw = ImageDraw.Draw(img)
-    # accent header bar — high-contrast, large-print signal
-    draw.rectangle([0, 0, W, 70], fill=acc)
+    # accent header bar — high-contrast series band
+    draw.rectangle([0, 0, W, 90], fill=acc)
+    lang = _guess_lang(title, subtitle)
+    y = _strap(draw, _STRAP_STEPS.get(lang, "STEP BY STEP"), 200,
+               _font(FONT_BEBAS, 58), acc)
     tp, tv, ti, tr = _choose_title_face(genre, title)
     f, lines, sz, lh, lead = _fit(draw, title.upper() if not (_is_thai(title) or _is_cjk(title)) else title,
-                                  tp, tv, ti, tr, CW, H * 0.40,
-                                  start=180, min_s=92, max_lines=4, leading_f=0.10)
-    y = _draw_block(draw, lines, 360, f, lh, lead, white)
-    draw.rectangle([CX - 180, y + 30, CX + 180, y + 42], fill=acc)
-    _subtitle(draw, subtitle, y + 100, _hex(cfg["sub"]), band=band, max_lines=3)
-    _author(draw, author, white)
+                                  tp, tv, ti, tr, CW, H * 0.46,
+                                  start=190, min_s=100, max_lines=5, leading_f=0.10)
+    y = _draw_block(draw, lines, y + 80, f, lh, lead, ink)
+    draw.rectangle([CX - 180, y + 36, CX + 180, y + 50], fill=acc)
+    _subtitle(draw, _short_sub(subtitle), y + 110, _hex(cfg["sub"]),
+              band=band, max_lines=2)
+    draw.rectangle([0, H - 110, W, H], fill=acc)
+    _author(draw, author, ink, y=H - 240)
 
 
 def _render_photo(draw, img, cfg, title, subtitle, author, genre, keywords):
+    """Cookbook bestseller formula (top-50 data: 84% light grounds, 46% single
+    hero shot): big dark title on a LIGHT top panel, ONE hero dish/drink photo
+    filling the bottom — title reads first at thumbnail, photo sells the zoom."""
     from PIL import Image, ImageDraw
-    white, acc = _hex(cfg["ink"]), _hex(cfg["accent"])
+    ink, acc = _hex(cfg["ink"]), _hex(cfg["accent"])
     panel = _hex(cfg["panel"])
-    photo_h = int(H * 0.62)
+    panel_h = int(H * 0.42)
+    img.paste(Image.new("RGB", (W, H), panel), (0, 0))
     hero = _ai_image(_food_prompt(title, keywords))
     if hero is not None:
-        img.paste(hero.resize((W, photo_h)), (0, 0))
+        ph = H - panel_h
+        pw = int(hero.width * ph / hero.height)
+        hero_r = hero.resize((max(pw, W), ph))
+        img.paste(hero_r.crop(((hero_r.width - W) // 2, 0,
+                               (hero_r.width - W) // 2 + W, ph)), (0, panel_h))
     else:
-        _gradient(img, (210, 104, 60), (150, 60, 30))
+        d0 = ImageDraw.Draw(img)
+        d0.rectangle([0, panel_h, W, H], fill=(210, 104, 60))
     draw = ImageDraw.Draw(img)
-    draw.rectangle([0, photo_h, W, H], fill=panel)
-    # scrim blending photo into panel
-    scrim = Image.new("RGBA", (W, 220), (0, 0, 0, 0))
-    ds = ImageDraw.Draw(scrim)
-    for i in range(220):
-        ds.line([(0, i), (W, i)], fill=(*panel, int(255 * i / 220)))
-    img.paste(Image.alpha_composite(
-        img.crop((0, photo_h - 220, W, photo_h)).convert("RGBA"), scrim
-    ).convert("RGB"), (0, photo_h - 220))
-    draw = ImageDraw.Draw(img)
-    tp, tv, ti, tr = _choose_title_face(genre, title)
-    latin = not (_is_thai(title) or _is_cjk(title))
-    f, lines, sz, lh, lead = _fit(draw, title.upper() if latin else title,
-                                  tp, tv, ti, tr, CW, H * 0.22,
-                                  start=150, min_s=78, max_lines=3, leading_f=0.10)
-    y = _draw_block(draw, lines, photo_h + 70, f, lh, lead, white)
-    draw.rectangle([CX - 160, y + 26, CX + 160, y + 34], fill=acc)
-    _subtitle(draw, subtitle, y + 70, _hex(cfg["sub"]), max_lines=2)
-    _author(draw, author, acc)
+    title_line, year = _split_year(title)
+    tp, tv, ti, tr = _choose_title_face(genre, title_line)
+    latin = not (_is_thai(title_line) or _is_cjk(title_line))
+    f, lines, sz, lh, lead = _fit(draw, title_line.upper() if latin else title_line,
+                                  tp, tv, ti, tr, CW, panel_h * 0.62,
+                                  start=180, min_s=92, max_lines=4, leading_f=0.08)
+    y = _draw_block(draw, lines, 170, f, lh, lead, ink)
+    draw.rectangle([CX - 160, y + 30, CX + 160, y + 42], fill=acc)
+    _subtitle(draw, _short_sub(subtitle), y + 90, _hex(cfg["sub"]), max_lines=2)
+    _author(draw, author, panel, y=H - 170)
 
 
 def _render_illustration(draw, img, cfg, title, subtitle, author, genre, keywords):
@@ -724,7 +857,7 @@ def _render_illustration(draw, img, cfg, title, subtitle, author, genre, keyword
                                   start=150, min_s=78, max_lines=3, leading_f=0.12)
     y = _draw_block(draw, lines, 150, f, lh, lead, ink)
     draw.rectangle([CX - 150, y + 24, CX + 150, y + 32], fill=acc)
-    _subtitle(draw, subtitle, y + 60, _hex(cfg["sub"]), max_lines=2)
+    _subtitle(draw, _short_sub(subtitle), y + 60, _hex(cfg["sub"]), max_lines=2)
     _author(draw, author, ink, y=H - 150)
 
 

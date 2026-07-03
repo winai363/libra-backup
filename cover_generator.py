@@ -177,10 +177,12 @@ _GENRE_KEYWORDS: dict[str, list[str]] = {
         "食谱", "烹饪", "美食",
     ],
     "creative": [
-        "creative", "creativity", "workbook", "journal", "art", "design",
+        # NB: format words (workbook/journal/template/quaderno) intentionally
+        # absent — an "Anxiety Workbook" is wellness, not art.
+        "creative", "creativity", "art", "design",
         "writing", "paint", "watercolor", "watercolour", "acuarela",
         "aquarelle", "craft", "draw", "drawing", "sketch", "poetry",
-        "fiction", "story", "template", "quaderno", "creativo", "kreativ",
+        "fiction", "story", "creativo", "kreativ",
         "coloring", "colouring", "malen", "zeichnen",
         "創作", "アート", "デザイン", "イラスト", "絵", "手帳", "創造",
         "创作", "艺术", "设计",

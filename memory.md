@@ -1,4 +1,20 @@
 
+## 2026-07-03 (บ่าย) — A+ ครบ 40/40 + ปกใหม่ขึ้น KDP + Free Promo อัตโนมัติ ✅
+
+**A+ Content ครบ 40/40 เล่ม** — บั๊กที่แก้ระหว่างทาง (จำไว้ ทุกตัวมี pattern ใช้ซ้ำ):
+1. `_is_signin` เช็คเฉพาะ URL path — query หลัง login มีคำ "signin" ทำ false-fail ที่ kdp.amazon.com (ec5d521)
+2. Add Image modal: คลิกปุ่มยืนยันไล่จาก**ตัวท้าย**ที่ visible (ตัวแรก = ปุ่ม Add ของ module picker ที่ซ่อนอยู่) + fail-loud ถ้า modal ไม่ปิด (7202933)
+3. **HTML entity หลุด** (`l&#x27;ansia`) ใน bullets → html.unescape บังคับ (3de3610)
+4. **คำเคลมสุขภาพโดน A+ filter**: "These keywords violate our community guidelines: prevenire" → `_CLAIM_WORDS` regex กรอง prevent/cure/treat/heal/remedy/diagnose ทุกภาษา EU ออกจาก bullets (29171b9)
+5. ASIN เคย applied จากรอบ fail → modal "Override existing content?" ต้องกด Override
+- Diagnostics ถาวร: validation fail → กด Fix content + dump invalid elements อัตโนมัติ
+- 5 เล่ม submitted ก่อนแก้ entity (dutch/fr/it) — ถ้า Amazon reject ตอน moderation ให้ regen assets + resubmit (ตัว batch ข้าม status=submitted ต้องลบ stamp ก่อน)
+
+**Cover v2 ขึ้น KDP:** regen 40/40 (variant hash = slug+title กันเล่มชื่อคล้ายโคลนกัน; ใช้ actual_live_title 4 เล่มที่เคยถูก rename) → `reupload_covers.py` (โหมด --cover แตะแค่ไฟล์ปก ไม่โดน SEO/tag) ทยอยอัป 31 เล่มก่อน อีก 9 เล่มรอ A+ เสร็จแล้วค่อยตาม
+
+**Free Promo อัตโนมัติ (บุ๋ยอนุมัติ):** `scripts/free_promo_auto.py` + cron 11:05 — เกณฑ์: LIVE≥7วัน + Enrolled + ไม่มียอด + ยังไม่เคยโปรในเทอม → ตั้งแจกฟรี 3 วัน (เริ่มพรุ่งนี้), 3 เล่ม/วัน, stamp listing.json free_promo, แจ้ง Telegram. เล่มแรกสำเร็จจริง: adhd-workbook-german-adults 4-6 ก.ค. "Success! Your promotion was added"
+- UI gotchas หน้า promotion-manager: radio default = Countdown Deal ต้องติ๊ก Free Book Promotion ก่อน; ช่องวันที่**พิมพ์ไม่ได้** (jQuery datepicker + เดือน/ปีเป็น dropdown) ต้องคลิกวันใน `#ui-datepicker-div`; end-date disabled จน start ถูกเลือก; ปุ่ม Save = `span.a-button#promotion-manager-freebook-save-changes` + `input.a-button-input` ข้างใน (ไม่ใช่ <button>), enabled = ไม่มี class a-button-disabled
+
 ## 2026-07-03 — ปิด 3 งานที่บุ๋ยอนุมัติ: Select ครบ + subtitle ครบ + A+ Content full-auto (commit 4384e82) ✅
 
 จาก audit เมื่อวาน บุ๋ยสั่ง "1. Go 2. Go 3. Go with full auto 4. (Ads) ยังก่อน":

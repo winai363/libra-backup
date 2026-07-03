@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, "/root/libra")
 from aplus_upload import (SESSION, SESSION_APLUS, KDP, marketplace_login,
-                          shot)
+                          shot, _is_signin)
 from playwright.async_api import async_playwright
 
 
@@ -36,7 +36,7 @@ async def run(slug: str, do_submit: bool):
         try:
             await pg.goto(hub_url, timeout=60000)
             await pg.wait_for_timeout(4000)
-            if "/ap/" in pg.url or "signin" in pg.url:
+            if _is_signin(pg.url):
                 if not await marketplace_login(pg, slug):
                     return 1
                 await pg.goto(hub_url, timeout=60000)

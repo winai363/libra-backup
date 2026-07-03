@@ -43,6 +43,15 @@ if _env_path.exists():
             ENV[k.strip()] = v.strip()
 
 
+def _is_signin(url: str) -> bool:
+    """Signin check on the URL PATH only — after a successful login Amazon
+    redirects to the hub with openid params that embed 'signin' in the QUERY,
+    which must not count as being on the signin page."""
+    from urllib.parse import urlsplit
+    path = urlsplit(url).path
+    return path.startswith("/ap/") or "signin" in path
+
+
 async def marketplace_login(pg, slug):
     """Complete Amazon signin on a localized domain (same widget IDs everywhere)."""
     email, pw = ENV.get("KDP_EMAIL", ""), ENV.get("KDP_PASSWORD", "")
@@ -89,7 +98,7 @@ async def marketplace_login(pg, slug):
             await pg.locator("#auth-signin-button, button[type='submit'], "
                              "input[type='submit']").first.click()
             await pg.wait_for_timeout(5000)
-        return "/ap/" not in pg.url and "signin" not in pg.url
+        return not _is_signin(pg.url)
     except Exception as e:
         print(f"login error: {type(e).__name__}: {e}")
         await shot(pg, slug, "login_error")
@@ -151,15 +160,16 @@ async def run(slug: str, dry_run: bool, stop_after: int):
             print(f"  hub url: {hub_url}", flush=True)
             await hub.goto(hub_url, wait_until="domcontentloaded", timeout=60000)
             await hub.wait_for_timeout(4000)
-            if "signin" in hub.url or "/ap/" in hub.url:
+            if _is_signin(hub.url):
                 print("  signin required — logging in...", flush=True)
                 if not await marketplace_login(hub, slug):
-                    return 3
+                    await shot(hub, slug, "abort_login_failed")
+                    print("LOGIN_FAILED"); return 3
                 if hub_url.split("//")[1].split("/")[0] not in hub.url:
                     await hub.goto(hub_url, wait_until="domcontentloaded",
                                    timeout=60000)
                 await hub.wait_for_timeout(4000)
-                if "signin" in hub.url or "/ap/" in hub.url:
+                if _is_signin(hub.url):
                     await shot(hub, slug, "abort_hub_signin")
                     print("SESSION_EXPIRED at hub"); return 3
             # persist marketplace cookies for future runs (separate file)

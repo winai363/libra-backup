@@ -11,6 +11,7 @@ Usage:
   python3 scripts/aplus_batch.py --only a,b
   python3 scripts/aplus_batch.py --limit 5
 """
+import fcntl
 import json
 import subprocess
 import sys
@@ -19,6 +20,7 @@ from pathlib import Path
 LIBRA = Path(__file__).resolve().parent.parent
 KDP = Path("/root/kdp")
 PY = sys.executable
+LOCK = LIBRA / "logs" / "aplus_batch.lock"
 
 
 def worklist(only=None):
@@ -43,6 +45,15 @@ def worklist(only=None):
 
 
 def main():
+    # single-instance lock — a cron run overlapping a manual run makes both
+    # process the same books and race each other (seen 2026-07-03)
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    lock_f = open(LOCK, "w")
+    try:
+        fcntl.flock(lock_f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("another aplus_batch is running — exiting")
+        sys.exit(0)
     only = None
     limit = None
     if "--only" in sys.argv:

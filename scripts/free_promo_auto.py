@@ -309,6 +309,16 @@ async def schedule_one(slug: str, bid: str, title: str, dry_run: bool) -> bool:
 
 
 def main():
+    # single-instance lock (same race-prevention as aplus_batch)
+    import fcntl
+    lock_path = Path("/root/libra/logs/free_promo.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_f = open(lock_path, "w")
+    try:
+        fcntl.flock(lock_f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("another free_promo_auto is running — exiting")
+        sys.exit(0)
     only = None
     if "--only" in sys.argv:
         only = set(sys.argv[sys.argv.index("--only") + 1].split(","))

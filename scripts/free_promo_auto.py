@@ -166,58 +166,115 @@ async def schedule_one(slug: str, bid: str, title: str, dry_run: bool) -> bool:
                 print("  ABORT: no Free Book Promotion section (not enrolled?)")
                 return False
             await shot(pg, f"{slug}_1_manager")
-            # open the Free Book Promotion creation form
+            # "Run a Price Promotion" card: radio defaults to Kindle Countdown
+            # Deal — select the Free Book Promotion radio first, which flips
+            # the create button's label
+            picked = await pg.evaluate("""() => {
+                for (const r of document.querySelectorAll('input[type="radio"]')) {
+                    const scope = r.closest('label') || r.parentElement;
+                    const txt = (scope ? scope.textContent : '') +
+                        (r.nextSibling ? r.nextSibling.textContent || '' : '');
+                    if (txt.includes('Free Book Promotion')) { r.click(); return true; }
+                }
+                return false;
+            }""")
+            if not picked:
+                fb = pg.get_by_text("Free Book Promotion", exact=False)
+                await fb.first.click()
+            await pg.wait_for_timeout(1500)
+            await shot(pg, f"{slug}_1b_radio")
             create = pg.get_by_role("button",
                                     name="Create a new Free Book Promotion",
                                     exact=False)
             if not await create.count():
                 create = pg.get_by_text("Create a new Free Book Promotion",
                                         exact=False)
-            if not await create.count():
-                # some layouts: section card with its own "Create" button near
-                # the "Free Book Promotion" heading
-                create = pg.locator(
-                    'button:near(:text("Free Book Promotion"))').filter(
-                    has_text="Create")
             await create.first.click()
             await pg.wait_for_timeout(4000)
             await shot(pg, f"{slug}_2_form")
-            # date fields (MM/DD/YYYY, US locale)
-            fmt = "{:%m/%d/%Y}"
-            dates = pg.locator('input[placeholder*="MM" i], '
-                               'input[name*="start" i], input[name*="date" i]')
-            n = await dates.count()
-            if n < 2:
-                dates = pg.locator('input[type="text"]:visible')
-                n = await dates.count()
-            if n < 2:
+            # date inputs are jQuery-datepicker-driven: typed text never
+            # enables Save Changes — pick the day IN the datepicker UI.
+            # Selected value renders as e.g. "July 4, 2026".
+            dates = pg.locator('input[type="text"]:visible')
+            if await dates.count() < 2:
                 await shot(pg, f"{slug}_abort_no_dates")
                 print("  ABORT: date inputs not found")
                 return False
-            await dates.nth(0).fill(fmt.format(start))
-            await dates.nth(1).fill(fmt.format(end))
-            await pg.keyboard.press("Escape")   # close any datepicker overlay
-            await pg.wait_for_timeout(1000)
+
+            async def pick(idx, d):
+                el = pg.locator("#start-date-input" if idx == 0
+                                else "#end-date-input")
+                if not await el.count():
+                    el = dates.nth(idx)
+                # end input stays disabled until the start date is picked
+                for _ in range(10):
+                    if await el.is_enabled():
+                        break
+                    await pg.wait_for_timeout(1000)
+                await el.click()
+                await pg.wait_for_timeout(1200)
+                res = await pg.evaluate(
+                    """async ([monthIdx, year, day]) => {
+                        const dp = document.querySelector('#ui-datepicker-div')
+                            || document.querySelector('.ui-datepicker');
+                        if (!dp) return 'no datepicker';
+                        // month/year are dropdowns in this datepicker
+                        const ms = dp.querySelector('select.ui-datepicker-month');
+                        const ys = dp.querySelector('select.ui-datepicker-year');
+                        if (ms && ms.value !== String(monthIdx)) {
+                            ms.value = String(monthIdx);
+                            ms.dispatchEvent(new Event('change', {bubbles: true}));
+                            await new Promise(r => setTimeout(r, 700));
+                        }
+                        if (ys && ys.value !== String(year)) {
+                            ys.value = String(year);
+                            ys.dispatchEvent(new Event('change', {bubbles: true}));
+                            await new Promise(r => setTimeout(r, 700));
+                        }
+                        for (const a of dp.querySelectorAll(
+                                '.ui-datepicker-calendar a'))
+                            if (a.textContent.trim() === String(day)) {
+                                a.click(); return 'ok';
+                            }
+                        return 'day not found';
+                    }""", [d.month - 1, str(d.year), d.day])
+                if res != "ok":
+                    print(f"  datepicker issue: {res}")
+                await pg.wait_for_timeout(1000)
+                return await el.input_value()
+
+            v0 = await pick(0, start)
+            v1 = await pick(1, end)
+            print(f"  dates on form: {v0} → {v1}")
             await shot(pg, f"{slug}_3_dates")
+            want0 = f"{start:%B} {start.day}, {start.year}"
+            want1 = f"{end:%B} {end.day}, {end.year}"
+            if v0 != want0 or v1 != want1:
+                print(f"  ABORT: dates did not stick (want {want0} → {want1})")
+                return False
             if dry_run:
                 print(f"  DRY-RUN: would schedule {start} → {end}")
                 return True
-            save = None
-            for label in ("Save changes", "Save", "Schedule", "Submit",
-                          "Start promotion", "Create promotion"):
-                cand = pg.get_by_role("button", name=label, exact=False)
-                for k in range(await cand.count()):
-                    el = cand.nth(k)
-                    if await el.is_visible() and await el.is_enabled():
-                        save = el
-                        break
-                if save:
+            # Save Changes is an Amazon a-button: span#...-save-changes
+            # wrapping input.a-button-input (no <button>, no value attr).
+            # Enabled = wrapper loses the a-button-disabled class.
+            save_wrap = pg.locator(
+                '#promotion-manager-freebook-save-changes')
+            if not await save_wrap.count():
+                save_wrap = pg.locator(
+                    'span.a-button:has-text("Save Changes")')
+            enabled = False
+            for _ in range(15):
+                cls = await save_wrap.first.get_attribute("class") or ""
+                if "a-button-disabled" not in cls:
+                    enabled = True
                     break
-            if not save:
+                await pg.wait_for_timeout(1000)
+            if not enabled:
                 await shot(pg, f"{slug}_abort_no_save")
-                print("  ABORT: save button not found")
+                print("  ABORT: Save Changes stayed disabled")
                 return False
-            await save.click()
+            await save_wrap.locator("input.a-button-input").first.click()
             await pg.wait_for_timeout(6000)
             await shot(pg, f"{slug}_4_saved")
             final = await pg.evaluate("()=>document.body.innerText")

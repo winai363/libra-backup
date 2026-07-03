@@ -1,4 +1,26 @@
 
+## 2026-07-03 — ปิด 3 งานที่บุ๋ยอนุมัติ: Select ครบ + subtitle ครบ + A+ Content full-auto (commit 4384e82) ✅
+
+จาก audit เมื่อวาน บุ๋ยสั่ง "1. Go 2. Go 3. Go with full auto 4. (Ads) ยังก่อน":
+1. **KDP Select 39/39 เล่ม LIVE** — `scripts/kdp_enroll_batch.py` (4 เล่มติดชื่อ listing ไม่ตรงชื่อจริงบน KDP → scrape ชื่อจริงมาใช้ + เก็บ `actual_live_title` ใน listing.json; ⚠️ 4 เล่มนี้ (adhd-adults-focus…, ai-side-hustles…, prompt-engineering-remote…, ai-powered-productivity…) ถ้า reupload metadata จะ RENAME เล่มจริง — ต้องเช็คก่อน)
+2. **Subtitle ใหม่ 12 เล่ม** (title+subtitle <200) — reupload ครบทุกเล่ม LIVE รวม micro-wellness-remote-parents-de ที่เคยติด In Review
+3. **A+ Content full-auto** — ระบบใหม่ 3 ไฟล์: `aplus_assets.py` (แบนเนอร์ 970x600: ปก+headline ภาษาถิ่น+bullets จาก description), `aplus_upload.py` (Playwright ครบ 6 stage: login ต่างตลาดผ่าน .env+TOTP → สร้าง content → อัปรูปด้วย composed DragEvents ทะลุ shadow DOM → ASIN typeahead (พิมพ์ช้าๆ ให้ dropdown เด้ง→คลิก suggestion→ติ๊ก checkbox→Apply content) → submit มี **modal ยืนยันซ้อน ต้องคลิก "Submit for approval" ตัวที่ 2**), `scripts/aplus_batch.py` (idempotent, ข้ามเล่มที่ aplus.status=submitted)
+   - Gotchas: draft A+ ไม่ persist ถ้าไม่ Save/Submit (navigate ทิ้ง = หาย, ไม่มีขยะซ้ำ); cookies ต่างตลาดเก็บที่ `kdp_session_aplus.json` (gitignored, ห้ามเขียนทับ kdp_session.json หลัก); status หลัง submit = "Submitted → Awaiting approval" (Amazon รีวิว ≤7 วันทำการ)
+   - **cron ใหม่ 10:40 ทุกวัน**: assets --all-live + batch → เล่มใหม่ที่ขึ้น LIVE ได้ A+ อัตโนมัติ
+   - POC easy-taxes-self-employed-spain + sober-mocktails-de (ตลาด DE) submit สำเร็จ verify จาก screenshot แล้ว; batch ที่เหลือ 37 เล่มรัน background (log: logs/aplus_batch_20260703.log)
+4. Amazon Ads = HOLD ตามคำสั่งบุ๋ย รอดูผล 1-3
+
+**Cover redesign v2 (commit 262dac7+7aa277b) — งานที่บุ๋ยสั่งเพิ่ม เสร็จแล้ว:**
+วิจัยตลาด (agent: Kindlepreneur 20k study, cookbook Top-50 data 84% พื้นสว่าง/46% hero เดียว, Greenleaf/Miblart 2026, ปกขายดีจริง ES/DE/FR) → เข้ารหัสลง cover_generator.py:
+- calm: พาสเทลซีด→สีอิ่มเข้ม 6 variant (teal/terracotta/sage/indigo/plum/ochre) + title ขาวหนา + ป้าย WORKBOOK/CUADERNO/CAHIER อัตโนมัติ (จับคำใน title)
+- authority (ภาษีสเปน): สีทึบสถาบัน + accent เหลือง + **ป้ายปี 2026** (ดึงปีออกจาก title มาเป็น badge) + strap หลายภาษา (_guess_lang จาก title)
+- seniors: ขาว + ตัวดำใหญ่มาก + แถบแดง (สไตล์ Stiftung Warentest) + strap SCHRITT FÜR SCHRITT
+- photo/food: กลับหัวเลย์เอาต์ — ชื่อใหญ่บนแผงครีม + รูป hero เดียวล่าง (prompt บังคับ 1 subject พื้นสว่าง)
+- subtitle บนปกตัดเหลือ ≤95 ตัวอักษร (_short_sub), แม็กซ์ 2 บรรทัด
+- **แก้บั๊ก detect_genre**: title หนัก 3×, tie-break หมวดเฉพาะชนะหมวดกว้าง, เพิ่มคำ wellness ภาษาถิ่น (anxiété/ansiedad/slaap/schlaf), เอา format words (workbook/journal) ออกจาก creative — เคยทำ TDAH→business, sleep→food, senior→tech
+- ผล: ปกใหม่ใช้กับ**เล่มใหม่อัตโนมัติ**; ปกเก่า 39 เล่มยังไม่ regen **รอบุ๋ยสั่ง** (มี regen_covers.py+reupload_covers.py พร้อม); รายงาน+เทียบก่อน-หลัง: /root/downloads/cover-redesign/รายงานปกใหม่-3กค2026.html
+- Gotcha ที่เจอ: kdp.amazon.com signin แบบ recognized-account (ไม่มีช่อง email) + URL หลัง login มีคำ signin ใน query → _is_signin เช็คเฉพาะ path (commit ec5d521)
+
 ## 2026-07-02 — Audit ระบบเทียบมาตรฐาน KDP 2026 + แก้ 6 จุด (commit e8c31e6) 🔍
 
 บุ๋ยสั่งตรวจว่า Libra สร้าง KDP ได้มาตรฐาน + เลือกหัวข้อขายได้ + SEO/กลยุทธ์ตรงหลัก 2026 ไหม. รีเสิร์ชกฎ 2026 จากแหล่ง official แล้วเทียบทั้งระบบ.

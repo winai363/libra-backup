@@ -200,6 +200,12 @@ def build_dashboard_overview() -> dict:
     }
 
 
+def check_read(request: Request):
+    """Public read access — login removed for viewing per user order 2026-07-05.
+    Write/publish actions and full-book file downloads still require the token."""
+    return
+
+
 def check_auth(request: Request):
     token = request.cookies.get("libra_token")
     if not TOKEN or not token or not secrets.compare_digest(token, TOKEN):
@@ -242,7 +248,7 @@ async def login(request: Request):
 
 @app.get("/api/books")
 async def list_books(request: Request, status: str = None):
-    check_auth(request)
+    check_read(request)
     books = get_books()
     if status:
         books = [b for b in books if b.get("status") == status]
@@ -251,7 +257,7 @@ async def list_books(request: Request, status: str = None):
 
 @app.get("/api/dashboard/overview")
 async def dashboard_overview(request: Request):
-    check_auth(request)
+    check_read(request)
     return build_dashboard_overview()
 
 
@@ -281,7 +287,7 @@ async def download_pdf(slug: str, request: Request):
 
 @app.get("/api/books/{slug}/cover")
 async def get_cover(slug: str, request: Request):
-    check_auth(request)
+    check_read(request)
     cover = get_book_dir(slug) / "cover.jpg"
     if not cover.exists():
         raise HTTPException(status_code=404)
@@ -514,7 +520,7 @@ async def get_book_content(slug: str, request: Request):
 @app.get("/preview/{slug}", response_class=HTMLResponse)
 async def preview_page(slug: str, request: Request):
     """Full book preview — cover, details, and full content."""
-    check_auth(request)
+    check_read(request)
     book_dir = get_book_dir(slug)
     listing_file = book_dir / "listing.json"
     if not listing_file.exists():
@@ -526,7 +532,7 @@ async def preview_page(slug: str, request: Request):
 @app.get("/review/{slug}", response_class=HTMLResponse)
 async def review_page(slug: str, request: Request):
     """Review page to check book details before KDP upload"""
-    check_auth(request)
+    check_read(request)
     book_dir = get_book_dir(slug)
     listing_file = book_dir / "listing.json"
     if not listing_file.exists():
@@ -538,7 +544,7 @@ async def review_page(slug: str, request: Request):
 @app.get("/approval/{slug}", response_class=HTMLResponse)
 async def approval_page(slug: str, request: Request):
     """Approval page for KDP upload"""
-    check_auth(request)
+    check_read(request)
     book_dir = get_book_dir(slug)
     listing_file = book_dir / "listing.json"
     if not listing_file.exists():
@@ -550,7 +556,7 @@ async def approval_page(slug: str, request: Request):
 @app.get("/api/pipeline-status")
 async def pipeline_status(request: Request):
     """Return all books with per-step pipeline status."""
-    check_auth(request)
+    check_read(request)
     books_out = []
     for listing_file in sorted(KDP_DIR.glob("*/listing.json"), reverse=True):
         if listing_file.parent.name == "logs":
@@ -601,7 +607,7 @@ async def pipeline_status(request: Request):
 
 @app.get("/status", response_class=HTMLResponse)
 async def status_page(request: Request):
-    check_auth(request)
+    check_read(request)
     html_path = Path(__file__).parent / "templates" / "status.html"
     return HTMLResponse(html_path.read_text())
 
@@ -609,7 +615,7 @@ async def status_page(request: Request):
 @app.get("/api/strategy")
 async def strategy_board(request: Request):
     """Depth-loop command center: hero books + plan timeline + checkpoint."""
-    check_auth(request)
+    check_read(request)
     cfg_path = Path(__file__).parent / "data" / "strategy_timeline.json"
     cfg = json.loads(cfg_path.read_text())
     today = datetime.now().date()
@@ -698,7 +704,7 @@ async def strategy_board(request: Request):
 @app.get("/api/profit/portfolio")
 async def profit_portfolio(request: Request):
     """Return portfolio-level traction and estimated revenue analytics."""
-    check_auth(request)
+    check_read(request)
     from profit_tracker import build_portfolio
     return build_portfolio()
 
@@ -723,7 +729,7 @@ async def record_profit_snapshot(slug: str, request: Request):
 
 @app.get("/profit", response_class=HTMLResponse)
 async def profit_page(request: Request):
-    check_auth(request)
+    check_read(request)
     html_path = Path(__file__).parent / "templates" / "profit.html"
     return HTMLResponse(html_path.read_text())
 
@@ -733,7 +739,7 @@ async def profit_page(request: Request):
 @app.get("/api/audit/report")
 async def get_audit_report(request: Request):
     """Return latest audit report JSON."""
-    check_auth(request)
+    check_read(request)
     report_file = KDP_DIR / "logs" / "audit_report.json"
     if not report_file.exists():
         raise HTTPException(status_code=404, detail="No audit report found. Run kdp_live_audit.py first.")
@@ -757,7 +763,7 @@ async def run_audit(request: Request):
 @app.get("/audit", response_class=HTMLResponse)
 async def audit_page(request: Request):
     """Show the live audit HTML dashboard."""
-    check_auth(request)
+    check_read(request)
     report_file = KDP_DIR / "logs" / "audit_report.html"
     if not report_file.exists():
         return HTMLResponse("""

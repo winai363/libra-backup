@@ -1,16 +1,16 @@
 ## Last Handoff — libra
 
-**เมื่อ:** 2026-07-02 21:01
-**ทำโดย:** claude
-**Task:** Audit + fix Libra KDP pipeline: quality, topic selection, SEO/tags, KDP 2026 strategy
+**เมื่อ:** 2026-07-05 12:40
+**ทำโดย:** codex
+**Task:** Finish feedback_loop crash + hero-title depth loop handoff
 
 ### สิ่งที่ทำ
-Audit Libra vs KDP 2026: fixed demand hard gate (BSR-anchored), royalty-weighted ranking, closed ungated fallback, byte-aware keyword limit, title+subtitle<200 rule; rewrote+republished keywords 9/9 LIVE books; cleared category blocker; commit e8c31e6 pushed to backup
+Libra takeover complete: fixed feedback_loop numeric normalization for n/a/blank metrics; capped cover title depth at max_lines; added paperback upload CLI guard and committed pending paperback cover/upload scripts; added tests. Verified py_compile, pytest focused suite 23 passed, feedback_loop --all runs on live data. Commit pushed: 4ad5dc3.
 
 ### Git state ตอน finish
 - Branch: `main`
-- Last commit: `e8c31e6 KDP 2026 audit fixes: BSR-anchored demand hard gate, royalty-weighted ranking, no ungated fallback, byte-aware keyword limit, title+subtitle<200 rule`
-- Uncommitted files: 3
+- Last commit: `4ad5dc3 Harden Libra feedback and paperback tooling`
+- Uncommitted files: 1
 
 ### ขั้นต่อไป
 _อ่านจาก summary ด้านบน — ถ้าไม่มีระบุ แสดงว่างานนี้เสร็จสมบูรณ์แล้ว_

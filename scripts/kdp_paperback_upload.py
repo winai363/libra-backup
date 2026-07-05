@@ -202,7 +202,7 @@ async def _click_first(page, selectors, desc, timeout=15000):
     raise RuntimeError(f"could not click {desc}: {last}")
 
 
-async def create_paperback(slug, price_usd, publish=True, paths_override=None):
+async def create_paperback(slug, price_usd, publish=True, paths_override=None, reupload=False):
     book_dir = KDP_DIR / slug
     listing = json.loads((book_dir / "listing.json").read_text())
     if listing.get("paperback", {}).get("submitted_at"):
@@ -296,10 +296,17 @@ async def create_paperback(slug, price_usd, publish=True, paths_override=None):
                     "span.a-button-inner input[type='submit']",
                 ], "Save and Continue (details)")
                 await page.wait_for_timeout(8000)
+                await _reauth(page, slug)  # Amazon may demand sign-in mid-flow
+                await page.wait_for_timeout(2000)
                 body = await page.inner_text("body")
                 if "Add at least one new category" in body:
                     await _shot(page, slug, "ERROR-details-validation")
-                    raise RuntimeError("details validation still failing (categories)")
+                    # modal picks were lost (e.g. auth wall before save) — make
+                    # the next run redo them instead of trusting the stamp
+                    listing.setdefault("paperback", {}).pop("categories_done", None)
+                    (book_dir / "listing.json").write_text(
+                        json.dumps(listing, ensure_ascii=False, indent=2))
+                    raise RuntimeError("details validation still failing (categories) — stamp cleared for retry")
             await _shot(page, slug, "4-content")
 
             # ── CONTENT TAB ────────────────────────────────────────────────
@@ -392,7 +399,8 @@ async def create_paperback(slug, price_usd, publish=True, paths_override=None):
                 'We're Sorry' upload-service failures."""
                 for attempt in range(1, 4):
                     body = await page.inner_text("body")
-                    if success_text in body or "SUCCESS" in await _asset_status(kind):
+                    if not reupload and attempt == 1 and (
+                            success_text in body or "SUCCESS" in await _asset_status(kind)):
                         logger.info(f"{kind} already uploaded — skip")
                         return
                     if "We're Sorry" in body:
@@ -408,6 +416,10 @@ async def create_paperback(slug, price_usd, publish=True, paths_override=None):
                             else page.locator("input[type='file']").last
                     await inp.set_input_files(str(path))
                     logger.info(f"{kind} uploading… (attempt {attempt})")
+                    if reupload:
+                        # replacing an existing file: give KDP time to flip the
+                        # stale SUCCESS status before we start polling it
+                        await page.wait_for_timeout(60000)
                     for _ in range(max_rounds):
                         await page.wait_for_timeout(10000)
                         st = await _asset_status(kind)
@@ -546,5 +558,6 @@ if __name__ == "__main__":
         if "--paths" in sys.argv:
             paths = [p.strip() for p in sys.argv[sys.argv.index("--paths") + 1].split(";") if p.strip()]
         publish = "--no-publish" not in sys.argv
-        ok = asyncio.run(create_paperback(slug, price, publish=publish, paths_override=paths))
+        ok = asyncio.run(create_paperback(slug, price, publish=publish, paths_override=paths,
+                                          reupload="--reupload" in sys.argv))
         sys.exit(0 if ok else 1)

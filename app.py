@@ -606,6 +606,95 @@ async def status_page(request: Request):
     return HTMLResponse(html_path.read_text())
 
 
+@app.get("/api/strategy")
+async def strategy_board(request: Request):
+    """Depth-loop command center: hero books + plan timeline + checkpoint."""
+    check_auth(request)
+    cfg_path = Path(__file__).parent / "data" / "strategy_timeline.json"
+    cfg = json.loads(cfg_path.read_text())
+    today = datetime.now().date()
+
+    # month-to-date downloads per ASIN (free-promo units show as orders/$0)
+    mtd = {}
+    state_path = KDP_DIR / "sales-sync-state.json"
+    mtd_royalties = 0.0
+    if state_path.exists():
+        state = json.loads(state_path.read_text())
+        for asin, t in state.get("titles", {}).items():
+            mtd[asin] = t.get("orders", 0)
+            mtd_royalties += t.get("royalties", 0.0) or 0.0
+
+    # lifetime revenue from feedback histories
+    lifetime = 0.0
+    for fh in KDP_DIR.glob("*/feedback-history.json"):
+        try:
+            for snap in json.loads(fh.read_text()):
+                lifetime += float(snap.get("revenue_usd") or 0)
+        except Exception:
+            continue
+
+    heroes = []
+    for slug in cfg["hero_slugs"]:
+        lp = KDP_DIR / slug / "listing.json"
+        if not lp.exists():
+            continue
+        l = json.loads(lp.read_text())
+        pb = l.get("paperback", {})
+        heroes.append({
+            "slug": slug,
+            "title": l.get("title", slug),
+            "language": l.get("language", ""),
+            "series": (l.get("series") or {}).get("title"),
+            "ebook": {
+                "asin": l.get("asin"),
+                "live_status": l.get("live_status"),
+                "select": bool(l.get("kdp_select")),
+                "aplus": (l.get("aplus") or {}).get("status"),
+            },
+            "paperback": {
+                "submitted_at": pb.get("submitted_at"),
+                "price_usd": pb.get("price_usd"),
+                "status": "IN_REVIEW" if pb.get("submitted_at") else None,
+            },
+            "free_promo": l.get("free_promo"),
+            "promo_days_left": cfg["promo_days_left"].get(slug),
+            "mtd_downloads": mtd.get(l.get("asin"), 0),
+            "amazon_url": f"https://www.amazon.com/dp/{l.get('asin')}" if l.get("asin") else None,
+        })
+
+    # live counts across the whole shelf
+    live_ebooks = 0
+    for lp in KDP_DIR.glob("*/listing.json"):
+        try:
+            if json.loads(lp.read_text()).get("live_status") == "LIVE":
+                live_ebooks += 1
+        except Exception:
+            continue
+
+    events = []
+    for ev in cfg["events"]:
+        d0 = datetime.strptime(ev["date"], "%Y-%m-%d").date()
+        d1 = datetime.strptime(ev.get("end", ev["date"]), "%Y-%m-%d").date()
+        state = "done" if (ev.get("done") or d1 < today) else ("today" if d0 <= today <= d1 else "upcoming")
+        events.append({**ev, "state": state})
+
+    return {
+        "strategy_name": cfg["strategy_name"],
+        "checkpoint": cfg["checkpoint"],
+        "days_to_checkpoint": (datetime.strptime(cfg["checkpoint"], "%Y-%m-%d").date() - today).days,
+        "summary": {
+            "live_ebooks": live_ebooks,
+            "paperbacks_submitted": sum(1 for h in heroes if h["paperback"]["submitted_at"]),
+            "mtd_downloads": sum(mtd.values()),
+            "mtd_royalties_usd": round(mtd_royalties, 2),
+            "lifetime_revenue_usd": round(lifetime, 2),
+        },
+        "heroes": heroes,
+        "timeline": events,
+        "actions_bui": cfg["actions_bui"],
+    }
+
+
 @app.get("/api/profit/portfolio")
 async def profit_portfolio(request: Request):
     """Return portfolio-level traction and estimated revenue analytics."""

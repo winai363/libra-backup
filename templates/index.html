@@ -49,7 +49,7 @@
       <div class="flex items-center justify-between gap-3">
         <div>
           <h1 class="text-xl font-bold text-amber-400">Libra Command Center</h1>
-          <p class="text-[11px] text-slate-500">KDP AutoPublisher · สร้าง ขาย และเรียนรู้จากยอดจริง</p>
+          <p class="text-[11px] text-slate-500">Depth Loop · เจาะลึก 5 เล่มฮีโร่ให้ขายได้จริง (พักการผลิตเล่มใหม่)</p>
         </div>
         <div class="flex gap-2">
           <a href="/libra/status" class="px-3 py-1.5 rounded-lg bg-sky-500/10 text-sky-300 text-xs font-medium hover:bg-sky-500/20">Pipeline</a>
@@ -75,6 +75,28 @@
   </div>
 
   <div class="max-w-6xl mx-auto px-4 pt-5">
+    <!-- ── Strategy board (depth loop) ── -->
+    <div id="strategy-view" class="hidden space-y-4 mb-6">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 class="text-lg font-bold text-white">🎯 <span id="strategy-name"></span></h2>
+        </div>
+        <span id="checkpoint-chip" class="px-3 py-1.5 rounded-full bg-amber-500/15 text-amber-300 text-xs font-bold"></span>
+      </div>
+      <div id="strategy-summary" class="grid grid-cols-2 lg:grid-cols-5 gap-3"></div>
+      <div id="hero-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+        <section class="lg:col-span-2 bg-slate-800 border border-slate-700 rounded-xl p-4">
+          <h3 class="font-bold text-white mb-3">📅 แผนเดือนนี้ (ฟรีเป็นหลัก · จ่ายเฉพาะถ้าบุ๋ยอนุมัติ)</h3>
+          <div id="strategy-timeline" class="space-y-2"></div>
+        </section>
+        <section class="bg-slate-800 border border-amber-700/40 rounded-xl p-4">
+          <h3 class="font-bold text-amber-300 mb-3">🙋 รอบุ๋ยทำ</h3>
+          <div id="bui-actions" class="space-y-2 text-sm"></div>
+        </section>
+      </div>
+    </div>
+
     <div id="overview-loading" class="text-sm text-slate-500">กำลังโหลดสถานะระบบ...</div>
     <div id="overview" class="hidden space-y-4">
       <div id="overview-cards" class="grid grid-cols-2 lg:grid-cols-4 gap-3"></div>
@@ -89,13 +111,13 @@
             <span id="automation-state" class="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs">AUTO ON</span>
           </div>
           <div class="mt-4 flex items-center gap-2 text-xs overflow-x-auto">
-            <span class="px-3 py-2 rounded-lg bg-slate-900 text-slate-300 whitespace-nowrap">หา niche ตามฤดูกาล</span>
+            <span class="px-3 py-2 rounded-lg bg-slate-900 text-slate-300 whitespace-nowrap">แจกฟรีแบบมีสื่อช่วยกระจาย</span>
             <span class="text-slate-600">→</span>
-            <span class="px-3 py-2 rounded-lg bg-slate-900 text-slate-300 whitespace-nowrap">สร้าง + QA</span>
+            <span class="px-3 py-2 rounded-lg bg-slate-900 text-slate-300 whitespace-nowrap">เก็บรีวิว</span>
             <span class="text-slate-600">→</span>
-            <span class="px-3 py-2 rounded-lg bg-slate-900 text-slate-300 whitespace-nowrap">ส่ง KDP</span>
+            <span class="px-3 py-2 rounded-lg bg-slate-900 text-slate-300 whitespace-nowrap">Pinterest ทบต้น</span>
             <span class="text-slate-600">→</span>
-            <span class="px-3 py-2 rounded-lg bg-amber-500/10 text-amber-300 whitespace-nowrap">เรียนรู้จากยอดขาย</span>
+            <span class="px-3 py-2 rounded-lg bg-amber-500/10 text-amber-300 whitespace-nowrap">ยอดขาย ebook + paperback</span>
           </div>
           <div id="queue-alert" class="hidden mt-4 rounded-lg border border-red-900/70 bg-red-950/30 p-3"></div>
         </section>
@@ -168,6 +190,77 @@ async function loadBooks() {
   if (overviewRes.ok) renderOverview(await overviewRes.json());
   updateCounts();
   renderBooks();
+  loadStrategy();
+}
+
+async function loadStrategy() {
+  const res = await fetch('api/strategy');
+  if (!res.ok) return;
+  const s = await res.json();
+  document.getElementById('strategy-view').classList.remove('hidden');
+  document.getElementById('strategy-name').textContent = s.strategy_name;
+  document.getElementById('checkpoint-chip').textContent =
+    `CHECKPOINT 31 ก.ค. · เหลือ ${s.days_to_checkpoint} วัน`;
+
+  const sm = s.summary;
+  document.getElementById('strategy-summary').innerHTML = [
+    ['Ebook LIVE', sm.live_ebooks + ' เล่ม', 'text-sky-300'],
+    ['Paperback ส่งแล้ว', sm.paperbacks_submitted + '/5 เล่ม', 'text-violet-300'],
+    ['ดาวน์โหลดเดือนนี้', sm.mtd_downloads, 'text-emerald-300'],
+    ['Royalty เดือนนี้', '$' + sm.mtd_royalties_usd, 'text-amber-300'],
+    ['รายได้ตลอดกาล', '$' + sm.lifetime_revenue_usd, 'text-slate-300'],
+  ].map(([label, val, color]) => `
+    <div class="metric-card border border-slate-700 rounded-xl p-3">
+      <p class="text-[11px] text-slate-400">${label}</p>
+      <p class="text-xl font-bold ${color}">${val}</p>
+    </div>`).join('');
+
+  document.getElementById('hero-cards').innerHTML = s.heroes.map(h => {
+    const pb = h.paperback.submitted_at
+      ? `<span class="px-2 py-0.5 rounded bg-violet-500/15 text-violet-300">PB $${h.paperback.price_usd} · รอตรวจ</span>`
+      : `<span class="px-2 py-0.5 rounded bg-slate-700 text-slate-400">PB —</span>`;
+    const promo = h.free_promo && h.free_promo.status === 'Running'
+      ? `<span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300">แจกฟรีถึง ${escapeHtml(String(h.free_promo.end).slice(5, 10))}</span>`
+      : `<span class="px-2 py-0.5 rounded bg-slate-700 text-slate-300">โปรเหลือ ${h.promo_days_left ?? '?'} วัน</span>`;
+    return `
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-3 flex gap-3">
+      <img src="api/books/${h.slug}/cover" class="w-16 h-24 object-cover rounded-md border border-slate-700" onerror="this.style.display='none'">
+      <div class="min-w-0 flex-1">
+        <p class="font-semibold text-white text-sm truncate" title="${escapeHtml(h.title)}">${escapeHtml(h.title)}</p>
+        <p class="text-[11px] text-slate-500">${escapeHtml(h.language)}${h.series ? ' · ซีรีส์ ' + escapeHtml(h.series) : ''}</p>
+        <div class="flex flex-wrap gap-1 mt-2 text-[11px]">
+          <span class="px-2 py-0.5 rounded ${h.ebook.live_status === 'LIVE' ? 'bg-sky-500/15 text-sky-300' : 'bg-red-500/15 text-red-300'}">Ebook ${escapeHtml(h.ebook.live_status || '?')}</span>
+          ${pb}${promo}
+          <span class="px-2 py-0.5 rounded bg-slate-700 text-slate-300">โหลดเดือนนี้ ${h.mtd_downloads}</span>
+        </div>
+        ${h.amazon_url ? `<a href="${h.amazon_url}" target="_blank" class="text-[11px] text-amber-400 hover:underline">ดูบน Amazon ↗</a>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('strategy-timeline').innerHTML = s.timeline.map(ev => {
+    const icon = ev.state === 'done' ? '✅' : (ev.state === 'today' ? '🔶' : '⬜');
+    const cls = ev.state === 'done' ? 'opacity-50' : (ev.state === 'today' ? 'border-amber-500/60 bg-amber-500/5' : '');
+    const owner = ev.owner === 'bui'
+      ? '<span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 text-[10px]">บุ๋ย</span>'
+      : ev.owner === 'decision'
+        ? '<span class="px-1.5 py-0.5 rounded bg-red-500/15 text-red-300 text-[10px]">ตัดสินใจ</span>'
+        : '<span class="px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-300 text-[10px]">AI อัตโนมัติ</span>';
+    const dates = ev.end ? `${ev.date.slice(5)} → ${ev.end.slice(5)}` : ev.date.slice(5);
+    const paid = ev.paid_optional ? `<span class="text-[10px] text-slate-500">💳 ${escapeHtml(ev.paid_optional)}</span>` : '';
+    return `
+    <div class="flex items-start gap-2 rounded-lg border border-slate-700 p-2 text-xs ${cls}">
+      <span>${icon}</span>
+      <div class="min-w-0">
+        <p class="text-slate-200">${escapeHtml(ev.title)} ${owner}</p>
+        <p class="text-[10px] text-slate-500">${dates} ${paid ? '· ' : ''}</p>${paid}
+      </div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('bui-actions').innerHTML = s.actions_bui.map(a =>
+    `<div class="flex items-start gap-2"><span>👉</span><p class="text-slate-300">${escapeHtml(a.text)}</p></div>`
+  ).join('');
 }
 
 function renderOverview(data) {
@@ -481,6 +574,7 @@ fetch('api/books').then(r => {
     r.json().then(data => {
       allBooks = data; updateCounts(); renderBooks();
       fetch('api/dashboard/overview').then(x => x.ok ? x.json() : null).then(x => { if (x) renderOverview(x); });
+      loadStrategy();
     });
   }
 });

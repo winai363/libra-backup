@@ -23,7 +23,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from playwright.async_api import async_playwright  # noqa: E402
 
 from kdp_upload import (  # noqa: E402 — module import is side-effect free
-    KDP_DIR, SESSION_FILE, logger, notify, set_ai_disclosure,
+    ENV, KDP_DIR, KDP_EMAIL, KDP_PASSWORD, SESSION_FILE, logger, notify,
+    set_ai_disclosure,
 )
 
 SHOTS = Path("/root/kdp/logs/paperback-shots")
@@ -136,6 +137,57 @@ async def inspect(slug):
             await browser.close()
 
 
+async def _reauth(page, slug):
+    """Amazon forces a fresh sign-in (max_auth_age=0) when creating a title.
+    Handle password re-entry + TOTP on the spot, then land on return_to URL."""
+    def _is_auth_page(url):
+        path = url.split("?", 1)[0]  # query params may embed 'signin' (openid)
+        return "/ap/" in path or "signin" in path
+    if not _is_auth_page(page.url):
+        return
+    logger.info("re-auth wall — signing in inline…")
+    try:
+        email_in = page.locator("input#ap_email, input[name='email']").first
+        if await email_in.is_visible(timeout=3000):
+            await email_in.fill(KDP_EMAIL)
+            try:
+                await page.locator("input#continue").first.click(timeout=3000)
+                await page.wait_for_timeout(2000)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    pw = page.locator("input[type='password'], input#ap_password").first
+    await pw.wait_for(state="visible", timeout=15000)
+    await pw.fill(KDP_PASSWORD)
+    await page.locator("input#signInSubmit, input[type='submit']").first.click()
+    await page.wait_for_timeout(5000)
+    body = (await page.inner_text("body")).lower()
+    if "two-step" in body or "verification" in body or "otp" in body:
+        import pyotp
+        secret = ENV.get("KDP_TOTP_SECRET", "")
+        if not secret:
+            raise RuntimeError("re-auth needs TOTP but KDP_TOTP_SECRET missing")
+        # device-choice page (radio) appears sometimes; code page other times
+        code_in = page.locator(
+            "input[name='otpCode'], input#auth-mfa-otpcode, input[autocomplete='one-time-code']").first
+        if not await code_in.is_visible():
+            try:
+                radio = page.locator("input[value*='TOTP'], input[value*='totp']").first
+                await radio.click(timeout=4000)
+            except Exception:
+                pass
+            await page.locator("input[type='submit'], button[type='submit']").first.click()
+            await code_in.wait_for(state="visible", timeout=15000)
+        await code_in.fill(pyotp.TOTP(secret).now())
+        await page.locator("input[type='submit'], button[type='submit']").first.click()
+        await page.wait_for_timeout(6000)
+    await _shot(page, slug, "reauth-done")
+    if _is_auth_page(page.url):
+        raise RuntimeError(f"re-auth did not clear: {page.url}")
+    logger.info(f"re-auth ok → {page.url}")
+
+
 async def _click_first(page, selectors, desc, timeout=15000):
     last = None
     for sel in selectors:
@@ -150,7 +202,7 @@ async def _click_first(page, selectors, desc, timeout=15000):
     raise RuntimeError(f"could not click {desc}: {last}")
 
 
-async def create_paperback(slug, price_usd, publish=True):
+async def create_paperback(slug, price_usd, publish=True, paths_override=None):
     book_dir = KDP_DIR / slug
     listing = json.loads((book_dir / "listing.json").read_text())
     if listing.get("paperback", {}).get("submitted_at"):
@@ -172,45 +224,130 @@ async def create_paperback(slug, price_usd, publish=True):
                 await page.wait_for_timeout(3500)
             except Exception:
                 pass
-            row = await _find_row(page, book_id)
-            if row is None:
-                raise RuntimeError("bookshelf row with 'Create paperback' not found")
+            # search narrowed the shelf — require EXACTLY our one title before
+            # touching a page-level button (kindle edit links count must be 1)
+            kindle_links = await page.locator('a[href*="/kindle/"][href*="/details"], a[href*="/kindle/"]').all()
+            ids = set()
+            for kl in kindle_links:
+                href = await kl.get_attribute("href") or ""
+                m = __import__("re").search(r"/kindle/([A-Z0-9]{8,})/", href)
+                if m:
+                    ids.add(m.group(1))
+            if ids != {book_id}:
+                raise RuntimeError(f"shelf not narrowed to our book (saw ids={ids}) — abort")
             await _shot(page, slug, "1-row")
-            await row.locator("a:has-text('Create paperback'), button:has-text('Create paperback')").first.click()
-            await page.wait_for_load_state("domcontentloaded")
-            await page.wait_for_timeout(5000)
+            # resume an existing paperback draft if the row already has one
+            pb_id = listing.get("paperback", {}).get("kdp_book_id")
+            if not pb_id:
+                hrefs = await page.evaluate(
+                    """() => Array.from(document.querySelectorAll('a'))
+                        .map(a => a.getAttribute('href') || '')
+                        .filter(h => /\\/paperback\\/[A-Z0-9]{8,}\\//.test(h))""")
+                m = [__import__("re").search(r"/paperback/([A-Z0-9]{8,})/", h).group(1) for h in hrefs]
+                pb_id = m[0] if m else None
+            if pb_id:
+                logger.info(f"resuming paperback draft {pb_id}")
+                await page.goto(f"https://kdp.amazon.com/en_US/title-setup/paperback/{pb_id}/content",
+                                wait_until="domcontentloaded", timeout=60000)
+                await page.wait_for_timeout(5000)
+                await _reauth(page, slug)
+            else:
+                await page.locator("button:has-text('Create paperback'), a:has-text('Create paperback')").first.click()
+                await page.wait_for_load_state("domcontentloaded")
+                await page.wait_for_timeout(5000)
+                await _reauth(page, slug)
+            await page.wait_for_timeout(3000)
+            if "/title-setup/paperback/" not in page.url:
+                raise RuntimeError(f"not on paperback setup page: {page.url}")
+            m = __import__("re").search(r"/paperback/([A-Z0-9]{8,})/", page.url)
+            if m:
+                listing.setdefault("paperback", {})["kdp_book_id"] = m.group(1)
+                (book_dir / "listing.json").write_text(
+                    json.dumps(listing, ensure_ascii=False, indent=2))
             logger.info(f"paperback setup url: {page.url}")
             await _shot(page, slug, "2-details")
 
-            # ── DETAILS TAB (metadata pre-copied from the ebook by KDP) ────
-            await set_ai_disclosure(page)
-            # some flows require explicitly confirming ownership/rights radio —
-            # already answered on the ebook, normally pre-filled.
-            await _shot(page, slug, "3-details-filled")
-            await _click_first(page, [
-                "#save-and-continue-announce",
-                "button:has-text('Save and Continue')",
-                "span.a-button-inner input[type='submit']",
-            ], "Save and Continue (details)")
-            await page.wait_for_timeout(8000)
+            on_details = "/details" in page.url.split("?")[0]
+            if not on_details:
+                logger.info("landed on content tab — details already complete, skipping")
+            else:
+                # ── DETAILS TAB (metadata pre-copied from the ebook) ───────
+                # categories do NOT carry over ("Add at least one new category
+                # to continue") — apply via the proven 3-category modal driver
+                # (fuzzy matcher survives Kindle-tree vs print-tree naming)
+                if listing.get("paperback", {}).get("categories_done"):
+                    logger.info("categories already applied on a previous run — skip")
+                else:
+                    from kdp_categories import set_categories
+                    cats = paths_override or listing.get("paperback", {}).get("categories") \
+                        or listing.get("categories", [])
+                    applied = await set_categories(page, cats, logger=logger)
+                    logger.info(f"paperback categories applied: {applied}")
+                    if not applied:
+                        raise RuntimeError("no category could be applied on paperback details")
+                    listing.setdefault("paperback", {})["categories_done"] = applied
+                    (book_dir / "listing.json").write_text(
+                        json.dumps(listing, ensure_ascii=False, indent=2))
+                await set_ai_disclosure(page)
+                await _shot(page, slug, "3-details-filled")
+                await _click_first(page, [
+                    "#save-and-continue-announce",
+                    "button:has-text('Save and Continue')",
+                    "span.a-button-inner input[type='submit']",
+                ], "Save and Continue (details)")
+                await page.wait_for_timeout(8000)
+                body = await page.inner_text("body")
+                if "Add at least one new category" in body:
+                    await _shot(page, slug, "ERROR-details-validation")
+                    raise RuntimeError("details validation still failing (categories)")
             await _shot(page, slug, "4-content")
 
             # ── CONTENT TAB ────────────────────────────────────────────────
-            # free KDP ISBN
-            try:
-                await _click_first(page, [
-                    "button:has-text('Assign me a free KDP ISBN')",
-                    "input[value*='free KDP ISBN']",
-                    "a:has-text('Assign me a free KDP ISBN')",
-                ], "free ISBN", timeout=8000)
-                await page.wait_for_timeout(2500)
-                # confirm modal if present
+            # free KDP ISBN — radio "Get a free KDP ISBN" then button "Assign ISBN"
+            body = await page.inner_text("body")
+            if "assigned a free KDP ISBN" in body:
+                logger.info("ISBN already assigned — skip")
+            elif "Assign ISBN" in body:
                 try:
-                    await page.locator("button:has-text('Assign ISBN'), input[type='button'][value*='Assign']").first.click(timeout=4000)
+                    await page.locator("text=Get a free KDP ISBN").first.click(timeout=5000)
+                    await page.wait_for_timeout(1000)
                 except Exception:
                     pass
-            except RuntimeError:
-                logger.info("free-ISBN control not found (maybe already assigned)")
+                await _click_first(page, [
+                    "button:has-text('Assign ISBN')",
+                    "input[value='Assign ISBN']",
+                    ".a-button:has-text('Assign ISBN')",
+                ], "Assign ISBN", timeout=10000)
+                # confirmation modal "Free KDP ISBN" — the confirm button is the
+                # LAST 'Assign ISBN' control on the page (section button is first)
+                try:
+                    await page.locator("text=Free KDP ISBN").first.wait_for(state="visible", timeout=8000)
+                    await page.wait_for_timeout(800)
+                    # button lives in shadow DOM — role locator pierces it and
+                    # only matches accessible (visible) nodes
+                    try:
+                        await page.get_by_role("button", name="Assign ISBN").last.click(timeout=6000)
+                        logger.info("ISBN modal confirmed via role locator")
+                    except Exception:
+                        # last resort: coordinate click on the modal button
+                        # (stable KDP modal layout at 1280x720 viewport)
+                        await page.mouse.click(1053, 417)
+                        logger.info("ISBN modal confirmed via coordinate click")
+                except Exception as e:
+                    logger.info(f"ISBN confirm modal handling: {e}")
+                assigned = False
+                for _ in range(18):
+                    await page.wait_for_timeout(5000)
+                    body = await page.inner_text("body")
+                    if "assigned a free KDP ISBN" in body or "ISBN: 979" in body:
+                        assigned = True
+                        break
+                if not assigned:
+                    await _shot(page, slug, "ERROR-isbn")
+                    raise RuntimeError("ISBN still unassigned after clicking Assign")
+                logger.info("ISBN assigned")
+            else:
+                logger.info("ISBN section shows no Assign button (already assigned)")
             await _shot(page, slug, "5-isbn")
 
             # print options: defaults are B&W on white, 6x9, no bleed, matte —
@@ -220,23 +357,73 @@ async def create_paperback(slug, price_usd, publish=True):
                 if want.lower() not in body.lower():
                     logger.warning(f"print option not showing default: {want!r}")
 
-            # upload manuscript
-            files = page.locator("input[type='file']")
-            await files.nth(0).set_input_files(str(interior))
-            logger.info("manuscript uploading…")
-            await page.wait_for_timeout(5000)
-            ok = False
-            for _ in range(60):  # up to 10 min
-                body = await page.inner_text("body")
-                if "Manuscript uploaded successfully" in body:
-                    ok = True
-                    break
-                if "error" in body.lower() and "manuscript" in body.lower():
-                    break
-                await page.wait_for_timeout(10000)
-            await _shot(page, slug, "6-manuscript")
-            if not ok:
-                raise RuntimeError("manuscript upload did not confirm")
+            # dismiss a stuck "Uploading…" modal from any previous run
+            try:
+                await page.locator("button:has-text('Cancel Upload')").first.click(timeout=3000)
+                await page.wait_for_timeout(2000)
+                logger.info("cancelled a stale upload modal")
+            except Exception:
+                pass
+
+            # upload manuscript via the framework's dedicated input + hidden
+            # status field (same ids as the proven ebook flow)
+            async def _asset_status(kind):
+                # print pages use data-print-book-publisher-* ids; cover has a
+                # separate "pdf-only" track for print-ready PDF covers
+                ids = {
+                    "interior": ["data-print-book-publisher-interior-asset-status"],
+                    "cover": ["data-print-book-publisher-cover-pdf-only-asset-status",
+                              "data-print-book-publisher-cover-asset-status"],
+                }[kind]
+                return await page.evaluate(
+                    "(ids) => ids.map(i => { const el = document.getElementById(i);"
+                    " return el ? el.value : ''; }).join('|')", ids)
+
+            async def _dump_upload_dom():
+                info = await page.evaluate(
+                    """() => ({
+                        fileInputs: [...document.querySelectorAll("input[type=file]")].map(i => i.id || i.name || '?'),
+                        statusEls: [...document.querySelectorAll("[id*=status i]")].map(i => `${i.id}=${(i.value||i.textContent||'').slice(0,40)}`).slice(0,20),
+                    })""")
+                logger.info(f"DOM dump: {info}")
+
+            async def _upload_asset(kind, path, shotname, success_text, max_rounds):
+                """kind: 'interior'|'cover'. Retries around KDP's transient
+                'We're Sorry' upload-service failures."""
+                for attempt in range(1, 4):
+                    body = await page.inner_text("body")
+                    if success_text in body or "SUCCESS" in await _asset_status(kind):
+                        logger.info(f"{kind} already uploaded — skip")
+                        return
+                    if "We're Sorry" in body:
+                        logger.warning(f"{kind}: 'We're Sorry' modal — reloading page")
+                        await page.reload(wait_until="domcontentloaded")
+                        await page.wait_for_timeout(6000)
+                    sel = ("#data-print-book-publisher-interior-file-upload-AjaxInput"
+                           if kind == "interior" else
+                           "#data-print-book-publisher-cover-pdf-only-file-upload-AjaxInput")
+                    inp = page.locator(sel)
+                    if not await inp.count():
+                        inp = page.locator("input[type='file']").first if kind == "interior" \
+                            else page.locator("input[type='file']").last
+                    await inp.set_input_files(str(path))
+                    logger.info(f"{kind} uploading… (attempt {attempt})")
+                    for _ in range(max_rounds):
+                        await page.wait_for_timeout(10000)
+                        st = await _asset_status(kind)
+                        body = await page.inner_text("body")
+                        if "SUCCESS" in st or success_text in body:
+                            await _shot(page, slug, shotname)
+                            logger.info(f"{kind} uploaded ✓")
+                            return
+                        if "ERROR" in st or "We're Sorry" in body:
+                            break
+                    await _shot(page, slug, f"{shotname}-retry{attempt}")
+                await _dump_upload_dom()
+                raise RuntimeError(f"{kind} upload failed after 3 attempts")
+
+            await _upload_asset("interior", interior, "6-manuscript",
+                                "Manuscript uploaded successfully", 90)
 
             # cover: choose "upload a cover you already have" radio, then file
             try:
@@ -244,19 +431,8 @@ async def create_paperback(slug, price_usd, publish=True):
                 await page.wait_for_timeout(1500)
             except Exception:
                 logger.info("cover-choice radio not found (may default to upload)")
-            n = await files.count()
-            await files.nth(n - 1).set_input_files(str(cover))
-            logger.info("cover uploading…")
-            ok = False
-            for _ in range(36):
-                body = await page.inner_text("body")
-                if "Cover uploaded successfully" in body:
-                    ok = True
-                    break
-                await page.wait_for_timeout(10000)
-            await _shot(page, slug, "7-cover")
-            if not ok:
-                raise RuntimeError("cover upload did not confirm")
+            await _upload_asset("cover", cover, "7-cover",
+                                "Cover uploaded successfully", 60)
 
             # previewer (mandatory before publish)
             await _click_first(page, [
@@ -285,11 +461,17 @@ async def create_paperback(slug, price_usd, publish=True):
                 raise RuntimeError("previewer Approve never appeared")
             await page.wait_for_timeout(6000)
 
+            # print flow asks the AI-tools disclosure on the CONTENT tab
+            await set_ai_disclosure(page, require_selections=True)
             await _click_first(page, [
                 "#save-and-continue-announce",
                 "button:has-text('Save and Continue')",
             ], "Save and Continue (content)")
             await page.wait_for_timeout(10000)
+            body = await page.inner_text("body")
+            if "Specify if you used AI tools" in body:
+                await _shot(page, slug, "ERROR-ai-disclosure")
+                raise RuntimeError("AI disclosure still unanswered on content tab")
             await _shot(page, slug, "9-pricing")
 
             # ── PRICING TAB ────────────────────────────────────────────────
@@ -360,6 +542,9 @@ if __name__ == "__main__":
         price = 9.99
         if "--price" in sys.argv:
             price = float(sys.argv[sys.argv.index("--price") + 1])
+        paths = None
+        if "--paths" in sys.argv:
+            paths = [p.strip() for p in sys.argv[sys.argv.index("--paths") + 1].split(";") if p.strip()]
         publish = "--no-publish" not in sys.argv
-        ok = asyncio.run(create_paperback(slug, price, publish=publish))
+        ok = asyncio.run(create_paperback(slug, price, publish=publish, paths_override=paths))
         sys.exit(0 if ok else 1)

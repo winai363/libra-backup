@@ -147,6 +147,15 @@ def build_paperback_pdf(slug: str, force: bool = False) -> Path:
 \urlstyle{same}
 \Urlmuskip=0mu plus 3mu
 
+% --- No overfull lines into KDP margins (previewer rejects them) ---
+\sloppy
+\setlength{\emergencystretch}{3em}
+% ragged-right chapter/section titles so long bold headings wrap instead of
+% protruding into the margin (KDP "insufficient gutter" error)
+\titleformat{\chapter}[display]{\normalfont\huge\bfseries\RaggedRight}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titleformat{\section}{\normalfont\Large\bfseries\RaggedRight}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalfont\large\bfseries\RaggedRight}{\thesubsection}{1em}{}
+
 % --- Readable body text ---
 \microtypesetup{protrusion=true,expansion=false}
 

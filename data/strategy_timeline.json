@@ -1,6 +1,6 @@
 {
   "checkpoint": "2026-07-31",
-  "strategy_name": "Depth Loop — 5 เล่มฮีโร่ (หยุดผลิตเล่มใหม่ / เทแรงใส่การกระจาย)",
+  "strategy_name": "Depth Loop — 5 เล่มฮีโร่ · เดือนนี้ทดลองช่องทางฟรีล้วน (ตัดสินเรื่องจ่ายเงินสิ้นเดือน)",
   "hero_slugs": [
     "adhd-self-help-adults-es",
     "adhd-adults-workbook-es",
@@ -16,22 +16,85 @@
     "easy-taxes-self-employed-spain": 5
   },
   "events": [
-    {"date": "2026-07-05", "title": "Paperback 4 เล่มฮีโร่ ส่งเข้า KDP + โปรไฟล์นักเขียนสมบูรณ์", "owner": "auto", "done": true},
-    {"date": "2026-07-06", "title": "โปรแจกฟรีรอบปัจจุบันจบ (TDAH lead + ADHS เยอรมัน)", "owner": "auto"},
-    {"date": "2026-07-07", "title": "ลดราคา ebook เล่มนำ $5.99→$2.99 (cron 15:00 — เช็ค set_price.log)", "owner": "auto"},
-    {"date": "2026-07-08", "title": "รู้ผลตรวจ paperback 4 เล่ม (≤72 ชม.)", "owner": "auto"},
-    {"date": "2026-07-10", "title": "เช็คผล A+ Content moderation 40 เล่ม", "owner": "auto"},
-    {"date": "2026-07-06", "end": "2026-07-31", "title": "พิน Pinterest วันละ 2-3 ชิ้น (downloads/kdp-pins)", "owner": "bui"},
-    {"date": "2026-07-12", "title": "สมัคร LovelyBooks (ฟรี) เตรียมรอบอ่านเล่มเยอรมัน", "owner": "bui"},
-    {"date": "2026-07-15", "end": "2026-07-19", "title": "แจกฟรี: Cuaderno de Ejercicios + โพสต์ r/FreeEBOOKS", "owner": "auto", "paid_optional": "Ebrolis €15-30 ถ้าอนุมัติงบ"},
-    {"date": "2026-07-22", "end": "2026-07-26", "title": "แจกฟรี: Enfoque, Trabajo y Relaciones + Reddit", "owner": "auto", "paid_optional": "Ebrolis €15-30 ถ้าอนุมัติงบ"},
-    {"date": "2026-07-25", "end": "2026-07-26", "title": "แจกฟรี: ADHS เยอรมัน (2 วันสุดท้าย) + LovelyBooks", "owner": "auto", "paid_optional": "xtme.de €19 ถ้าอนุมัติงบ"},
-    {"date": "2026-07-29", "end": "2026-08-02", "title": "แจกฟรี: คู่มือภาษีสเปน + Reddit", "owner": "auto", "paid_optional": "Ebrolis €15-30 ถ้าอนุมัติงบ"},
-    {"date": "2026-07-31", "title": "🔖 CHECKPOINT — ตัดสินทิศทางด้วยตัวเลขจริง (ยอดขาย/รีวิว/KU)", "owner": "decision"}
+    {
+      "date": "2026-07-05",
+      "title": "Paperback 4 เล่มฮีโร่ ส่งเข้า KDP + โปรไฟล์นักเขียนสมบูรณ์",
+      "owner": "auto",
+      "done": true
+    },
+    {
+      "date": "2026-07-06",
+      "title": "โปรแจกฟรีรอบปัจจุบันจบ (TDAH lead + ADHS เยอรมัน)",
+      "owner": "auto"
+    },
+    {
+      "date": "2026-07-07",
+      "title": "ลดราคา ebook เล่มนำ $5.99→$2.99 (cron 15:00 — เช็ค set_price.log)",
+      "owner": "auto"
+    },
+    {
+      "date": "2026-07-08",
+      "title": "รู้ผลตรวจ paperback 4 เล่ม (≤72 ชม.)",
+      "owner": "auto"
+    },
+    {
+      "date": "2026-07-10",
+      "title": "เช็คผล A+ Content moderation 40 เล่ม",
+      "owner": "auto"
+    },
+    {
+      "date": "2026-07-06",
+      "end": "2026-07-31",
+      "title": "พิน Pinterest วันละ 2-3 ชิ้น (downloads/kdp-pins)",
+      "owner": "bui"
+    },
+    {
+      "date": "2026-07-12",
+      "title": "สมัคร LovelyBooks (ฟรี) เตรียมรอบอ่านเล่มเยอรมัน",
+      "owner": "bui"
+    },
+    {
+      "date": "2026-07-15",
+      "end": "2026-07-19",
+      "title": "แจกฟรี: Cuaderno de Ejercicios + โพสต์ r/FreeEBOOKS",
+      "owner": "auto"
+    },
+    {
+      "date": "2026-07-22",
+      "end": "2026-07-26",
+      "title": "แจกฟรี: Enfoque, Trabajo y Relaciones + Reddit",
+      "owner": "auto"
+    },
+    {
+      "date": "2026-07-25",
+      "end": "2026-07-26",
+      "title": "แจกฟรี: ADHS เยอรมัน (2 วันสุดท้าย) + LovelyBooks",
+      "owner": "auto"
+    },
+    {
+      "date": "2026-07-29",
+      "end": "2026-08-02",
+      "title": "แจกฟรี: คู่มือภาษีสเปน + Reddit",
+      "owner": "auto"
+    },
+    {
+      "date": "2026-07-31",
+      "title": "🔖 CHECKPOINT — วัดผลแผนฟรีล้วน (โหลด/รีวิว/ยอดขาย/KU) แล้วตัดสิน: จ่าย Ebrolis/xtme เดือน ส.ค. หรือแช่แข็ง",
+      "owner": "decision"
+    }
   ],
   "actions_bui": [
-    {"text": "พิน Pinterest วันละ 2-3 ชิ้น จาก FileBrowser → downloads → kdp-pins (แยกบอร์ดภาษา ES/DE)", "key": "pinterest"},
-    {"text": "ตัดสินงบเปิดตัวแบบจ่าย ~฿2,600 (Ebrolis×3 + xtme) — ไม่จ่ายก็เดินแผนฟรีได้ ดู downloads → kdp-launch-kit", "key": "budget"},
-    {"text": "สมัคร LovelyBooks.de (ฟรี) สำหรับรอบอ่านเล่มเยอรมัน — ขั้นตอนใน launch kit", "key": "lovelybooks"}
+    {
+      "text": "พิน Pinterest วันละ 2-3 ชิ้น จาก FileBrowser → downloads → kdp-pins (แยกบอร์ดภาษา ES/DE)",
+      "key": "pinterest"
+    },
+    {
+      "text": "สมัคร LovelyBooks.de (ฟรี) สำหรับรอบอ่านเล่มเยอรมัน — ขั้นตอนใน launch kit",
+      "key": "lovelybooks"
+    },
+    {
+      "text": "โพสต์วันแจกฟรีลง Reddit ตามข้อความสำเร็จรูปใน launch kit (r/FreeEBOOKS ฯลฯ)",
+      "key": "reddit"
+    }
   ]
 }

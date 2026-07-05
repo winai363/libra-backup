@@ -24,6 +24,19 @@ THRESHOLDS = {
 }
 
 
+def _num(value, default=0):
+    """Return a numeric value for KDP metrics that may be blank or 'n/a'."""
+    if value in (None, "", "n/a", "N/A", "—", "-"):
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+
 def load_history(slug: str) -> list:
     """Load feedback history for a book."""
     path = KDP_DIR / slug / "feedback-history.json"
@@ -50,10 +63,10 @@ def record_snapshot(slug: str, snapshot: dict) -> dict:
     # Compute deltas vs previous snapshot
     if history:
         prev = history[-1]
-        snapshot["delta_bsr"] = snapshot.get("bsr", 0) - prev.get("bsr", 0)
-        snapshot["delta_units"] = snapshot.get("units_7d", 0) - prev.get("units_7d", 0)
-        snapshot["delta_kenp"] = snapshot.get("kenp_7d", 0) - prev.get("kenp_7d", 0)
-        snapshot["delta_reviews"] = snapshot.get("reviews_count", 0) - prev.get("reviews_count", 0)
+        snapshot["delta_bsr"] = _num(snapshot.get("bsr")) - _num(prev.get("bsr"))
+        snapshot["delta_units"] = _num(snapshot.get("units_7d")) - _num(prev.get("units_7d"))
+        snapshot["delta_kenp"] = _num(snapshot.get("kenp_7d")) - _num(prev.get("kenp_7d"))
+        snapshot["delta_reviews"] = _num(snapshot.get("reviews_count")) - _num(prev.get("reviews_count"))
     else:
         snapshot["delta_bsr"] = 0
         snapshot["delta_units"] = 0
@@ -84,19 +97,19 @@ def analyze(slug: str) -> dict:
     latest = history[-1]
 
     # BSR check
-    bsr = latest.get("bsr", 0)
+    bsr = _num(latest.get("bsr"))
     if bsr > THRESHOLDS["rank_warning_threshold"]:
         flags.append(f"LOW_VISIBILITY: BSR {bsr:,} > {THRESHOLDS['rank_warning_threshold']:,}")
         recommendations.append("Review keywords and categories — book has very low visibility")
 
     # 7-day impressions
-    total_impressions_7d = sum(s.get("impressions_7d", 0) for s in recent_7d)
+    total_impressions_7d = sum(_num(s.get("impressions_7d")) for s in recent_7d)
     if total_impressions_7d < THRESHOLDS["min_impressions_7d"] and len(recent_7d) > 0:
         flags.append(f"LOW_IMPRESSIONS: {total_impressions_7d} impressions in 7 days")
         recommendations.append("Consider A/B testing title/subtitle or adding backend keywords")
 
     # 30-day sales
-    total_units_30d = sum(s.get("units_7d", 0) for s in recent_30d)
+    total_units_30d = sum(_num(s.get("units_7d")) for s in recent_30d)
     pub_date = history[0]["date"]
     days_published = (today - date.fromisoformat(pub_date)).days
     if days_published >= 30 and total_units_30d < THRESHOLDS["min_units_30d"]:
@@ -104,20 +117,20 @@ def analyze(slug: str) -> dict:
         recommendations.append("Evaluate price point — consider temporary discount or KDP Select enrollment")
 
     # KENP reads
-    total_kenp_30d = sum(s.get("kenp_7d", 0) for s in recent_30d)
+    total_kenp_30d = sum(_num(s.get("kenp_7d")) for s in recent_30d)
     if days_published >= 30 and total_kenp_30d < THRESHOLDS["min_kenp_30d"]:
         flags.append(f"LOW_KENP: {total_kenp_30d} KENP reads in 30 days")
         recommendations.append("Consider running a KDP countdown deal to boost Kindle Unlimited enrollment")
 
     # Review rating
-    avg_rating = latest.get("avg_rating", 0)
+    avg_rating = _num(latest.get("avg_rating"))
     if avg_rating > 0 and avg_rating < THRESHOLDS["review_flag_threshold"]:
         flags.append(f"LOW_RATING: {avg_rating:.1f} stars")
         recommendations.append("Review reader comments — editorial/content quality may need addressing")
 
     # BSR trend (improving or declining)
     if len(history) >= 3:
-        bsr_trend = [s.get("bsr", 0) for s in history[-3:]]
+        bsr_trend = [_num(s.get("bsr")) for s in history[-3:]]
         if all(b > 0 for b in bsr_trend):
             if bsr_trend[-1] > bsr_trend[0] * 1.5:
                 flags.append("BSR_DECLINING: rank worsening over last 3 snapshots")

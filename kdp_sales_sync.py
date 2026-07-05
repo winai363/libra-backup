@@ -52,6 +52,34 @@ def _log(msg: str) -> None:
         pass
 
 
+def _tg(msg: str) -> None:
+    """Telegram notify (best-effort). Same .env pattern as scripts/free_promo_auto."""
+    import os
+    import urllib.parse
+    import urllib.request
+
+    def _env(k):
+        v = os.getenv(k)
+        if v:
+            return v
+        envf = Path(__file__).parent / ".env"
+        if envf.exists():
+            for line in envf.read_text().splitlines():
+                if line.startswith(k + "="):
+                    return line.split("=", 1)[1].strip()
+        return None
+
+    tok, chat = _env("TELEGRAM_BOT_TOKEN"), _env("TELEGRAM_CHAT_ID")
+    if not (tok and chat):
+        return
+    payload = urllib.parse.urlencode({"chat_id": chat, "text": msg}).encode()
+    try:
+        urllib.request.urlopen(
+            f"https://api.telegram.org/bot{tok}/sendMessage", data=payload, timeout=20)
+    except Exception as e:
+        _log(f"telegram failed: {e}")
+
+
 def _load_json(path: Path, default):
     try:
         if path.exists():
@@ -206,6 +234,7 @@ def sync(dry_run: bool = False) -> None:
     idx = build_indexes()
     new_baseline = {}
     recorded = 0
+    events = []
 
     for t in data["titles"]:
         asin = t.get("asin", "")
@@ -251,12 +280,17 @@ def sync(dry_run: bool = False) -> None:
             how = upsert_today_snapshot(slug, snap)
             _log(f"    {how} snapshot -> {slug}")
             recorded += 1
+            events.append(
+                f"• {slug}: +{d_orders} order, +{d_pages} KU pages, "
+                f"+{d_roy} {t.get('currency','')} (MTD {cur_orders}o/{cur_pages}p)")
 
     if not dry_run:
         state["titles"] = new_baseline
         state["updated_at"] = datetime.now().isoformat(timespec="seconds")
         STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
         _log(f"Done. {recorded} book(s) updated. State saved -> {STATE_FILE.name}")
+        if events:
+            _tg("📚 Libra KDP — ความเคลื่อนไหววันนี้:\n" + "\n".join(events))
     else:
         _log("Done (dry-run, nothing written).")
 

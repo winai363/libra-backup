@@ -1,4 +1,12 @@
 
+## 2026-07-05 — รับช่วงต่อ lock ค้าง: feedback loop + cover title depth + paperback prep
+
+- บุ๋ยให้ Codex ปลด lock เก่าของ Claude แล้วรับงาน `/root/libra` ต่อเอง; abort เฉพาะ coordination lock ไม่ล้าง diff.
+- แก้ `feedback_loop.py` ให้ metric จาก KDP ที่เป็น `n/a`/blank/`None` ไม่ทำให้ analyze/record snapshot crash; `feedback_loop.py --all` ผ่านกับข้อมูลจริง.
+- แก้ `cover_generator._fit()` กัน title ล้นลึกเกิน max_lines: เมื่อฟอนต์ถึงขั้นต่ำแล้วยังยาว จะ truncate บรรทัดสุดท้ายด้วย ellipsis แทนปล่อย block ชนส่วนอื่น.
+- เพิ่ม CLI usage guard ใน `scripts/kdp_paperback_upload.py` เพื่อไม่ crash เมื่อรันผิดแบบไม่ใส่ slug.
+- เพิ่ม test เฉพาะ `tests/test_feedback_loop.py` และ `tests/test_cover_generator.py`; verify `py_compile` ผ่าน, pytest ชุดสำคัญ 23 passed.
+
 ## 2026-07-03 (บ่าย) — A+ ครบ 40/40 + ปกใหม่ขึ้น KDP + Free Promo อัตโนมัติ ✅
 
 **A+ Content ครบ 40/40 เล่ม** — บั๊กที่แก้ระหว่างทาง (จำไว้ ทุกตัวมี pattern ใช้ซ้ำ):

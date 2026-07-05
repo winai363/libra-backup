@@ -548,6 +548,13 @@ def _fit(draw, text, path, var, index, raqm, maxw, max_h,
         size -= 4
     f = _font(path, min_s, var, index, raqm)
     lines = _wrap(draw, text, f, maxw)
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        if lines:
+            last = lines[-1].rstrip()
+            while last and _line_w(draw, last + "…", f) > maxw:
+                last = last[:-1].rstrip()
+            lines[-1] = (last or lines[-1][:1]) + "…"
     asc, desc = f.getmetrics()
     return f, lines, min_s, asc + desc, int(min_s * leading_f)
 

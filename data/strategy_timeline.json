@@ -18,7 +18,7 @@
   "events": [
     {
       "date": "2026-07-05",
-      "title": "Paperback 4 เล่มฮีโร่ ส่งเข้า KDP + โปรไฟล์นักเขียนสมบูรณ์",
+      "title": "✅ Paperback 4 เล่มฮีโร่ LIVE บน Amazon + โปรไฟล์นักเขียน WK Bui สมบูรณ์",
       "owner": "auto",
       "done": true
     },
@@ -30,11 +30,6 @@
     {
       "date": "2026-07-07",
       "title": "ลดราคา ebook เล่มนำ $5.99→$2.99 (cron 15:00 — เช็ค set_price.log)",
-      "owner": "auto"
-    },
-    {
-      "date": "2026-07-08",
-      "title": "รู้ผลตรวจ paperback 4 เล่ม (≤72 ชม.)",
       "owner": "auto"
     },
     {
@@ -93,7 +88,7 @@
       "key": "lovelybooks"
     },
     {
-      "text": "โพสต์วันแจกฟรีลง Reddit ตามข้อความสำเร็จรูปใน launch kit (r/FreeEBOOKS ฯลฯ)",
+      "text": "Reddit: ระบบเด้ง Telegram ให้ในวันแจกฟรี (16/22/25/29 ก.ค.) พร้อมข้อความ — บุ๋ยแค่ก๊อป→วางในแอป Reddit→Post (ล็อกอิน WK_Bui_Books + Join r/FreeEBOOKS ไว้)",
       "key": "reddit"
     }
   ]

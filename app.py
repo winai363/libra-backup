@@ -660,7 +660,8 @@ async def strategy_board(request: Request):
             "paperback": {
                 "submitted_at": pb.get("submitted_at"),
                 "price_usd": pb.get("price_usd"),
-                "status": "IN_REVIEW" if pb.get("submitted_at") else None,
+                "asin": pb.get("asin"),
+                "status": (pb.get("live_status") or ("IN_REVIEW" if pb.get("submitted_at") else None)),
             },
             "free_promo": l.get("free_promo"),
             "promo_days_left": cfg["promo_days_left"].get(slug),

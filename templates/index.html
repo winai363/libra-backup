@@ -216,9 +216,11 @@ async function loadStrategy() {
     </div>`).join('');
 
   document.getElementById('hero-cards').innerHTML = s.heroes.map(h => {
-    const pb = h.paperback.submitted_at
-      ? `<span class="px-2 py-0.5 rounded bg-violet-500/15 text-violet-300">PB $${h.paperback.price_usd} · รอตรวจ</span>`
-      : `<span class="px-2 py-0.5 rounded bg-slate-700 text-slate-400">PB —</span>`;
+    const pb = h.paperback.status === 'LIVE'
+      ? `<span class="px-2 py-0.5 rounded bg-violet-500/25 text-violet-200">PB $${h.paperback.price_usd} · LIVE</span>`
+      : h.paperback.submitted_at
+        ? `<span class="px-2 py-0.5 rounded bg-violet-500/15 text-violet-300">PB $${h.paperback.price_usd} · รอตรวจ</span>`
+        : `<span class="px-2 py-0.5 rounded bg-slate-700 text-slate-400">PB —</span>`;
     const promo = h.free_promo && h.free_promo.status === 'Running'
       ? `<span class="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300">แจกฟรีถึง ${escapeHtml(String(h.free_promo.end).slice(5, 10))}</span>`
       : `<span class="px-2 py-0.5 rounded bg-slate-700 text-slate-300">โปรเหลือ ${h.promo_days_left ?? '?'} วัน</span>`;

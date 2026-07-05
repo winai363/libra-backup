@@ -31,6 +31,35 @@ HIGH_RISK_KEYWORDS = [
     "trademark", "copyright", "official guide",
 ]
 
+# Prescriptive diet / meal-plan / weight-loss niches. Amazon's most-policed
+# category — generic AI books here get rejected with "might result in a
+# disappointing customer experience" regardless of internal QA. This is a HARD
+# NO-GO gate (not just a score penalty), because even a high-demand/low-comp
+# topic here is a rejection + account strike waiting to happen.
+# (Added 2026-07-03 after "Plan de Repas Protéiné" B0H5WD1JTV was rejected post-live.)
+DIET_HEALTH_HARD_BLOCK = [
+    # English
+    "meal plan", "meal prep", "diet plan", "diet guide", "diet book",
+    "weight loss", "fat loss", "lose weight", "belly fat", "shed pounds",
+    "keto", "ketogenic", "intermittent fasting", "detox", "cleanse",
+    "calorie deficit", "slim down", "metabolic diet", "fat burning",
+    # French
+    "plan de repas", "perte de poids", "maigrir", "jeûne intermittent",
+    "brûle-graisse", "brûler les graisses", "rééquilibrage alimentaire",
+    # Spanish
+    "plan de comidas", "pérdida de peso", "adelgazar", "quemar grasa",
+    "ayuno intermitente", "bajar de peso",
+    # German
+    "abnehmen", "ernährungsplan", "diätplan", "gewichtsverlust",
+    "fettverbrennung", "intervallfasten", "stoffwechsel",
+    # Italian
+    "piano alimentare", "perdita di peso", "dimagrire", "digiuno intermittente",
+    "bruciare grassi",
+    # Portuguese
+    "plano alimentar", "perda de peso", "emagrecer", "jejum intermitente",
+    "queimar gordura",
+]
+
 SCORING_PROMPT = """You are a KDP market intelligence analyst. Score this ebook topic using web search.
 
 Topic: {title}
@@ -213,6 +242,17 @@ def score_topic(topic: dict) -> dict:
         data["risks"] = list(data.get("risks", [])) + [
             f"No proven buyers: demand score {demand_score}/20 < required {DEMAND_MIN} "
             f"(top competitor BSR: {data['demand'].get('top_competitor_bsr', '?')})"
+        ]
+
+    # Hard block: prescriptive diet / meal-plan / weight-loss niches are
+    # rejected by Amazon as "disappointing customer experience" no matter how
+    # good our metrics look — never generate these.
+    diet_hits = [k for k in DIET_HEALTH_HARD_BLOCK if k in title_lower]
+    if diet_hits:
+        go_no_go = "NO-GO"
+        data["risks"] = list(data.get("risks", [])) + [
+            f"Diet/meal-plan/weight-loss niche (matched: {', '.join(diet_hits)}) — "
+            "Amazon rejects these as 'disappointing customer experience'. Hard block."
         ]
 
     result = {

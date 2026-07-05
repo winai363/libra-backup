@@ -166,7 +166,9 @@ def print_analysis(analysis: dict):
     print(f"Feedback: {analysis['slug']} ({analysis.get('days_published', '?')} days live)")
     if analysis.get("latest_snapshot"):
         s = analysis["latest_snapshot"]
-        print(f"  BSR: {s.get('bsr', 'n/a'):,}  |  Units 7d: {s.get('units_7d', 'n/a')}  "
+        bsr = s.get("bsr", "n/a")
+        bsr_str = f"{bsr:,}" if isinstance(bsr, int) else str(bsr)
+        print(f"  BSR: {bsr_str}  |  Units 7d: {s.get('units_7d', 'n/a')}  "
               f"|  KENP 7d: {s.get('kenp_7d', 'n/a')}  |  Rating: {s.get('avg_rating', 'n/a')}")
     if analysis["flags"]:
         print(f"  FLAGS: {'; '.join(analysis['flags'])}")

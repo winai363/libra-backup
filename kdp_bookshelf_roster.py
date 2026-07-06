@@ -117,14 +117,16 @@ def compute_alerts(report: dict) -> dict:
        - live_duplicates: a book with ≥2 LIVE rows (active cannibalization)
        - live_orphans:    a LIVE book on KDP with no local listing
     """
-    # Group every entry by the book it belongs to (winner.slug or duplicate_of).
-    groups: dict[str, list] = {}
+    # Group every entry by the (book, format) it belongs to (winner.slug or
+    # duplicate_of). Keep format in the key so an ebook + its paperback edition
+    # aren't mistaken for a cannibalizing duplicate.
+    groups: dict[tuple, list] = {}
     for e in report["entries"]:
         key = e.get("slug") or e.get("duplicate_of")
         if key:
-            groups.setdefault(key, []).append(e)
+            groups.setdefault((key, e.get("format", "ebook")), []).append(e)
     live_dups = {}
-    for slug, group in groups.items():
+    for (slug, _fmt), group in groups.items():
         live = [e for e in group if e["status"] == "LIVE"]
         if len(live) >= 2:
             live_dups[slug] = [e["asin"] for e in live]
@@ -280,11 +282,21 @@ def _title_match(api_tokens: set[str], listings: dict) -> tuple[str | None, floa
 def reconcile(rows: dict[str, str], dry_run: bool) -> dict:
     by_asin, _by_title, listings = build_indexes()
 
-    bookid_to_slug = {}
+    # asin/book_id -> (slug, format). build_indexes only knows the ebook (top-level
+    # asin), so add the paperback/hardcover editions recorded under their own sub-key
+    # — otherwise their LIVE bookshelf rows look like orphans (false "no listing" alert).
+    asin_index = {a: (s, "ebook") for a, s in by_asin.items()}
+    bookid_index = {}
     for slug, info in listings.items():
-        bid = _load_json(info["path"], {}).get("kdp_book_id")
-        if bid:
-            bookid_to_slug[bid] = slug
+        d = _load_json(info["path"], {})
+        if d.get("kdp_book_id"):
+            bookid_index[d["kdp_book_id"]] = (slug, "ebook")
+        for fmt in ("paperback", "hardcover"):
+            f = d.get(fmt) or {}
+            if f.get("asin"):
+                asin_index[f["asin"]] = (slug, fmt)
+            if f.get("kdp_book_id"):
+                bookid_index[f["kdp_book_id"]] = (slug, fmt)
 
     # Pass 1 — build a candidate per row with a match authority:
     #   3 = book_id exact, 2 = asin exact, 1 = title token-overlap, 0 = none.
@@ -296,11 +308,11 @@ def reconcile(rows: dict[str, str], dry_run: bool) -> dict:
         price_m = PRICE_RE.search(text)
         title_guess = text.split("  ")[0][:120]
 
-        slug, authority, score = None, 0, 0.0
-        if book_id in bookid_to_slug:
-            slug, authority = bookid_to_slug[book_id], 3
-        elif asin and asin in by_asin:
-            slug, authority = by_asin[asin], 2
+        slug, fmt, authority, score = None, "ebook", 0, 0.0
+        if book_id in bookid_index:
+            (slug, fmt), authority = bookid_index[book_id], 3
+        elif asin and asin in asin_index:
+            (slug, fmt), authority = asin_index[asin], 2
         else:
             slug, score = _title_match(_tokens(title_guess), listings)
             if slug:
@@ -311,6 +323,7 @@ def reconcile(rows: dict[str, str], dry_run: bool) -> dict:
             "asin": asin,
             "status": status,
             "slug": slug,
+            "format": fmt,
             "match_authority": authority,
             "match_score": round(score, 2),
             "price": float(price_m.group(1)) if price_m else None,
@@ -322,13 +335,15 @@ def reconcile(rows: dict[str, str], dry_run: bool) -> dict:
     # Pass 2 — resolve slug collisions. When several rows claim one slug (duplicate
     # uploads on KDP), the winner is highest authority, then most-real status, then
     # ASIN present. Losers are flagged as duplicates and NOT written.
-    by_slug: dict[str, list] = {}
+    # Collisions are per (slug, format): two ebook rows for one book is a real
+    # duplicate, but an ebook + its paperback are distinct legit editions.
+    by_slug: dict[tuple, list] = {}
     for e in entries:
         if e["slug"]:
-            by_slug.setdefault(e["slug"], []).append(e)
+            by_slug.setdefault((e["slug"], e["format"]), []).append(e)
 
     duplicates = []
-    for slug, group in by_slug.items():
+    for (slug, _fmt), group in by_slug.items():
         group.sort(
             key=lambda e: (e["match_authority"], _STATUS_RANK.get(e["status"], 0), bool(e["asin"])),
             reverse=True,
@@ -357,14 +372,16 @@ def reconcile(rows: dict[str, str], dry_run: bool) -> dict:
             if not dry_run:
                 lf = listings[e["slug"]]["path"]
                 d = _load_json(lf, {})
+                # Write ebook fields at top level; paperback/hardcover into their sub-key.
+                target = d if e["format"] == "ebook" else d.setdefault(e["format"], {})
                 changed = False
-                if e["asin"] and d.get("asin") != e["asin"]:
-                    d["asin"] = e["asin"]; changed = True
-                if d.get("kdp_book_id") != e["book_id"]:
-                    d["kdp_book_id"] = e["book_id"]; changed = True
-                if d.get("live_status") != e["status"]:
-                    d["live_status"] = e["status"]
-                    d["live_status_checked_at"] = fetched_at
+                if e["asin"] and target.get("asin") != e["asin"]:
+                    target["asin"] = e["asin"]; changed = True
+                if target.get("kdp_book_id") != e["book_id"]:
+                    target["kdp_book_id"] = e["book_id"]; changed = True
+                if target.get("live_status") != e["status"]:
+                    target["live_status"] = e["status"]
+                    target["live_status_checked_at"] = fetched_at
                     changed = True
                 if changed:
                     lf.write_text(json.dumps(d, indent=2, ensure_ascii=False), encoding="utf-8")

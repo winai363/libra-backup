@@ -38,6 +38,29 @@ LOG_FILE = LIBRA_DIR / "logs" / "sales-sync.log"
 BASE = "https://kdpreports.amazon.com"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
+# Approximate FX → USD (1 unit of currency = X USD). KDP reports royalties in
+# each marketplace's local currency; without conversion the non-USD catalog
+# (EU/UK/JP) records revenue_usd=0, so winner_signals / profit_tracker (which key
+# on revenue_usd) rank real sellers as if they earned nothing. Approximate
+# mid-2026 rates — update if they drift materially. Mirrors the static-rate
+# convention already in profit_tracker.py (THB_RATE).
+FX_TO_USD = {
+    "USD": 1.0, "EUR": 1.08, "GBP": 1.27, "JPY": 0.0067, "CAD": 0.73,
+    "AUD": 0.66, "INR": 0.012, "MXN": 0.058, "BRL": 0.18, "SEK": 0.095,
+    "PLN": 0.25,
+}
+
+
+def _to_usd(amount: float, currency: str) -> float:
+    """Convert a native-currency royalty to USD. Unknown currency -> 0.0 + warn
+    (a visible zero beats a silently wrong number)."""
+    cur = (currency or "").upper()
+    rate = FX_TO_USD.get(cur)
+    if rate is None:
+        _log(f"    !! unknown currency '{cur}' — revenue_usd left 0 (add to FX_TO_USD)")
+        return 0.0
+    return round(amount * rate, 2)
+
 
 # ---------- helpers ----------
 
@@ -268,7 +291,7 @@ def sync(dry_run: bool = False) -> None:
             "source": "kdp_sales_sync",
             "units_7d": d_orders,
             "kenp_7d": d_pages,
-            "revenue_usd": d_roy if t.get("currency") == "USD" else 0.0,
+            "revenue_usd": _to_usd(d_roy, t.get("currency", "")),
             "mtd_orders": cur_orders,
             "mtd_kenp": cur_pages,
             "mtd_royalties": cur_roy,

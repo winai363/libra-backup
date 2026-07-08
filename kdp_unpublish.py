@@ -33,18 +33,20 @@ SHOTS = LIBRA_DIR / "logs" / "unpublish-shots"
 
 # Targets approved by Bui — the duplicate strays to remove. The KEEPERS
 # (B0H4CPDDBY, B0H3FQ7BDQ) are intentionally NOT in this list.
+# Refreshed 2026-07-08 from bookshelf-roster.json: the 3 current DRAFT strays
+# (all never-published). Drafts can only be Archived (no Unpublish link on a draft).
 TARGETS = [
     {
-        "book_id": "A326HKKCYZ0HYN", "asin": "B0H38QFT5Z", "action": "unpublish",
-        "title_must_include": "Mocktail-Rezepte", "note": "sober-mocktails-de duplicate (LIVE)",
+        "book_id": "A1XSA2OH5H2JIY", "asin": "B0H365SW7S", "action": "archive",
+        "title_must_include": "Advanced Python", "note": "orphan generic draft (slug=None)",
     },
     {
-        "book_id": "A2X8DSDRZJFNWR", "asin": "B0H3FJNK8Z", "action": "unpublish",
-        "title_must_include": "Quaderno Creativo AI", "note": "ai-creative-workbook-italian duplicate (LIVE)",
+        "book_id": "A2X8DSDRZJFNWR", "asin": "B0H3FJNK8Z", "action": "archive",
+        "title_must_include": "Quaderno Creativo AI", "note": "ai-creative-workbook-italian duplicate (LIVE kept)",
     },
     {
-        "book_id": "AHBBNW4YUVMKR", "asin": "B0H372YXCY", "action": "archive",
-        "title_must_include": "Mocktail-Rezepte", "note": "sober-mocktails-de duplicate (DRAFT)",
+        "book_id": "A326HKKCYZ0HYN", "asin": "B0H38QFT5Z", "action": "archive",
+        "title_must_include": "Mocktail-Rezepte", "note": "sober-mocktails-de duplicate (LIVE kept)",
     },
 ]
 

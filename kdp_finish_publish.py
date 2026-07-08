@@ -1,7 +1,10 @@
 """
 Quick-fix: navigate directly to the pricing page for a book
 that has "Live with unpublished changes" and click Publish.
-Usage: python3 kdp_finish_publish.py <slug>
+Usage: python3 kdp_finish_publish.py <slug> [price]
+       price defaults to 2.99; pass the book's real list price (e.g. 4.99) so a
+       non-$2.99 title is not silently repriced when we only want to submit the
+       pending draft.
 """
 import asyncio
 import json
@@ -15,7 +18,7 @@ SESSION_FILE = Path("/root/libra/kdp_session.json")
 LOGIN_SCRIPT = Path("/root/libra/kdp_login_full.py")
 
 
-async def finish_publish(slug: str) -> bool:
+async def finish_publish(slug: str, price: str = "2.99") -> bool:
     book_dir = KDP_DIR / slug
     listing_file = book_dir / "listing.json"
     if not listing_file.exists():
@@ -112,10 +115,10 @@ async def finish_publish(slug: str) -> bool:
             try:
                 price_input = page.locator(sel).first
                 if await price_input.count() > 0 and await price_input.is_visible():
-                    await price_input.fill("2.99")
+                    await price_input.fill(price)
                     await price_input.press("Tab")
                     price_set = True
-                    print(f"[INFO] ✓ Price set via {sel}")
+                    print(f"[INFO] ✓ Price set via {sel} -> {price}")
                     break
             except Exception:
                 continue
@@ -126,10 +129,10 @@ async def finish_publish(slug: str) -> bool:
                 try:
                     name = await inp.get_attribute('name') or ''
                     if ('price' in name.lower() or 'list_price' in name.lower()) and await inp.is_visible():
-                        await inp.fill("2.99")
+                        await inp.fill(price)
                         await inp.evaluate('el => el.dispatchEvent(new Event("blur",{bubbles:true}))')
                         price_set = True
-                        print(f"[INFO] ✓ Price set via name={name}")
+                        print(f"[INFO] ✓ Price set via name={name} -> {price}")
                         break
                 except Exception:
                     continue
@@ -158,10 +161,14 @@ async def finish_publish(slug: str) -> bool:
                 await page.screenshot(path="/tmp/kdp_finish_publish_after.png")
                 print("[INFO] After-click screenshot saved to /tmp/kdp_finish_publish_after.png")
 
-                # Check for validation errors
-                error_box = page.locator('text="Please fix the highlighted error"')
+                # Check for validation errors. KDP's banner is "Please fix the
+                # highlighted error(s) to continue" — match as a SUBSTRING (an
+                # exact-text locator silently misses the "(s) to continue" suffix
+                # and reports a false success while the book never publishes).
+                error_box = page.get_by_text("Please fix the highlighted error", exact=False)
                 if await error_box.count() > 0:
-                    print("[ERROR] Validation errors on pricing page — see /tmp/kdp_finish_publish_after.png")
+                    print("[ERROR] Validation errors on pricing page — not published; "
+                          "see /tmp/kdp_finish_publish_after.png")
                     await browser.close()
                     return False
 
@@ -183,8 +190,9 @@ async def finish_publish(slug: str) -> bool:
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python3 kdp_finish_publish.py <slug>")
+        print("Usage: python3 kdp_finish_publish.py <slug> [price]")
         sys.exit(1)
     slug = sys.argv[1]
-    ok = asyncio.run(finish_publish(slug))
+    price = sys.argv[2] if len(sys.argv) > 2 else "2.99"
+    ok = asyncio.run(finish_publish(slug, price))
     sys.exit(0 if ok else 1)

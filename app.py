@@ -129,9 +129,16 @@ def build_dashboard_overview() -> dict:
     winners = get_winners()
     sales_state_file = KDP_DIR / "sales-sync-state.json"
     sales_state = {}
+    mtd_royalties = 0.0
+    mtd_orders_all_types = 0
+    mtd_kenp = 0
     if sales_state_file.exists():
         try:
             sales_state = json.loads(sales_state_file.read_text())
+            for row in sales_state.get("titles", {}).values():
+                mtd_royalties += float(row.get("royalties") or 0.0)
+                mtd_orders_all_types += int(row.get("orders") or 0)
+                mtd_kenp += int(row.get("kenp") or row.get("pagesRead") or 0)
         except (OSError, json.JSONDecodeError):
             pass
 
@@ -183,6 +190,10 @@ def build_dashboard_overview() -> dict:
             "units_30d": portfolio["summary"]["units_30d"],
             "revenue_30d_usd": portfolio["summary"]["estimated_revenue_30d_usd"],
             "revenue_30d_thb": portfolio["summary"]["estimated_revenue_30d_thb"],
+            "real_mtd_royalties_usd": round(mtd_royalties, 2),
+            "mtd_orders_all_types": mtd_orders_all_types,
+            "mtd_kenp": mtd_kenp,
+            "money_warning": "revenue_30d_usd is an estimate; real_mtd_royalties_usd is KDP money source of truth",
             "books_with_data": portfolio["summary"]["books_with_data"],
             "last_sync": sales_state.get("updated_at", ""),
         },
@@ -700,6 +711,26 @@ async def strategy_board(request: Request):
         "timeline": events,
         "actions_bui": cfg["actions_bui"],
     }
+
+
+@app.get("/api/distribution")
+async def distribution_dashboard_api(request: Request):
+    """Return the July distribution experiment report with money/free split."""
+    check_read(request)
+    from distribution_report import build_report
+    return build_report()
+
+
+@app.get("/distribution", response_class=HTMLResponse)
+async def distribution_dashboard_page(request: Request):
+    check_read(request)
+    from distribution_report import DOWNLOADS_HTML, build_report, render_html, write_outputs, write_chrome_guide
+    if DOWNLOADS_HTML.exists():
+        return HTMLResponse(DOWNLOADS_HTML.read_text(encoding="utf-8"))
+    report = build_report()
+    write_outputs(report)
+    write_chrome_guide(report)
+    return HTMLResponse(render_html(report))
 
 
 @app.get("/api/profit/portfolio")

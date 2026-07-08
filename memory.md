@@ -1,4 +1,62 @@
 
+## 2026-07-08 — Libra Distribution Dashboard + daily Telegram automation
+
+- บุ๋ย approve ให้ทำตามแผน 100% automation เท่าที่ทำได้ และเตรียมส่วนที่ต้องทำผ่าน Claude for Chrome. เพิ่ม `distribution_report.py` เป็น source กลางของรายงาน distribution: แยกเงินจริง KDP royalties ออกจาก orders/free downloads ชัดเจน, อ่าน hero books, free promo windows, LovelyBooks flags, Reddit schedule, และสร้าง today actions.
+- เพิ่มหน้าเว็บ/ไฟล์ให้ดูเอง: `/distribution` ใน Libra service, API `/api/distribution`, JSON `/root/libra/data/distribution-report.json`, HTML ดาวน์โหลดได้ที่ `/root/downloads/libra-distribution-dashboard.html`. หน้า HTML แสดงเงินจริง MTD, orders/downloads, free downloads เฉพาะ promo windows, KENP, LovelyBooks status, งานวันนี้ และกฎตัดสิน.
+- เพิ่ม field กันสับสนใน `/api/dashboard/overview`: `real_mtd_royalties_usd`, `mtd_orders_all_types`, `mtd_kenp`, `money_warning`. ห้ามใช้ `revenue_30d_usd` เป็นเงินจริง เพราะยังเป็น estimate จาก units/free downloads; เงินจริงตอนนี้จาก state/log = `$2.06`, tracked orders/downloads = `32`, KENP = `25`.
+- Automation: เพิ่ม `scripts/libra_distribution_report.py`; รันแล้วสร้าง report + Claude for Chrome guide ที่ `/root/downloads/kdp-pins/CLAUDE-CHROME-POSTING-GUIDE.md`; ส่ง Telegram ทดสอบสำเร็จ. ตั้ง cron system-level ทุกวัน `09:50` หลัง sales sync/promo report: `cd /root/libra && /usr/bin/python3 scripts/libra_distribution_report.py --send >> /root/libra/logs/distribution-report.log 2>&1`.
+- Claude for Chrome handoff: guide สั่งให้โพสต์พินจาก `downloads/kdp-pins` เท่านั้น (ไม่ใช่ Etsy `pinterest-batch2`), วันละ 2-3 พิน, ใช้ caption จาก `CAPTIONS.txt`, ใส่ลิงก์ Amazon ให้ตรงเล่ม; LovelyBooks 25-26 ก.ค. ให้ตอบใน Leserunde และชวนโหลดฟรีจาก Amazon ห้ามส่งไฟล์เอง.
+- Deploy/verify: `pytest tests/test_distribution_report.py tests/test_profit_tracker.py tests/test_feedback_loop.py tests/test_kdp_publish_confirmation.py -q` = 13 passed; `py_compile` ผ่าน; restart `libra.service` แล้ว active; curl `/distribution` HTTP 200 และ `/api/distribution` คืน `lovelybooks=ready`, `mtd_royalties_usd=2.06`, `mtd_kenp=25`. Telegram daily report ส่งจริงแล้ว 1 ครั้ง.
+
+## 2026-07-08 — correction: อัปเดต LovelyBooks ใน strategy timeline + ระวัง dashboard revenue estimate
+
+- บุ๋ยทักว่าข้อมูล LovelyBooks ในคำตอบยังเก่า ทั้งที่สำนักพิมพ์/ทีม LovelyBooks ตอบกลับมาแล้ว. ตรวจใหม่จาก actual source: `/root/lovelybooks/book_indexed.flag` = หน้านักเขียน WK Bui ขึ้นแล้ว, `/root/lovelybooks/leserunde_tool.flag` = `Aktion starten`, และ `/root/lovelybooks/shots/published.png` ถูกสร้าง 7 ก.ค. 16:12 แปลว่า Leserunde ohne Verlosung publish แล้ว.
+- Root cause ของคำตอบเก่า: `/root/libra/data/strategy_timeline.json` ยังมี event stale ว่า "สมัคร LovelyBooks 12 ก.ค." และ `/root/memory.md` ยังบอก "รอทีมตอบ 13-15 ก.ค."; dashboard `/api/strategy` จึงพาให้สรุปผิดถ้าไม่เปิด lovelybooks flags/logs. แก้แล้ว: timeline เป็น done วันที่ 7 ก.ค. และ action ของบุ๋ยเปลี่ยนเป็นตอบคอมเมนต์/ชวนโหลดฟรี 25-26 ก.ค.; root memory อัปเดตว่าไม่รอตอบแล้ว.
+- อ่าน Libra ใหม่ทั้งระบบ: `/api/strategy` summary = 41 live ebooks, 4 paperbacks submitted/live, MTD royalties $2.06, lifetime $4.12; roster actual ล่าสุด `/root/kdp/bookshelf-roster.json` fetched 14:07 = LIVE 45, orphan 0, duplicate 0. LovelyBooks ไม่ใช่งานค้างสมัครแล้ว.
+- ระวังตัวเลข dashboard/profit: `/api/profit/portfolio` ยังแสดง estimated revenue 30d $71.12 เพราะคำนวณจาก units/free downloads บางส่วนเหมือน paid; source of truth เงินจริงต้องยึด `kdp_sales_sync` log `royalties=2.0638560641 USD` วันที่ 8 ก.ค. อย่ารายงาน $71.12 เป็นเงินจริง.
+
+## 2026-07-08 — verify state + archive 3 junk drafts + commit FX fix (commit e3af667)
+
+**บุ๋ยสั่ง "ลุยตามคำแนะนำ แต่เช็คให้ชัวร์ก่อน" → verify แล้วลงมือ:**
+- **ตัวเลขยอดขายอ่านให้ถูก:** `kdp_sales_sync` log จะพิมพ์ `digitalOrders=115` แต่นั่นคือตัวนับ overview widget (คละแจกฟรี/ทุกตลาด) **ไม่ใช่เงิน**. เงินจริง = `totalRoyalties` = **$2.06 MTD ก.ค.**. per-title จริงมีแค่ 3 เล่ม (17+13+2 orders). อย่ารายงาน 115 เป็นยอดขาย.
+- **Archive 3 DRAFT strays** ด้วย `kdp_unpublish.py` (อัปเดต TARGETS ให้ตรง roster ปัจจุบัน, action=archive ทุกตัว เพราะ draft ไม่มีปุ่ม Unpublish): Advanced Python orphan (B0H365SW7S) + italian dup (B0H3FJNK8Z) + mocktails dup (B0H38QFT5Z). ตัวจริง LIVE เก็บครบ. verify: roster ใหม่ DRAFT=0 orphan=0 dup=0, LIVE ยัง 41.
+- **Commit FX fix ที่ค้าง** ใน `kdp_sales_sync.py` (session ก่อน 7ก.ค. เพิ่ม `FX_TO_USD`/`_to_usd` แต่ไม่ได้ commit) — กันรายได้ non-USD ถูกบันทึกเป็น $0 ใน winner_signals/profit_tracker.
+- **🐛 แก้บั๊ก roster false-alarm (commit 03e2501):** "4 เล่ม UNPUBLISHED" **เป็นข้อมูลผิด** — badge จริงบน KDP คือ "Live With unpublished changes" (เล่มยัง LIVE ขายอยู่ แค่มี draft edit ค้างไม่ submit). `classify_status` เช็ค `"unpublish" in t` ก่อน `"live"` เลยตีผิด. แก้ให้เช็ค "live" ก่อน → roster ตอนนี้ LIVE 45, UNPUBLISHED 0, backfill live_status กลับถูก. **บทเรียน: อย่าเชื่อ label ที่ derive มา ตรวจ badge ดิบก่อน.**
+- **⚠️ ค้าง (low prio):** 4 เล่มนั้นมี "unpublished changes" (Continue setup) = edit ค้างไม่ submit บน KDP — live version ขายปกติ ไม่กระทบรายได้ แต่ควรเคลียร์ (submit หรือ discard). น่าจะตกค้างจาก cover-v2 reupload 3ก.ค. ที่ save draft แต่ไม่ publish.
+- **(ข) toolkit paid vs free:** digitalOrders ใน dashboard **รวมยอดแจกฟรี** (126 orders แต่ royalty รวม $2.28 = $0.018/order เป็นไปไม่ได้ถ้า paid หมด). toolkit $2.99@70%=~$1.98/เล่ม, royalty=$1.98 → **ขายจริง ~1 เล่ม**, ที่เหลือ ~16 = แจกฟรี. เดือนนี้ทั้งพอร์ตขายจริง ≈ 1 เล่ม + KENP 71 หน้า. endpoint promotions/freePromo ไม่มี (คืน HTML).
+- **✅ security:** เพิ่ม `data/ebrolis_session.json` + `data/.lovely-profile/` เข้า .gitignore แล้ว (commit 8d2929d).
+
+## 2026-07-08 (บ่าย) — เคลียร์ "unpublished changes" 4 เล่ม + full context review + แผน distribution
+
+**เคลียร์ draft edit ค้าง (ผลจริง 1/4 — อย่ารายงานเกิน):** ใช้ `kdp_finish_publish.py <slug> [price]` (ไปหน้า pricing กด Publish ส่ง draft ค้าง).
+- ✅ `deducciones-fiscales-autonomos-espana-2026` — republish สำเร็จ ขึ้น "Updates in review" (เล่มนี้เคยติด Passkey error ตอน submit)
+- ❌ อีก 3 เล่ม (sleep-dutch, ai-productivity-homeoffice-de, cozy-romantasy) — ติด validation ในหน้า pricing ("Please complete this" 2 จุด = KDP Select/territory rights/ราคา primary market ไม่ stick ผ่าน automation React form). เล่มยัง LIVE ขายปกติ = cosmetic → **หยุด ไม่ไล่แก้บนเล่มที่ขายอยู่** (ค่า cosmetic ต่ำ เสี่ยงสูง + เดือนนี้ตั้งใจแตะน้อย)
+- **🐛 แก้ 2 บั๊กใน kdp_finish_publish (commit ล่าสุด):** (1) hardcode ราคา $2.99 → เพิ่ม arg `[price]` (homeoffice-de=$4.99 เกือบโดนลดราคา!); (2) เช็ค error ด้วย exact text `"Please fix the highlighted error"` แต่จริงเป็น `"...error(s) to continue"` → match ไม่เจอ = **รายงาน SUCCESS ปลอม**. แก้เป็น substring. **บทเรียน: tool บอก success ต้องดูภาพจริงยืนยัน (เคยเชื่อ log แล้วผิด).**
+- **ต้นตอ 3 เล่มที่เคลียร์ไม่ได้ = KDP "preorder was cancelled" state** (diagnostic 5 รอบ) → error 2 จุดไม่ผูกฟิลด์มาตรฐาน (ราคา/royalty/territory ครบหมด). ทำ auto ไม่คุ้ม/เสี่ยงบนเล่มที่ขายอยู่ → **หยุด รายงานบุ๋ย** (แก้มือ 2 นาที/เล่ม ถ้าอยากเรียบ). อย่าเสียเวลาไล่แก้อีกถ้าไม่มีคำสั่ง.
+
+**8ก.ค. — 30-Day Turnaround (จาก Antigravity) เริ่ม auto: review-link + free-book posts:**
+- **Verdict แผน 4 ข้อ:** #1 สุมไฟฟรี ✅ทำ · #2 ลิงก์รีวิวท้ายเล่ม ✅ROI สูงสุด (แก้ URL→per-marketplace) · #3 KENP page-flip ⚠️ข้าม (รายได้จิ๋ว+Amazon จับ manipulation+ต้องเล่มใหม่) · #4 A+ ไส้ใน ✅รอ A+ รอบแรกเคลียร์ ~14ก.ค.
+- **#2 สร้าง `scripts/add_review_link.py`** — inject ลิงก์ create-review **per-marketplace + localized CTA** (EN→.com, ES→.es, DE→.de ฯลฯ; ลิงก์ .com ตายสำหรับ 88% แคตตาล็อก) ลงหลัง heading รีวิวใน ebook.md + rebuild EPUB. **ทำ+verify แล้ว 10 เล่ม** (ฮีโร่ ES/DE + อังกฤษ) local — ลิงก์ฝังใน EPUB จริง. ⚠️ **ASIN รู้หลัง publish → tool นี้ต้องรัน post-publish** (template แก้ไม่ได้เพราะ write time ยังไม่มี ASIN).
+- **🔴 Re-upload ติด blocker:** `kdp_upload.py <slug> --update` (arg: slug ก่อน flag) → `require_quality_gate` เช็ค **paperback PDF content (หน้า/ตัวอักษร) เสมอ** แม้อัปแค่ ebook; easy-taxes มี paperback.pdf พัง (1หน้า/0char) เลยบล็อก. **ยังไม่ re-upload เล่มไหนขึ้น KDP** (live ไม่โดนแตะ). Proper fix (follow-up): ให้ `validate_book` ข้าม paperback CONTENT checks เมื่อ require_pdf=False หรือ regen paperback PDFs. **อย่า hack gate รีบๆ.** revert การแก้ gate ที่ไม่สำเร็จแล้ว.
+- **#1 `/root/downloads/kdp-freebook-posts.md`** — โพสต์ r/FreeEBOOKS+FB สำหรับเล่มอังกฤษที่ฟรีอยู่: freelance-designers (ถึง10ก.ค.), workflows-professionals (ถึง9ก.ค.), anxiety-men-40 (9-11). **งานบุ๋ยโพสต์เอง** (server IP โดนบล็อก).
+
+**8ก.ค. — Pinterest workflow: บุ๋ยเลือกใช้ Claude for Chrome (client-side) โพสต์พิน KDP:**
+- กฎ "Pinterest อัพมือเท่านั้น" = ห้าม **server automation** (session ใหม่+IP บอท = แบน). แต่ **Claude for Chrome (รันในเบราว์เซอร์บุ๋ยที่ login จริง) OK** — เสี่ยงต่ำ. ผม (server) สั่ง Chrome บุ๋ยไม่ได้ = เตรียม prompt ให้บุ๋ยวางเอง.
+- ⚠️ พินหนังสือ KDP จริงอยู่ `/root/downloads/kdp-pins/` (15 พิน 5 เล่ม + CAPTIONS.txt) — **ไม่ใช่** `pinterest-batch2` (นั่น Etsy!). เตรียม `kdp-pins/PIN-QUEUE-claude-chrome.md` (2 รอบ: workbook วันนี้ / focus พรุ่งนี้). ลิงก์: workbook=B0H6VB1SDX, focus=B0H6V4RNJ2.
+- ทางถาวร auto จริง = Pinterest API (ยังติด "Trial access pending" — เช็คว่าปลดล็อกยังถ้าบุ๋ยอยากให้ผมทำเองทั้งหมด).
+
+**8ก.ค. (เย็น) — Option 1: ตั้งวันแจกฟรีเล่มฮีโร่คู่ตัวขยายฟรี (บุ๋ยเลือก):**
+- แผน free-only เดิม = "holding pattern": เล่มฮีโร่ 4 เล่ม status `Planned-HOLD` (รอ paid stack ที่เลื่อนไป checkpoint) → ก.ค. ไม่มีข้อมูลเล่มฮีโร่. บุ๋ยเลือกจับคู่กับตัวขยาย**ฟรี**ที่มี.
+- **เพิ่ม `--start/--days/--force` ใน `free_promo_auto.py`** (เดิมตั้งได้แค่ "พรุ่งนี้+3วัน"); datepicker รองรับวันอนาคต/ข้ามเดือนอยู่แล้ว. `--force`+`--only` ข้าม auto-filter (has_sales/min-age) สำหรับ manual scheduling เจตนา (safety check ในฟอร์มยังทำงาน). commit แล้ว.
+- **ตั้งจริง verify แล้ว (ไม่ผูกเงิน):** workbook-es (adhd-adults-workbook-es) 15-19ก.ค. + focus-es (adhd-adults-focus-work-relationships-es) 22-26ก.ค. คู่ Pinterest; german (adhd-workbook-german-adults, เหลือ 2 วัน) 25-26ก.ค. คู่ LovelyBooks Leserunde. เก็บ promo เก่า german ไว้ใน `free_promo_history`.
+- **taxes (easy-taxes) ไม่ตั้ง** — ไม่มีตัวขยายฟรี (ไม่ใช่ ADHD/ไม่มี LovelyBooks) + มียอดขายแล้ว; รอบุ๋ยทำ tax Pinterest pins หรือรอ checkpoint.
+- ⚠️ **บุ๋ยต้องอัพ Pinterest batch2 ให้พินชี้ workbook-es โผล่ ~15-19ก.ค. และ focus-es ~22-26ก.ค.** (นี่คือตัวขยาย ถ้าไม่มีพิน = ฟรีเดี่ยว 2-7 โหลด). LovelyBooks 25-26 auto (watcher เตือนแล้ว).
+
+**บุ๋ยสั่ง "ทำทุกข้อ" (ก/ข/ค/ง) — ผลจริง:**
+- **(ก) เครื่องวัด:** ✅ Telegram watcher LovelyBooks (`/root/lovelybooks/check_book_indexed.py`+`check_leserunde_tool.py`) เดิมชี้ loom/.env (token 401 ตาย) → ชี้ `/root/libra/.env` (bot=Bui_libra_bot ใช้ได้) + var `TELEGRAM_CHAT_ID`; test ping เข้าแล้ว. royalty 35% ADHD lead ยังล็อค (2วันหลัง promo) — gate+cron retry จัดการ, flag ไว้. A+ 40 submitted 3ก.ค. เช็คจริง ~14ก.ค.
+- **(ค) artifact แผน:** Artifact tool ถูกปิด (don't-ask mode) → เซฟ HTML ที่ `/root/downloads/libra-distribution-plan.html` (เปิดผ่าน FileBrowser). ครบ: สถานะจริง/รากปัญหา 3ชั้น+โครงสร้าง/แผน A+B/คำถามพอร์ต/กฎห้ามข้าม.
+- **(ง) คำถามพอร์ต:** digital product ทั้งหมด (BuiBook ฿0/Etsy 0/KDP ~$4) ตัน distribution เหมือนกัน; ตัวทำเงินจริง=Shopee VDO เกาะไวรัล FB (สินค้า+ผู้ชมที่เดียวกัน). เสนอบุ๋ยคิด: ลงทุน distribution ให้ KDP (ES/DE) หรือถือ passive แล้วโยกโฟกัส — ตัดสินที่ checkpoint. **ยังไม่ทำเอง.**
+
 ## 2026-07-05 — รับช่วงต่อ lock ค้าง: feedback loop + cover title depth + paperback prep
 
 - บุ๋ยให้ Codex ปลด lock เก่าของ Claude แล้วรับงาน `/root/libra` ต่อเอง; abort เฉพาะ coordination lock ไม่ล้าง diff.

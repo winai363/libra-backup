@@ -133,9 +133,14 @@ async def shot(pg, name):
     print(f"  shot: {p.name}", flush=True)
 
 
-async def schedule_one(slug: str, bid: str, title: str, dry_run: bool) -> bool:
-    start = date.today() + timedelta(days=1)
-    end = start + timedelta(days=PROMO_DAYS - 1)
+async def schedule_one(slug: str, bid: str, title: str, dry_run: bool,
+                       start=None, days=None) -> bool:
+    # start/days let us place a promo on an explicit future window (e.g. align a
+    # hero book's free days with a Pinterest/LovelyBooks push) instead of the
+    # default "tomorrow, PROMO_DAYS long". The datepicker below already navigates
+    # arbitrary months via its month/year dropdowns.
+    start = start or (date.today() + timedelta(days=1))
+    end = start + timedelta(days=(days or PROMO_DAYS) - 1)
     async with async_playwright() as p:
         b = await p.chromium.launch(
             headless=True, args=["--disable-blink-features=AutomationControlled"])
@@ -322,7 +327,31 @@ def main():
     only = None
     if "--only" in sys.argv:
         only = set(sys.argv[sys.argv.index("--only") + 1].split(","))
-    todo = candidates(only)
+    # explicit window (manual hero-book scheduling); default stays tomorrow/PROMO_DAYS
+    start_arg = None
+    if "--start" in sys.argv:
+        from datetime import datetime as _dt
+        start_arg = _dt.strptime(sys.argv[sys.argv.index("--start") + 1], "%Y-%m-%d").date()
+    days_arg = None
+    if "--days" in sys.argv:
+        days_arg = int(sys.argv[sys.argv.index("--days") + 1])
+    # --force + --only: schedule the named slugs directly, bypassing the auto
+    # eligibility heuristics (has_sales / min-age). Deliberate manual scheduling
+    # (e.g. a hero book that already has a little traction, timed to a LovelyBooks
+    # push). schedule_one still verifies the right book + a real FBP section on-page.
+    if only is not None and "--force" in sys.argv:
+        todo = []
+        for slug in sorted(only):
+            lf = KDP / slug / "listing.json"
+            if not lf.exists():
+                print(f"  {slug}: no listing.json — skipped"); continue
+            d = json.loads(lf.read_text())
+            bid = d.get("kdp_book_id")
+            if not bid:
+                print(f"  {slug}: no kdp_book_id — skipped"); continue
+            todo.append((slug, bid, d.get("actual_live_title") or d.get("title", "")))
+    else:
+        todo = candidates(only)
     if "--list" in sys.argv:
         print(f"{len(todo)} candidate(s):")
         for slug, bid, title in todo:
@@ -337,13 +366,14 @@ def main():
     ok = []
     for slug, bid, title in todo:
         print(f"• {slug}", flush=True)
-        if asyncio.run(schedule_one(slug, bid, title, dry)):
+        if asyncio.run(schedule_one(slug, bid, title, dry, start_arg, days_arg)):
             ok.append(slug)
     print(f"\nDONE: {len(ok)}/{len(todo)}")
     if ok and not dry:
-        start = (date.today() + timedelta(days=1)).isoformat()
-        tg("🎁 Libra Free Promo ตั้งอัตโนมัติ " + str(len(ok)) + " เล่ม "
-           f"(เริ่ม {start}, 3 วัน):\n" + "\n".join("• " + s for s in ok))
+        start = (start_arg or (date.today() + timedelta(days=1))).isoformat()
+        ndays = days_arg or PROMO_DAYS
+        tg("🎁 Libra Free Promo ตั้งแล้ว " + str(len(ok)) + " เล่ม "
+           f"(เริ่ม {start}, {ndays} วัน):\n" + "\n".join("• " + s for s in ok))
 
 
 if __name__ == "__main__":

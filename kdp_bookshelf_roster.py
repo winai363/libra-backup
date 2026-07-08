@@ -75,12 +75,16 @@ def classify_status(text: str) -> str:
         return "IN_REVIEW"
     if "blocked" in t or "quality issue" in t or "needs your attention" in t:
         return "BLOCKED"
-    if "draft" in t:
-        return "DRAFT"
-    if "unpublish" in t:  # "unpublished" / "unpublishing"
-        return "UNPUBLISHED"
+    # "Live With unpublished changes" = the book IS live (selling); it just has a
+    # draft edit that was never submitted. Must be checked BEFORE the bare
+    # "unpublish" rule below, or the word "unpublished" mis-flags a live book as
+    # UNPUBLISHED (false "lost inventory" alarm).
     if "live" in t:
         return "LIVE"
+    if "draft" in t:
+        return "DRAFT"
+    if "unpublish" in t:  # "unpublished" / "unpublishing" (truly removed from sale)
+        return "UNPUBLISHED"
     return "UNKNOWN"
 
 

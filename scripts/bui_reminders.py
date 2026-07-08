@@ -45,9 +45,9 @@ def _tg(msg: str) -> bool:
 SCHEDULE = {
     "2026-07-09": (
         "📌 Libra — งานบุ๋ย (ทำเร็วสุด)\n"
-        "อัพ Pinterest batch2 (10 พิน) ที่ FileBrowser → downloads → pinterest-batch2\n"
-        "จัดพินให้: workbook-es (Cuaderno TDAH) โผล่ช่วง 15-19 ก.ค. · focus-es (Enfoque) ช่วง 22-26 ก.ค.\n"
-        "= ตัวขยายวันแจกฟรี ถ้าไม่มีพิน ฟรีเดี่ยวได้แค่ 2-7 โหลด"
+        "อัพพิน Pinterest หนังสือ KDP ที่ FileBrowser → downloads → kdp-pins (ไม่ใช่ batch2 ที่เป็น Etsy)\n"
+        "โฟกัส: workbook-es (Cuaderno, 3 พิน) + focus-es (Enfoque, 3 พิน) — ปักได้เลยตอนนี้ 2-3 พิน/วัน\n"
+        "caption+ลิงก์อยู่ใน kdp-pins/CAPTIONS.txt = ตัวขยายวันแจกฟรี"
     ),
     "2026-07-14": (
         "🎁 พรุ่งนี้ workbook-es (Cuaderno TDAH) เริ่มแจกฟรี 15-19 ก.ค.\n"

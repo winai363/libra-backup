@@ -225,6 +225,10 @@ def test_build_monitor_summarizes_on_track_distribution_plan():
     assert monitor["actual_vs_plan"]["roles"]["CMO"]["status"] == "behind"
     assert monitor["kdp_agent"]["mode"] == "auto_advisor"
     assert "อย่าเพิ่งซื้อ paid promo" in monitor["kdp_agent"]["next_actions"][0]
+    assert monitor["kdp_agent"]["action_queue"][0]["owner"] == "CMO"
+    assert monitor["kdp_agent"]["action_queue"][0]["status"] == "due_now"
+    assert monitor["kdp_agent"]["decision_gates"][0]["name"] == "Paid promo gate"
+    assert monitor["kdp_agent"]["decision_gates"][0]["status"] == "closed"
 
 
 def test_render_monitor_html_contains_status_and_next_actions():
@@ -255,6 +259,12 @@ def test_render_monitor_html_contains_status_and_next_actions():
         "kdp_agent": {
             "mode": "auto_advisor",
             "next_actions": ["อย่าเพิ่งซื้อ paid promo", "เร่ง Pinterest ที่เหลือ"],
+            "action_queue": [
+                {"owner": "CMO", "task": "เร่ง Pinterest ที่เหลือ", "due": "ก่อน 2026-07-15", "status": "due_now"}
+            ],
+            "decision_gates": [
+                {"name": "Paid promo gate", "status": "closed", "rule": "รอ proof หลัง promo windows"}
+            ],
         },
     }
 
@@ -267,7 +277,43 @@ def test_render_monitor_html_contains_status_and_next_actions():
     assert "CFO" in html
     assert "KDP Strategist" in html
     assert "อย่าเพิ่งซื้อ paid promo" in html
+    assert "Action Queue" in html
+    assert "Decision Gates" in html
     assert "On track" in html
     assert "$6.77" in html
     assert "2/4 done" in html
     assert "รอ checkpoint ก่อนซื้อ paid promo" in html
+
+
+def test_kdp_agent_digest_summarizes_roles_queue_and_gates():
+    state = {
+        "overall": {"status": "on_track", "score": 92},
+        "roles": {
+            "CFO": {"status": "early"},
+            "COO": {"status": "on_plan"},
+            "CMO": {"status": "behind"},
+            "KDP Strategist": {"status": "watch"},
+        },
+        "agent": {
+            "next_actions": ["อย่าเพิ่งซื้อ paid promo", "เร่ง Pinterest ที่เหลือ"],
+            "action_queue": [
+                {"owner": "CMO", "task": "เร่ง Pinterest ที่เหลือ", "due": "ก่อน 2026-07-15", "status": "due_now"}
+            ],
+            "decision_gates": [
+                {"name": "Paid promo gate", "status": "closed", "rule": "รอ proof หลัง promo windows"}
+            ],
+        },
+        "actual_vs_plan": [
+            {"name": "Revenue", "actual_label": "$6.77", "plan_label": "$25.00", "percent": 27, "status": "early"}
+        ],
+        "blockers": {"count": 0},
+    }
+
+    msg = dr.kdp_agent_digest(state)
+
+    assert "Libra KDP Auto Manager" in msg
+    assert "Score: 92" in msg
+    assert "CFO=early" in msg
+    assert "CMO=behind" in msg
+    assert "เร่ง Pinterest ที่เหลือ" in msg
+    assert "Paid promo gate: closed" in msg

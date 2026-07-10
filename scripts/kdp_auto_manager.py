@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sys
+import argparse
 from pathlib import Path
 
 LIBRA_DIR = Path(__file__).resolve().parents[1]
@@ -20,6 +21,8 @@ from distribution_report import (  # noqa: E402
     CATEGORY_HEALTH_STATE,
     build_monitor,
     build_report,
+    kdp_agent_digest,
+    send_telegram,
     _load_json,
 )
 
@@ -42,18 +45,23 @@ def build_state() -> dict:
     }
 
 
-def main() -> dict:
+def main(send: bool = False) -> dict:
     state = build_state()
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    sent = send_telegram(kdp_agent_digest(state)) if send else False
     print(
         "kdp_auto_manager "
         f"status={state['overall']['status']} "
         f"score={state['overall']['score']} "
-        f"blockers={state['blockers']['count']}"
+        f"blockers={state['blockers']['count']} "
+        f"send={send} sent={sent}"
     )
     return state
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--send", action="store_true", help="send Telegram digest")
+    args = parser.parse_args()
+    main(send=args.send)

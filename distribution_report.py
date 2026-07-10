@@ -395,6 +395,44 @@ def _build_kdp_agent(actual_vs_plan: dict, blockers: list[str]) -> dict:
     if cmo.get("status") == "behind":
         next_actions.append("เร่ง Pinterest ที่เหลือให้ครบ 4/4 ก่อนรอบแจกฟรี 15-26 ก.ค.")
     next_actions.append("หลังแต่ละ free promo ให้เทียบ downloads, KENP, reviews, royalties กับ target แล้วค่อยเลือก next move")
+    action_queue = []
+    if cmo.get("status") == "behind":
+        action_queue.append({
+            "owner": "CMO",
+            "task": "เร่ง Pinterest ที่เหลือให้ครบ 4/4",
+            "due": "ก่อน 2026-07-15",
+            "status": "due_now",
+        })
+    if blockers:
+        action_queue.append({
+            "owner": "COO",
+            "task": "แก้ blocker ที่หยุดแผน distribution",
+            "due": "วันนี้",
+            "status": "due_now",
+        })
+    action_queue.append({
+        "owner": "KDP Strategist",
+        "task": "หลังแต่ละ free promo ให้สรุป downloads, KENP, reviews, royalties เทียบ target",
+        "due": "หลัง 2026-07-19, 2026-07-26",
+        "status": "scheduled",
+    })
+    decision_gates = [
+        {
+            "name": "Paid promo gate",
+            "status": "closed",
+            "rule": "เปิดพิจารณาเฉพาะหลังเห็น proof จาก promo windows หรือถึง checkpoint 2026-07-31",
+        },
+        {
+            "name": "Amazon Ads gate",
+            "status": "closed",
+            "rule": "ยังไม่เปิดจนกว่า royalties/KENP/review signal ชี้ว่าเล่มใดมี buyer intent จริง",
+        },
+        {
+            "name": "Scale content gate",
+            "status": "open",
+            "rule": "ทำ distribution ฟรีและ manual tasks ต่อได้ เพราะไม่มี spend risk",
+        },
+    ]
     return {
         "name": "Libra KDP Auto Manager",
         "mode": "auto_advisor",
@@ -402,6 +440,8 @@ def _build_kdp_agent(actual_vs_plan: dict, blockers: list[str]) -> dict:
         "cadence": "daily after KDP sales sync",
         "roles": ["CFO", "COO", "CMO", "KDP Strategist"],
         "next_actions": next_actions,
+        "action_queue": action_queue,
+        "decision_gates": decision_gates,
         "guardrails": [
             "KDP royalties are the money source of truth",
             "orders/downloads include free activity and cannot justify spend alone",
@@ -711,6 +751,14 @@ def render_monitor_html(monitor: dict) -> str:
     agent_actions = "\n".join(
         f"<li>{e(item)}</li>" for item in monitor.get("kdp_agent", {}).get("next_actions", [])
     ) or "<li>รอข้อมูลรอบถัดไป</li>"
+    action_queue = "\n".join(
+        f"<tr><td>{e(item.get('owner'))}</td><td>{e(item.get('task'))}</td><td>{e(item.get('due'))}</td><td>{e(item.get('status'))}</td></tr>"
+        for item in monitor.get("kdp_agent", {}).get("action_queue", [])
+    ) or "<tr><td colspan='4'>ยังไม่มี action ค้าง</td></tr>"
+    decision_gates = "\n".join(
+        f"<tr><td>{e(item.get('name'))}</td><td>{e(item.get('status'))}</td><td>{e(item.get('rule'))}</td></tr>"
+        for item in monitor.get("kdp_agent", {}).get("decision_gates", [])
+    ) or "<tr><td colspan='3'>ยังไม่มี gate</td></tr>"
     return f"""<!doctype html>
 <html lang="th">
 <head>
@@ -828,6 +876,23 @@ def render_monitor_html(monitor: dict) -> str:
 
   <section class="grid two">
     <div class="card">
+      <h2>Action Queue</h2>
+      <table>
+        <thead><tr><th>Owner</th><th>Task</th><th>Due</th><th>Status</th></tr></thead>
+        <tbody>{action_queue}</tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2>Decision Gates</h2>
+      <table>
+        <thead><tr><th>Gate</th><th>Status</th><th>Rule</th></tr></thead>
+        <tbody>{decision_gates}</tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="grid two">
+    <div class="card">
       <h2>Blockers</h2>
       <ul>{blocker_items}</ul>
     </div>
@@ -850,6 +915,40 @@ def render_monitor_html(monitor: dict) -> str:
 </body>
 </html>
 """
+
+
+def kdp_agent_digest(state: dict) -> str:
+    roles = state.get("roles", {})
+    role_line = " · ".join(
+        f"{name}={roles.get(name, {}).get('status', '-')}"
+        for name in ["CFO", "COO", "CMO", "KDP Strategist"]
+    )
+    lines = [
+        "Libra KDP Auto Manager",
+        f"Score: {state.get('overall', {}).get('score', '-')} | Status: {state.get('overall', {}).get('status', '-')}",
+        role_line,
+        f"Blockers: {state.get('blockers', {}).get('count', '-')}",
+        "",
+        "Actual vs Plan:",
+    ]
+    for metric in state.get("actual_vs_plan", [])[:5]:
+        lines.append(
+            f"- {metric.get('name')}: {metric.get('actual_label')} / {metric.get('plan_label')} "
+            f"({metric.get('percent')}%, {metric.get('status')})"
+        )
+    lines.append("")
+    lines.append("Action Queue:")
+    for item in state.get("agent", {}).get("action_queue", [])[:5]:
+        lines.append(f"- {item.get('owner')}: {item.get('task')} | {item.get('due')} | {item.get('status')}")
+    lines.append("")
+    lines.append("Decision Gates:")
+    for item in state.get("agent", {}).get("decision_gates", [])[:5]:
+        lines.append(f"- {item.get('name')}: {item.get('status')} — {item.get('rule')}")
+    lines.append("")
+    lines.append("Next actions:")
+    for item in state.get("agent", {}).get("next_actions", [])[:5]:
+        lines.append(f"- {item}")
+    return "\n".join(lines)
 
 
 def write_outputs(report: dict) -> None:

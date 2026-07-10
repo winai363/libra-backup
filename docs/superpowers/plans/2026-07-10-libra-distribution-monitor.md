@@ -123,3 +123,36 @@ Add `Actual vs Plan`, bar chart rows, CFO/COO/CMO/KDP Strategist cards, and KDP 
 - [x] **Step 4: Add read-only agent endpoint and cron refresh**
 
 Add `/api/kdp-agent`, `scripts/kdp_auto_manager.py`, and system cron at 10:05 daily. The cron only writes advisory state; it does not mutate KDP.
+
+### Task 4: Daily Operating Loop
+
+**Files:**
+- Modify: `distribution_report.py`
+- Modify: `scripts/kdp_auto_manager.py`
+- Modify: `tests/test_distribution_report.py`
+
+**Interfaces:**
+- Produces: `monitor["kdp_agent"]["action_queue"]`
+- Produces: `monitor["kdp_agent"]["decision_gates"]`
+- Produces: `kdp_agent_digest(state: dict) -> str`
+- Updates cron to run `scripts/kdp_auto_manager.py --send`
+
+- [x] **Step 1: Write failing tests**
+
+Require the monitor to expose action queue, decision gates, and a Telegram digest.
+
+- [x] **Step 2: Implement action queue and decision gates**
+
+Add due-now CMO Pinterest work, scheduled KDP strategist review, closed paid promo/Amazon Ads gates, and open free/manual scale gate.
+
+- [x] **Step 3: Implement Telegram digest**
+
+Add `kdp_agent_digest()` and `--send` support in `scripts/kdp_auto_manager.py`.
+
+- [x] **Step 4: Update cron**
+
+Set daily cron:
+
+```bash
+5 10 * * * cd /root/libra && /usr/bin/python3 scripts/kdp_auto_manager.py --send >> /root/libra/logs/kdp-agent.log 2>&1
+```

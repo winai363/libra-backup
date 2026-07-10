@@ -59,6 +59,32 @@
   - public monitor มี `Actual vs Plan`, `bar-fill`, `$25.00`, CFO/COO/CMO/KDP Strategist และ `อย่าเพิ่งซื้อ paid promo`
   - public `/libra/api/kdp-agent` คืน JSON agent state
 
+## 2026-07-10 — KDP Auto Manager daily operating loop
+
+- บุ๋ยสั่ง “ต่อ” หลังเพิ่ม Actual vs Plan และ KDP Auto Manager
+- เพิ่ม `action_queue` และ `decision_gates` ให้ `monitor["kdp_agent"]`:
+  - CMO: `เร่ง Pinterest ที่เหลือให้ครบ 4/4`, due `ก่อน 2026-07-15`, status `due_now`
+  - KDP Strategist: สรุปผลหลัง free promo windows, status `scheduled`
+  - Paid promo gate = `closed` จนกว่าจะมี proof หลัง promo windows หรือถึง checkpoint
+  - Amazon Ads gate = `closed` จนกว่า royalties/KENP/review signal ชี้ buyer intent จริง
+  - Scale content gate = `open` สำหรับงานฟรี/manual ที่ไม่มี spend risk
+- เพิ่ม `kdp_agent_digest(state)` ใน `distribution_report.py` เพื่อสร้างข้อความ Telegram digest จาก agent state
+- ปรับ `scripts/kdp_auto_manager.py`:
+  - เพิ่ม `--send`
+  - เมื่อใส่ `--send` จะส่ง Telegram digest ด้วย `send_telegram()`
+  - ยังเป็น read-only: ไม่ซื้อ paid promo, ไม่เปลี่ยนราคา, ไม่ publish, ไม่ mutate KDP
+- อัปเดต cron system-level เป็น:
+  - `5 10 * * * cd /root/libra && /usr/bin/python3 scripts/kdp_auto_manager.py --send >> /root/libra/logs/kdp-agent.log 2>&1`
+- ปรับหน้า `/distribution/monitor` ให้แสดง `Action Queue` และ `Decision Gates`
+- Verify:
+  - RED tests fail ก่อนแก้เพราะไม่มี queue/gates/digest
+  - `PYTHONPATH=. pytest tests/test_distribution_report.py tests/test_profit_tracker.py tests/test_feedback_loop.py tests/test_kdp_publish_confirmation.py -q` = 17 passed
+  - `python3 -m py_compile app.py distribution_report.py tests/test_distribution_report.py scripts/kdp_auto_manager.py` ผ่าน
+  - `python3 scripts/kdp_auto_manager.py --send` ได้ `sent=True`
+  - restart `libra.service` แล้ว active
+  - public monitor มี `Action Queue`, `Decision Gates`, `Paid promo gate`, `Amazon Ads gate`
+  - public `/libra/api/kdp-agent` คืน `CMO due_now Paid promo gate closed`
+
 ## 2026-07-08 — Libra Distribution Dashboard + daily Telegram automation
 
 - บุ๋ย approve ให้ทำตามแผน 100% automation เท่าที่ทำได้ และเตรียมส่วนที่ต้องทำผ่าน Claude for Chrome. เพิ่ม `distribution_report.py` เป็น source กลางของรายงาน distribution: แยกเงินจริง KDP royalties ออกจาก orders/free downloads ชัดเจน, อ่าน hero books, free promo windows, LovelyBooks flags, Reddit schedule, และสร้าง today actions.

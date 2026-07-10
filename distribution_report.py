@@ -28,6 +28,13 @@ DOWNLOADS_HTML = LIBRA_DIR.parent / "downloads" / "libra-distribution-dashboard.
 CHROME_GUIDE = LIBRA_DIR.parent / "downloads" / "kdp-pins" / "CLAUDE-CHROME-POSTING-GUIDE.md"
 CATEGORY_HEALTH_STATE = LIBRA_DIR / "data" / "category_health_state.json"
 
+DEFAULT_PLAN_TARGETS = {
+    "revenue_usd": 25.0,
+    "orders_downloads": 120,
+    "kenp": 500,
+    "free_downloads": 100,
+}
+
 
 def _load_json(path: Path, default: Any) -> Any:
     try:
@@ -270,6 +277,140 @@ def _sales_sync_fresh(last_sync: str, generated_at: str) -> bool:
     return bool(sync_day and generated_day and sync_day >= generated_day)
 
 
+def _percent(actual: float, plan: float) -> int:
+    if plan <= 0:
+        return 100 if actual >= plan else 0
+    return max(0, min(100, round((actual / plan) * 100)))
+
+
+def _progress_status(percent: int, *, early_label: str = "early") -> str:
+    if percent >= 100:
+        return "on_plan"
+    if percent >= 60:
+        return "watch"
+    if percent >= 25:
+        return early_label
+    return "behind"
+
+
+def _metric(name: str, actual: float, plan: float, actual_label: str, plan_label: str, status: str | None = None) -> dict:
+    pct = _percent(actual, plan)
+    return {
+        "name": name,
+        "actual": actual,
+        "plan": plan,
+        "actual_label": actual_label,
+        "plan_label": plan_label,
+        "percent": pct,
+        "status": status or _progress_status(pct),
+    }
+
+
+def _build_actual_vs_plan(
+    report: dict,
+    *,
+    hero_total: int,
+    hero_live: int,
+    hero_select: int,
+    hero_aplus: int,
+    pin_done: int,
+    pin_total: int,
+    blocker_count: int,
+) -> dict:
+    money = report.get("money", {})
+    promos = report.get("free_promos", {})
+    metrics = [
+        _metric(
+            "Revenue",
+            float(money.get("mtd_royalties_usd") or 0.0),
+            DEFAULT_PLAN_TARGETS["revenue_usd"],
+            f"${float(money.get('mtd_royalties_usd') or 0.0):.2f}",
+            f"${DEFAULT_PLAN_TARGETS['revenue_usd']:.2f}",
+            "early" if float(money.get("mtd_royalties_usd") or 0.0) > 0 else "behind",
+        ),
+        _metric(
+            "Orders/downloads",
+            int(money.get("mtd_orders_all_types") or 0),
+            DEFAULT_PLAN_TARGETS["orders_downloads"],
+            str(int(money.get("mtd_orders_all_types") or 0)),
+            str(DEFAULT_PLAN_TARGETS["orders_downloads"]),
+        ),
+        _metric(
+            "KENP",
+            int(money.get("mtd_kenp") or 0),
+            DEFAULT_PLAN_TARGETS["kenp"],
+            str(int(money.get("mtd_kenp") or 0)),
+            str(DEFAULT_PLAN_TARGETS["kenp"]),
+        ),
+        _metric(
+            "Free downloads",
+            int(promos.get("total_downloads_in_promo_windows") or 0),
+            DEFAULT_PLAN_TARGETS["free_downloads"],
+            str(int(promos.get("total_downloads_in_promo_windows") or 0)),
+            str(DEFAULT_PLAN_TARGETS["free_downloads"]),
+            "behind",
+        ),
+        _metric("Hero LIVE", hero_live, hero_total, _ratio_label(hero_live, hero_total), _ratio_label(hero_total, hero_total), "on_plan" if hero_live == hero_total else "behind"),
+        _metric("KDP Select", hero_select, hero_total, _ratio_label(hero_select, hero_total), _ratio_label(hero_total, hero_total), "on_plan" if hero_select == hero_total else "behind"),
+        _metric("A+ submitted", hero_aplus, hero_total, _ratio_label(hero_aplus, hero_total), _ratio_label(hero_total, hero_total), "on_plan" if hero_aplus == hero_total else "behind"),
+        _metric("Pinterest", pin_done, pin_total, str(pin_done), str(pin_total), "on_plan" if pin_done == pin_total else "behind"),
+        _metric("Blockers", 0 if blocker_count else 1, 1, str(blocker_count), "0", "on_plan" if blocker_count == 0 else "blocked"),
+    ]
+    roles = {
+        "CFO": {
+            "status": "early" if float(money.get("mtd_royalties_usd") or 0.0) > 0 else "behind",
+            "verdict": "มีเงินจริงแล้ว แต่ proof ยังเล็กมาก; ห้ามเพิ่มงบจนกว่าจะเห็นผลหลัง promo windows",
+            "target": f"${DEFAULT_PLAN_TARGETS['revenue_usd']:.2f} royalties by checkpoint",
+        },
+        "COO": {
+            "status": "on_plan" if blocker_count == 0 and hero_live == hero_total and hero_select == hero_total else "blocked",
+            "verdict": "ระบบหลักพร้อมเดินรอบแจกฟรี; โฟกัสคิวงาน manual และ freshness",
+            "target": "0 blockers, 0 KDP queue, fresh daily sync",
+        },
+        "CMO": {
+            "status": "on_plan" if pin_total and pin_done == pin_total else "behind",
+            "verdict": "distribution ยังช้ากว่าแผน เพราะ Pinterest ยังไม่ครบ 4/4",
+            "target": "Pinterest 4/4 plus Reddit/LovelyBooks on promo dates",
+        },
+        "KDP Strategist": {
+            "status": "watch",
+            "verdict": "รอข้อมูลจากรอบแจกฟรี 15-26 ก.ค. ก่อนตัดสิน paid promo หรือ Amazon Ads",
+            "target": "Use downloads, KENP, reviews, and royalties after each promo window",
+        },
+    }
+    return {
+        "targets": DEFAULT_PLAN_TARGETS,
+        "metrics": metrics,
+        "roles": roles,
+    }
+
+
+def _build_kdp_agent(actual_vs_plan: dict, blockers: list[str]) -> dict:
+    next_actions = []
+    if blockers:
+        next_actions.append("แก้ blocker ก่อนให้ agent เสนอ growth action")
+    else:
+        next_actions.append("อย่าเพิ่งซื้อ paid promo จนกว่าจะถึง checkpoint หรือมี proof หลัง promo windows")
+    cmo = actual_vs_plan.get("roles", {}).get("CMO", {})
+    if cmo.get("status") == "behind":
+        next_actions.append("เร่ง Pinterest ที่เหลือให้ครบ 4/4 ก่อนรอบแจกฟรี 15-26 ก.ค.")
+    next_actions.append("หลังแต่ละ free promo ให้เทียบ downloads, KENP, reviews, royalties กับ target แล้วค่อยเลือก next move")
+    return {
+        "name": "Libra KDP Auto Manager",
+        "mode": "auto_advisor",
+        "authority": "read, diagnose, set targets, recommend next actions; no paid spend or KDP publishing mutation without guard/approval",
+        "cadence": "daily after KDP sales sync",
+        "roles": ["CFO", "COO", "CMO", "KDP Strategist"],
+        "next_actions": next_actions,
+        "guardrails": [
+            "KDP royalties are the money source of truth",
+            "orders/downloads include free activity and cannot justify spend alone",
+            "no paid promo before checkpoint unless real proof appears",
+            "do not send files on LovelyBooks; point readers to Amazon free promo",
+        ],
+    }
+
+
 def build_monitor(
     report: dict,
     *,
@@ -346,6 +487,18 @@ def build_monitor(
         status = "watch"
         label = "Watch"
 
+    actual_vs_plan = _build_actual_vs_plan(
+        report,
+        hero_total=hero_total,
+        hero_live=hero_live,
+        hero_select=hero_select,
+        hero_aplus=hero_aplus,
+        pin_done=pin_done,
+        pin_total=pin_total,
+        blocker_count=len(blockers),
+    )
+    kdp_agent = _build_kdp_agent(actual_vs_plan, blockers)
+
     return {
         "generated_at": report.get("generated_at", ""),
         "overall": {"status": status, "label": label, "score": score},
@@ -390,6 +543,8 @@ def build_monitor(
                 else "รอ checkpoint ก่อนซื้อ paid promo"
             )
         },
+        "actual_vs_plan": actual_vs_plan,
+        "kdp_agent": kdp_agent,
     }
 
 
@@ -536,6 +691,26 @@ def render_monitor_html(monitor: dict) -> str:
         for p in monitor.get("promo", {}).get("upcoming", [])
     ) or "<tr><td colspan='3'>ยังไม่มีโปรถัดไป</td></tr>"
     remaining = ", ".join(monitor.get("manual", {}).get("pinterest", {}).get("remaining", [])) or "-"
+    avp = monitor.get("actual_vs_plan", {})
+    bars = "\n".join(
+        f"""<div class="bar-row">
+          <div class="bar-head"><b>{e(m.get('name'))}</b><span>{e(m.get('actual_label'))} / {e(m.get('plan_label'))}</span></div>
+          <div class="bar-track"><div class="bar-fill {e(m.get('status'))}" style="width:{e(m.get('percent', 0))}%"></div></div>
+          <div class="bar-foot"><span>{e(m.get('percent', 0))}%</span><span>{e(m.get('status'))}</span></div>
+        </div>"""
+        for m in avp.get("metrics", [])
+    )
+    role_cards = "\n".join(
+        f"""<div class="role-card">
+          <div class="role-top"><b>{e(role)}</b><span class="status {e(data.get('status'))}">{e(data.get('status'))}</span></div>
+          <p>{e(data.get('verdict'))}</p>
+          <small>{e(data.get('target'))}</small>
+        </div>"""
+        for role, data in avp.get("roles", {}).items()
+    )
+    agent_actions = "\n".join(
+        f"<li>{e(item)}</li>" for item in monitor.get("kdp_agent", {}).get("next_actions", [])
+    ) or "<li>รอข้อมูลรอบถัดไป</li>"
     return f"""<!doctype html>
 <html lang="th">
 <head>
@@ -564,6 +739,20 @@ def render_monitor_html(monitor: dict) -> str:
     .metric {{ font-size:26px; font-weight:800; margin-top:8px; }}
     .label {{ color:var(--muted); font-size:13px; }}
     .stack {{ display:grid; gap:10px; }}
+    .bar-list {{ display:grid; gap:12px; }}
+    .bar-row {{ background:#0d1424; border:1px solid var(--line); border-radius:8px; padding:10px; }}
+    .bar-head, .bar-foot, .role-top {{ display:flex; justify-content:space-between; gap:12px; align-items:center; }}
+    .bar-head span, .bar-foot {{ color:var(--muted); font-size:13px; }}
+    .bar-track {{ height:12px; background:#253044; border-radius:999px; overflow:hidden; margin:8px 0; }}
+    .bar-fill {{ height:100%; background:var(--good); border-radius:999px; }}
+    .bar-fill.behind, .bar-fill.blocked {{ background:var(--bad); }}
+    .bar-fill.early, .bar-fill.watch {{ background:var(--warn); }}
+    .role-grid {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }}
+    .role-card {{ background:#0d1424; border:1px solid var(--line); border-radius:8px; padding:12px; }}
+    .role-card p {{ margin:10px 0 8px; }}
+    .status {{ color:var(--ink); background:var(--warn); border-radius:999px; padding:3px 8px; font-size:12px; font-weight:700; }}
+    .status.on_plan {{ background:var(--good); }}
+    .status.behind, .status.blocked {{ background:var(--bad); color:white; }}
     table {{ width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; }}
     th, td {{ padding:10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }}
     th {{ color:#c9d8ef; font-size:12px; text-transform:uppercase; }}
@@ -573,9 +762,10 @@ def render_monitor_html(monitor: dict) -> str:
     @media (max-width: 860px) {{
       header, .grid.two {{ display:block; }}
       .grid {{ grid-template-columns:repeat(2,minmax(0,1fr)); }}
+      .role-grid {{ grid-template-columns:repeat(2,minmax(0,1fr)); }}
       .card {{ margin-bottom:12px; }}
     }}
-    @media (max-width: 540px) {{ .grid {{ grid-template-columns:1fr; }} h1 {{ font-size:24px; }} }}
+    @media (max-width: 540px) {{ .grid, .role-grid {{ grid-template-columns:1fr; }} h1 {{ font-size:24px; }} }}
   </style>
 </head>
 <body>
@@ -616,6 +806,24 @@ def render_monitor_html(monitor: dict) -> str:
       <p>{e(monitor['decision']['recommendation'])}</p>
       <p class="muted">ถ้ายังไม่มี proof จากโหลด/รีวิว/KU/paid sale ให้รอข้อมูลถึง checkpoint ก่อนเพิ่มงบ</p>
     </div>
+  </section>
+
+  <section class="grid two">
+    <div class="card">
+      <h2>Actual vs Plan</h2>
+      <div class="bar-list">{bars}</div>
+    </div>
+    <div class="card">
+      <h2>KDP Auto Manager Agent</h2>
+      <p><b>{e(monitor.get('kdp_agent', {}).get('name', 'Libra KDP Auto Manager'))}</b> · {e(monitor.get('kdp_agent', {}).get('mode', 'auto_advisor'))}</p>
+      <p class="muted">{e(monitor.get('kdp_agent', {}).get('authority', ''))}</p>
+      <ul>{agent_actions}</ul>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:12px">
+    <h2>CFO / COO / CMO / KDP Strategist</h2>
+    <div class="role-grid">{role_cards}</div>
   </section>
 
   <section class="grid two">

@@ -216,6 +216,15 @@ def test_build_monitor_summarizes_on_track_distribution_plan():
     assert monitor["manual"]["pinterest"]["label"] == "2/4 done"
     assert monitor["blockers"]["count"] == 0
     assert monitor["decision"]["recommendation"] == "รอ checkpoint ก่อนซื้อ paid promo"
+    assert monitor["actual_vs_plan"]["metrics"][0]["name"] == "Revenue"
+    assert monitor["actual_vs_plan"]["metrics"][0]["actual"] == 6.77
+    assert monitor["actual_vs_plan"]["metrics"][0]["plan"] == 25.0
+    assert monitor["actual_vs_plan"]["metrics"][0]["percent"] == 27
+    assert monitor["actual_vs_plan"]["roles"]["CFO"]["status"] == "early"
+    assert monitor["actual_vs_plan"]["roles"]["COO"]["status"] == "on_plan"
+    assert monitor["actual_vs_plan"]["roles"]["CMO"]["status"] == "behind"
+    assert monitor["kdp_agent"]["mode"] == "auto_advisor"
+    assert "อย่าเพิ่งซื้อ paid promo" in monitor["kdp_agent"]["next_actions"][0]
 
 
 def test_render_monitor_html_contains_status_and_next_actions():
@@ -231,11 +240,33 @@ def test_render_monitor_html_contains_status_and_next_actions():
         "blockers": {"count": 0, "items": []},
         "today_actions": [{"channel": "Monitor", "action": "ดูรายงานวันนี้"}],
         "decision": {"recommendation": "รอ checkpoint ก่อนซื้อ paid promo"},
+        "actual_vs_plan": {
+            "metrics": [
+                {"name": "Revenue", "actual_label": "$6.77", "plan_label": "$25.00", "percent": 27, "status": "early"},
+                {"name": "Pinterest", "actual_label": "2", "plan_label": "4", "percent": 50, "status": "behind"},
+            ],
+            "roles": {
+                "CFO": {"status": "early", "verdict": "Revenue proof ยังไม่พอ"},
+                "COO": {"status": "on_plan", "verdict": "ระบบพร้อม"},
+                "CMO": {"status": "behind", "verdict": "Pinterest ยังไม่ครบ"},
+                "KDP Strategist": {"status": "watch", "verdict": "รอ promo windows"},
+            },
+        },
+        "kdp_agent": {
+            "mode": "auto_advisor",
+            "next_actions": ["อย่าเพิ่งซื้อ paid promo", "เร่ง Pinterest ที่เหลือ"],
+        },
     }
 
     html = dr.render_monitor_html(monitor)
 
     assert "Libra Monitor" in html
+    assert "Actual vs Plan" in html
+    assert "bar-fill" in html
+    assert "$25.00" in html
+    assert "CFO" in html
+    assert "KDP Strategist" in html
+    assert "อย่าเพิ่งซื้อ paid promo" in html
     assert "On track" in html
     assert "$6.77" in html
     assert "2/4 done" in html

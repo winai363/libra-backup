@@ -23,6 +23,42 @@
   - public `/libra/api/distribution/monitor` คืน `status=on_track`, `score=92`, `blockers.count=0`
   - public `/libra/distribution/monitor` มี `Libra Monitor`, `On track`, `$6.77`, `2/4 done`, `รอ checkpoint ก่อนซื้อ paid promo`
 
+## 2026-07-10 — Actual vs Plan + KDP Auto Manager Agent
+
+- บุ๋ยขอ Actual vs Plan แบบ bar chart และให้วาง role CFO/COO/CMO/KDP Strategist เพื่อคุม Libra KDP เป็นระบบ auto
+- เพิ่ม target รอบเรียนรู้ถึง checkpoint `2026-07-31` ใน `distribution_report.py`:
+  - Revenue royalties `$25.00`
+  - Orders/downloads `120`
+  - KENP `500`
+  - Free downloads `100`
+  - Pinterest `4/4`
+  - Blockers `0`
+- เพิ่ม `monitor["actual_vs_plan"]`:
+  - `metrics` สำหรับ bar chart: Revenue, Orders/downloads, KENP, Free downloads, Hero LIVE, KDP Select, A+ submitted, Pinterest, Blockers
+  - `roles` สำหรับ CFO/COO/CMO/KDP Strategist พร้อม status/verdict/target
+- เพิ่ม `monitor["kdp_agent"]`:
+  - name = `Libra KDP Auto Manager`
+  - mode = `auto_advisor`
+  - authority = read/diagnose/set targets/recommend only; no paid spend or KDP mutation without guard/approval
+  - next actions ล่าสุด: อย่าเพิ่งซื้อ paid promo, เร่ง Pinterest ที่เหลือ, หลังแต่ละ free promo ให้เทียบ downloads/KENP/reviews/royalties กับ target
+- ปรับ `/distribution/monitor` ให้แสดง:
+  - Actual vs Plan bar chart
+  - KDP Auto Manager Agent
+  - CFO / COO / CMO / KDP Strategist role cards
+- เพิ่ม endpoint `/api/kdp-agent` (public path `/libra/api/kdp-agent`) เพื่อดู agent state แยก
+- เพิ่ม `scripts/kdp_auto_manager.py` เขียน `data/kdp-agent-state.json` แบบ read-only
+- ตั้ง cron system-level ทุกวัน 10:05 หลัง distribution report:
+  - `cd /root/libra && /usr/bin/python3 scripts/kdp_auto_manager.py >> /root/libra/logs/kdp-agent.log 2>&1`
+- เพิ่ม `data/kdp-agent-state.json` เข้า `.gitignore` เพื่อไม่ให้ runtime state ทำ repo dirty ทุกวัน
+- Verify:
+  - RED tests fail ก่อนแก้เพราะไม่มี Actual vs Plan/agent/bar chart
+  - `PYTHONPATH=. pytest tests/test_distribution_report.py tests/test_profit_tracker.py tests/test_feedback_loop.py tests/test_kdp_publish_confirmation.py -q` = 16 passed
+  - `python3 -m py_compile app.py distribution_report.py tests/test_distribution_report.py scripts/kdp_auto_manager.py` ผ่าน
+  - `python3 scripts/kdp_auto_manager.py` เขียน state สำเร็จ: `status=on_track score=92 blockers=0`
+  - restart `libra.service` แล้ว active
+  - public monitor มี `Actual vs Plan`, `bar-fill`, `$25.00`, CFO/COO/CMO/KDP Strategist และ `อย่าเพิ่งซื้อ paid promo`
+  - public `/libra/api/kdp-agent` คืน JSON agent state
+
 ## 2026-07-08 — Libra Distribution Dashboard + daily Telegram automation
 
 - บุ๋ย approve ให้ทำตามแผน 100% automation เท่าที่ทำได้ และเตรียมส่วนที่ต้องทำผ่าน Claude for Chrome. เพิ่ม `distribution_report.py` เป็น source กลางของรายงาน distribution: แยกเงินจริง KDP royalties ออกจาก orders/free downloads ชัดเจน, อ่าน hero books, free promo windows, LovelyBooks flags, Reddit schedule, และสร้าง today actions.

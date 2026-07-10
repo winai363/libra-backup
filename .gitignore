@@ -19,6 +19,7 @@ data/kdp-title-limit.json
 data/category_health.json
 data/category_health.md
 data/category_health_state.json
+data/kdp-agent-state.json
 data/new-title-submissions.log
 data/distribution-report.json
 kdp_session_aplus.json

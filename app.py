@@ -733,6 +733,24 @@ async def distribution_monitor_api(request: Request):
     )
 
 
+@app.get("/api/kdp-agent")
+async def kdp_agent_api(request: Request):
+    """Return the KDP auto manager agent state and role verdicts."""
+    check_read(request)
+    from distribution_report import CATEGORY_HEALTH_STATE, build_monitor, build_report, _load_json
+    monitor = build_monitor(
+        build_report(),
+        overview=build_dashboard_overview(),
+        category_health=_load_json(CATEGORY_HEALTH_STATE, {}),
+    )
+    return {
+        "generated_at": monitor["generated_at"],
+        "agent": monitor["kdp_agent"],
+        "roles": monitor["actual_vs_plan"]["roles"],
+        "actual_vs_plan": monitor["actual_vs_plan"]["metrics"],
+    }
+
+
 @app.get("/distribution", response_class=HTMLResponse)
 async def distribution_dashboard_page(request: Request):
     check_read(request)

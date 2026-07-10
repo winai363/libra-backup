@@ -721,6 +721,18 @@ async def distribution_dashboard_api(request: Request):
     return build_report()
 
 
+@app.get("/api/distribution/monitor")
+async def distribution_monitor_api(request: Request):
+    """Return the single-glance monitor for the active Libra distribution plan."""
+    check_read(request)
+    from distribution_report import CATEGORY_HEALTH_STATE, build_monitor, build_report, _load_json
+    return build_monitor(
+        build_report(),
+        overview=build_dashboard_overview(),
+        category_health=_load_json(CATEGORY_HEALTH_STATE, {}),
+    )
+
+
 @app.get("/distribution", response_class=HTMLResponse)
 async def distribution_dashboard_page(request: Request):
     check_read(request)
@@ -731,6 +743,18 @@ async def distribution_dashboard_page(request: Request):
     write_outputs(report)
     write_chrome_guide(report)
     return HTMLResponse(render_html(report))
+
+
+@app.get("/distribution/monitor", response_class=HTMLResponse)
+async def distribution_monitor_page(request: Request):
+    check_read(request)
+    from distribution_report import CATEGORY_HEALTH_STATE, build_monitor, build_report, render_monitor_html, _load_json
+    monitor = build_monitor(
+        build_report(),
+        overview=build_dashboard_overview(),
+        category_health=_load_json(CATEGORY_HEALTH_STATE, {}),
+    )
+    return HTMLResponse(render_monitor_html(monitor))
 
 
 @app.get("/api/profit/portfolio")

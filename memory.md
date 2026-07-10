@@ -1,4 +1,28 @@
 
+## 2026-07-10 — Distribution Monitor Dashboard
+
+- บุ๋ยถามสถานะแผน Libra และขอ dashboard monitor; ตรวจ state จริงก่อนสร้าง:
+  - แผน active = `Depth Loop — 5 เล่มฮีโร่ · เดือนนี้ทดลองช่องทางฟรีล้วน`, checkpoint `2026-07-31`
+  - เงินจริง MTD จาก `/root/kdp/sales-sync-state.json` = `$6.77`; orders/downloads = `60`; KENP = `159`
+  - Hero books: LIVE 5/5, KDP Select 5/5, A+ submitted 5/5
+  - Pinterest manual progress = 2/4 done; เหลือ `adhd-workbook-german-adults`, `easy-taxes-self-employed-spain`
+  - Category health ok, blocker 0, warning 26; KDP queue 0
+- เพิ่ม monitor ใหม่:
+  - API: `/api/distribution/monitor` (ผ่าน nginx คือ `/libra/api/distribution/monitor`)
+  - HTML: `/distribution/monitor` (ผ่าน nginx คือ `/libra/distribution/monitor`)
+- แก้ `distribution_report.py`:
+  - `build_monitor(report, overview=None, category_health=None)` คำนวณ score/status/blockers/health/recommendation
+  - `render_monitor_html(monitor)` แสดงหน้าอ่านครั้งเดียว: plan score, เงินจริง, orders/downloads, KENP, checkpoint, hero setup, Pinterest, blockers, system health, promo calendar
+  - Blocker logic ตั้งใจนับเฉพาะสิ่งที่หยุดแผน hero distribution จริง; old `quality_failed` drafts ไม่ใช่ blocker ของแผนเดือน ก.ค.
+- แก้ `app.py` เพิ่ม route monitor ทั้ง JSON และ HTML
+- เพิ่ม tests ใน `tests/test_distribution_report.py`; RED fail ก่อนแก้เพราะยังไม่มี functions, GREEN ผ่านหลังแก้
+- Verify:
+  - `PYTHONPATH=. pytest tests/test_distribution_report.py tests/test_profit_tracker.py tests/test_feedback_loop.py tests/test_kdp_publish_confirmation.py -q` = 16 passed
+  - `python3 -m py_compile app.py distribution_report.py tests/test_distribution_report.py` ผ่าน
+  - restart `libra.service` แล้ว active
+  - public `/libra/api/distribution/monitor` คืน `status=on_track`, `score=92`, `blockers.count=0`
+  - public `/libra/distribution/monitor` มี `Libra Monitor`, `On track`, `$6.77`, `2/4 done`, `รอ checkpoint ก่อนซื้อ paid promo`
+
 ## 2026-07-08 — Libra Distribution Dashboard + daily Telegram automation
 
 - บุ๋ย approve ให้ทำตามแผน 100% automation เท่าที่ทำได้ และเตรียมส่วนที่ต้องทำผ่าน Claude for Chrome. เพิ่ม `distribution_report.py` เป็น source กลางของรายงาน distribution: แยกเงินจริง KDP royalties ออกจาก orders/free downloads ชัดเจน, อ่าน hero books, free promo windows, LovelyBooks flags, Reddit schedule, และสร้าง today actions.

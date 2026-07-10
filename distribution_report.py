@@ -26,6 +26,7 @@ LOVELY_DIR = LIBRA_DIR.parent / "lovelybooks"
 REPORT_JSON = LIBRA_DIR / "data" / "distribution-report.json"
 DOWNLOADS_HTML = LIBRA_DIR.parent / "downloads" / "libra-distribution-dashboard.html"
 CHROME_GUIDE = LIBRA_DIR.parent / "downloads" / "kdp-pins" / "CLAUDE-CHROME-POSTING-GUIDE.md"
+CATEGORY_HEALTH_STATE = LIBRA_DIR / "data" / "category_health_state.json"
 
 
 def _load_json(path: Path, default: Any) -> Any:
@@ -259,6 +260,139 @@ def build_report(today: date | None = None) -> dict:
     return report
 
 
+def _ratio_label(done: int, total: int) -> str:
+    return f"{done}/{total}" if total else "0/0"
+
+
+def _sales_sync_fresh(last_sync: str, generated_at: str) -> bool:
+    sync_day = _parse_date(last_sync)
+    generated_day = _parse_date(generated_at)
+    return bool(sync_day and generated_day and sync_day >= generated_day)
+
+
+def build_monitor(
+    report: dict,
+    *,
+    overview: dict | None = None,
+    category_health: dict | None = None,
+) -> dict:
+    """Build a single-glance monitor from the distribution report.
+
+    The monitor intentionally keeps old quality-failed drafts out of the
+    blocker count. This July plan is distribution-first; blockers are only
+    issues that can stop the active hero-book experiment.
+    """
+    overview = overview or {}
+    category_health = category_health or _load_json(CATEGORY_HEALTH_STATE, {})
+    heroes = report.get("hero_books", [])
+    hero_total = len(heroes)
+    hero_live = sum(1 for h in heroes if h.get("live_status") == "LIVE")
+    hero_select = sum(1 for h in heroes if h.get("select"))
+    hero_aplus = sum(1 for h in heroes if h.get("aplus") in {"submitted", "approved", "live"})
+    scheduled_or_done = sum(1 for h in heroes if h.get("free_promo"))
+
+    pinterest = report.get("manual_progress", {}).get("pinterest", {})
+    pin_done = int(pinterest.get("completed_count") or 0)
+    pin_remaining = int(pinterest.get("remaining_count") or 0)
+    pin_total = pin_done + pin_remaining
+
+    blockers: list[str] = []
+    counts = overview.get("counts", {}) if isinstance(overview, dict) else {}
+    if int(counts.get("queued_for_kdp") or 0) > 0:
+        blockers.append(f"KDP queue has {counts.get('queued_for_kdp')} pending item(s)")
+    queue_blocker = overview.get("queue_blocker") if isinstance(overview, dict) else None
+    if queue_blocker:
+        blockers.append(f"Queue blocker: {queue_blocker.get('slug', 'unknown')}")
+    signature = category_health.get("signature", {}) if isinstance(category_health, dict) else {}
+    if int(signature.get("blocker_count") or 0) > 0:
+        blockers.append(f"Category blockers: {signature.get('blocker_count')}")
+    if hero_live < hero_total:
+        blockers.append(f"Hero ebooks live: {_ratio_label(hero_live, hero_total)}")
+    if hero_select < hero_total:
+        blockers.append(f"Hero KDP Select: {_ratio_label(hero_select, hero_total)}")
+    if hero_aplus < hero_total:
+        blockers.append(f"Hero A+ submitted: {_ratio_label(hero_aplus, hero_total)}")
+
+    money = report.get("money", {})
+    sync_last = money.get("last_sync") or overview.get("sales", {}).get("last_sync", "")
+    sync_fresh = _sales_sync_fresh(sync_last, report.get("generated_at", ""))
+    if not sync_fresh:
+        blockers.append("KDP sales sync is stale")
+
+    days_left = report.get("checkpoint", {}).get("days_left")
+    timeline_label = "On track"
+    if isinstance(days_left, int) and days_left < 0:
+        timeline_label = "Past checkpoint"
+        blockers.append("Checkpoint date has passed")
+    elif report.get("free_promos", {}).get("active"):
+        timeline_label = "Promo active"
+
+    score = 100
+    score -= min(40, len(blockers) * 12)
+    if pin_total and pin_remaining:
+        score -= 8
+    if scheduled_or_done < max(1, hero_total - 1):
+        score -= 10
+    if float(money.get("mtd_royalties_usd") or 0) <= 0:
+        score -= 12
+    score = max(0, min(100, score))
+    if blockers:
+        status = "blocked"
+        label = "Blocked"
+    elif score >= 75:
+        status = "on_track"
+        label = "On track"
+    else:
+        status = "watch"
+        label = "Watch"
+
+    return {
+        "generated_at": report.get("generated_at", ""),
+        "overall": {"status": status, "label": label, "score": score},
+        "money": {
+            "royalties": float(money.get("mtd_royalties_usd") or 0.0),
+            "orders": int(money.get("mtd_orders_all_types") or 0),
+            "kenp": int(money.get("mtd_kenp") or 0),
+        },
+        "timeline": {
+            "label": timeline_label,
+            "days_left": days_left,
+            "checkpoint": report.get("checkpoint", {}).get("date", ""),
+        },
+        "setup": {
+            "hero_live": _ratio_label(hero_live, hero_total),
+            "hero_select": _ratio_label(hero_select, hero_total),
+            "hero_aplus": _ratio_label(hero_aplus, hero_total),
+            "scheduled_or_done_promos": _ratio_label(scheduled_or_done, hero_total),
+        },
+        "manual": {
+            "pinterest": {
+                "label": f"{pin_done}/{pin_total} done" if pin_total else "0/0 done",
+                "remaining": pinterest.get("remaining_slugs", []),
+            }
+        },
+        "promo": {
+            "active": report.get("free_promos", {}).get("active", []),
+            "upcoming": report.get("free_promos", {}).get("upcoming", []),
+            "free_downloads": int(report.get("free_promos", {}).get("total_downloads_in_promo_windows") or 0),
+        },
+        "health": {
+            "kdp_queue": str(counts.get("queued_for_kdp", 0)),
+            "category": signature.get("status", "unknown"),
+            "category_warnings": int(signature.get("warning_count") or 0),
+            "sales_sync": "fresh" if sync_fresh else "stale",
+        },
+        "blockers": {"count": len(blockers), "items": blockers},
+        "today_actions": report.get("today_actions", []),
+        "decision": {
+            "recommendation": (
+                "แก้ blocker ก่อนตัดสินงบ" if blockers
+                else "รอ checkpoint ก่อนซื้อ paid promo"
+            )
+        },
+    }
+
+
 def telegram_message(report: dict) -> str:
     money = report["money"]
     pinterest = report.get("manual_progress", {}).get("pinterest", {})
@@ -380,6 +514,130 @@ def render_html(report: dict) -> str:
     <h2>กฎตัดสิน</h2>
     <ul>{rules}</ul>
   </section>
+</main>
+</body>
+</html>
+"""
+
+
+def render_monitor_html(monitor: dict) -> str:
+    def e(value: Any) -> str:
+        return html.escape(str(value if value is not None else ""))
+
+    status = monitor["overall"]["status"]
+    blockers = monitor.get("blockers", {}).get("items", [])
+    blocker_items = "\n".join(f"<li>{e(item)}</li>" for item in blockers) or "<li>ไม่มี blocker ที่หยุดแผนฮีโร่ตอนนี้</li>"
+    actions = "\n".join(
+        f"<li><b>{e(a.get('channel', ''))}</b>: {e(a.get('action', ''))}</li>"
+        for a in monitor.get("today_actions", [])
+    ) or "<li>ดูตัวเลขและรอรอบแจกฟรีถัดไป</li>"
+    upcoming = "\n".join(
+        f"<tr><td>{e(p.get('slug', ''))}</td><td>{e(p.get('start', ''))}</td><td>{e(p.get('end', ''))}</td></tr>"
+        for p in monitor.get("promo", {}).get("upcoming", [])
+    ) or "<tr><td colspan='3'>ยังไม่มีโปรถัดไป</td></tr>"
+    remaining = ", ".join(monitor.get("manual", {}).get("pinterest", {}).get("remaining", [])) or "-"
+    return f"""<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Libra Monitor</title>
+  <style>
+    :root {{
+      --bg:#0b1020; --panel:#121826; --panel2:#172033; --line:#2a3548;
+      --text:#e8edf7; --muted:#98a6ba; --good:#23c483; --warn:#f4b740; --bad:#ee5b5b;
+      --ink:#071018;
+    }}
+    body {{ margin:0; background:var(--bg); color:var(--text); font-family:Inter, Arial, sans-serif; }}
+    main {{ max-width:1180px; margin:0 auto; padding:24px 16px 44px; }}
+    header {{ display:flex; justify-content:space-between; gap:16px; align-items:flex-start; margin-bottom:18px; }}
+    h1 {{ margin:0; font-size:30px; line-height:1.1; }}
+    h2 {{ margin:0 0 12px; font-size:17px; }}
+    .muted {{ color:var(--muted); }}
+    .pill {{ display:inline-flex; align-items:center; min-height:30px; padding:0 12px; border-radius:999px; font-weight:700; color:var(--ink); background:var(--warn); }}
+    .pill.on_track {{ background:var(--good); }}
+    .pill.blocked {{ background:var(--bad); color:white; }}
+    .score {{ font-size:46px; font-weight:800; letter-spacing:0; }}
+    .grid {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }}
+    .grid.two {{ grid-template-columns:1.1fr .9fr; margin-top:12px; }}
+    .card {{ background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px; }}
+    .metric {{ font-size:26px; font-weight:800; margin-top:8px; }}
+    .label {{ color:var(--muted); font-size:13px; }}
+    .stack {{ display:grid; gap:10px; }}
+    table {{ width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:8px; overflow:hidden; }}
+    th, td {{ padding:10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }}
+    th {{ color:#c9d8ef; font-size:12px; text-transform:uppercase; }}
+    ul {{ margin:0; padding-left:18px; }}
+    li {{ margin:6px 0; }}
+    .decision {{ background:var(--panel2); border-left:4px solid var(--good); }}
+    @media (max-width: 860px) {{
+      header, .grid.two {{ display:block; }}
+      .grid {{ grid-template-columns:repeat(2,minmax(0,1fr)); }}
+      .card {{ margin-bottom:12px; }}
+    }}
+    @media (max-width: 540px) {{ .grid {{ grid-template-columns:1fr; }} h1 {{ font-size:24px; }} }}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Libra Monitor</h1>
+      <div class="muted">Generated {e(monitor.get('generated_at'))} · checkpoint {e(monitor['timeline']['checkpoint'])}</div>
+    </div>
+    <div>
+      <span class="pill {e(status)}">{e(monitor['overall']['label'])}</span>
+      <div class="score">{e(monitor['overall']['score'])}</div>
+      <div class="muted">plan score</div>
+    </div>
+  </header>
+
+  <section class="grid">
+    <div class="card"><div class="label">เงินจริง MTD</div><div class="metric">${monitor['money']['royalties']:.2f}</div><div class="muted">KDP royalties เท่านั้น</div></div>
+    <div class="card"><div class="label">Orders/downloads</div><div class="metric">{e(monitor['money']['orders'])}</div><div class="muted">รวมโหลดฟรี</div></div>
+    <div class="card"><div class="label">KENP</div><div class="metric">{e(monitor['money']['kenp'])}</div><div class="muted">หน้าอ่าน Kindle Unlimited</div></div>
+    <div class="card"><div class="label">เหลือถึง checkpoint</div><div class="metric">{e(monitor['timeline']['days_left'])} วัน</div><div class="muted">{e(monitor['timeline']['label'])}</div></div>
+  </section>
+
+  <section class="grid">
+    <div class="card"><div class="label">Hero ebooks LIVE</div><div class="metric">{e(monitor['setup']['hero_live'])}</div></div>
+    <div class="card"><div class="label">KDP Select</div><div class="metric">{e(monitor['setup']['hero_select'])}</div></div>
+    <div class="card"><div class="label">A+ submitted</div><div class="metric">{e(monitor['setup']['hero_aplus'])}</div></div>
+    <div class="card"><div class="label">Pinterest</div><div class="metric">{e(monitor['manual']['pinterest']['label'])}</div><div class="muted">เหลือ: {e(remaining)}</div></div>
+  </section>
+
+  <section class="grid two">
+    <div class="card">
+      <h2>งานวันนี้</h2>
+      <ul>{actions}</ul>
+    </div>
+    <div class="card decision">
+      <h2>คำแนะนำตอนนี้</h2>
+      <p>{e(monitor['decision']['recommendation'])}</p>
+      <p class="muted">ถ้ายังไม่มี proof จากโหลด/รีวิว/KU/paid sale ให้รอข้อมูลถึง checkpoint ก่อนเพิ่มงบ</p>
+    </div>
+  </section>
+
+  <section class="grid two">
+    <div class="card">
+      <h2>Blockers</h2>
+      <ul>{blocker_items}</ul>
+    </div>
+    <div class="card">
+      <h2>System Health</h2>
+      <div class="stack">
+        <div>KDP queue: <b>{e(monitor['health']['kdp_queue'])}</b></div>
+        <div>Category: <b>{e(monitor['health']['category'])}</b> · warnings {e(monitor['health'].get('category_warnings', 0))}</div>
+        <div>Sales sync: <b>{e(monitor['health']['sales_sync'])}</b></div>
+      </div>
+    </div>
+  </section>
+
+  <h2 style="margin-top:18px">Promo Calendar</h2>
+  <table>
+    <thead><tr><th>Book</th><th>Start</th><th>End</th></tr></thead>
+    <tbody>{upcoming}</tbody>
+  </table>
 </main>
 </body>
 </html>

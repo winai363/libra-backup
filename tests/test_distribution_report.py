@@ -161,3 +161,82 @@ def test_build_report_includes_manual_progress_from_evidence(tmp_path, monkeypat
     assert report["manual_progress"]["pinterest"]["completed_count"] == 2
     assert report["manual_progress"]["pinterest"]["target_slugs"] == ["hero-one", "hero-two", "hero-three"]
     assert report["manual_progress"]["pinterest"]["remaining_slugs"] == ["hero-three"]
+
+
+def test_build_monitor_summarizes_on_track_distribution_plan():
+    report = {
+        "generated_at": "2026-07-10T09:50:01",
+        "checkpoint": {"date": "2026-07-31", "days_left": 21},
+        "money": {
+            "last_sync": "2026-07-10T09:15:09",
+            "mtd_orders_all_types": 60,
+            "mtd_kenp": 159,
+            "mtd_royalties_usd": 6.77,
+        },
+        "free_promos": {
+            "total_downloads_in_promo_windows": 2,
+            "active": [],
+            "upcoming": [
+                {"slug": "workbook-es", "start": "2026-07-15", "end": "2026-07-19"},
+                {"slug": "focus-es", "start": "2026-07-22", "end": "2026-07-26"},
+            ],
+        },
+        "lovelybooks": {"status": "ready"},
+        "manual_progress": {
+            "pinterest": {
+                "completed_count": 2,
+                "remaining_count": 2,
+                "remaining_slugs": ["german", "taxes"],
+            }
+        },
+        "hero_books": [
+            {"slug": "lead", "live_status": "LIVE", "select": True, "aplus": "submitted", "free_promo": {"status": "Done"}},
+            {"slug": "workbook-es", "live_status": "LIVE", "select": True, "aplus": "submitted", "free_promo": {"status": "Scheduled"}},
+            {"slug": "focus-es", "live_status": "LIVE", "select": True, "aplus": "submitted", "free_promo": {"status": "Scheduled"}},
+            {"slug": "german", "live_status": "LIVE", "select": True, "aplus": "submitted", "free_promo": {"status": "Scheduled"}},
+            {"slug": "taxes", "live_status": "LIVE", "select": True, "aplus": "submitted", "free_promo": None},
+        ],
+        "today_actions": [{"channel": "Monitor", "action": "ดูรายงานวันนี้"}],
+    }
+    overview = {
+        "counts": {"queued_for_kdp": 0, "quality_failed": 17, "tracked_asins": 42},
+        "queue_blocker": None,
+        "sales": {"last_sync": "2026-07-10T09:15:09"},
+    }
+    category_health = {"signature": {"status": "ok", "blocker_count": 0, "warning_count": 26}}
+
+    monitor = dr.build_monitor(report, overview=overview, category_health=category_health)
+
+    assert monitor["overall"]["status"] == "on_track"
+    assert monitor["overall"]["score"] >= 75
+    assert monitor["timeline"]["label"] == "On track"
+    assert monitor["setup"]["hero_live"] == "5/5"
+    assert monitor["setup"]["hero_select"] == "5/5"
+    assert monitor["setup"]["hero_aplus"] == "5/5"
+    assert monitor["manual"]["pinterest"]["label"] == "2/4 done"
+    assert monitor["blockers"]["count"] == 0
+    assert monitor["decision"]["recommendation"] == "รอ checkpoint ก่อนซื้อ paid promo"
+
+
+def test_render_monitor_html_contains_status_and_next_actions():
+    monitor = {
+        "generated_at": "2026-07-10T09:50:01",
+        "overall": {"status": "on_track", "label": "On track", "score": 82},
+        "money": {"royalties": 6.77, "orders": 60, "kenp": 159},
+        "timeline": {"label": "On track", "days_left": 21, "checkpoint": "2026-07-31"},
+        "setup": {"hero_live": "5/5", "hero_select": "5/5", "hero_aplus": "5/5"},
+        "manual": {"pinterest": {"label": "2/4 done", "remaining": ["german", "taxes"]}},
+        "promo": {"active": [], "upcoming": [{"slug": "workbook-es", "start": "2026-07-15", "end": "2026-07-19"}]},
+        "health": {"kdp_queue": "0", "category": "ok", "sales_sync": "fresh"},
+        "blockers": {"count": 0, "items": []},
+        "today_actions": [{"channel": "Monitor", "action": "ดูรายงานวันนี้"}],
+        "decision": {"recommendation": "รอ checkpoint ก่อนซื้อ paid promo"},
+    }
+
+    html = dr.render_monitor_html(monitor)
+
+    assert "Libra Monitor" in html
+    assert "On track" in html
+    assert "$6.77" in html
+    assert "2/4 done" in html
+    assert "รอ checkpoint ก่อนซื้อ paid promo" in html

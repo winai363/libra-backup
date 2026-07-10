@@ -119,6 +119,25 @@
   - public `/libra/distribution/monitor` มี `Free Growth Engine`, `free_post`, `Auto execute`
 - สถานะ decision ล่าสุด: ยังไม่ schedule free promo ใหม่ เพราะมี promo ใกล้เริ่ม 15 ก.ค. และ Pinterest/manual distribution ยังไม่ครบ; agent เลือก auto free_post เป็น action ที่เหมาะสุดตอนนี้
 
+## 2026-07-10 — Pinterest completed 4/4 after Claude for Chrome posting
+
+- บุ๋ยแจ้งว่าโพสต์ Pinterest เสร็จแล้วจาก Claude for Chrome
+- อัปเดต `data/manual-task-state.json`:
+  - completed เพิ่ม `adhd-workbook-german-adults`
+  - completed เพิ่ม `easy-taxes-self-employed-spain`
+  - last_updated = `2026-07-10`
+  - note ระบุว่าเป็น user report จากการโพสต์ผ่าน Claude for Chrome
+- Regenerate report/agent:
+  - `python3 scripts/libra_distribution_report.py`
+  - `python3 scripts/kdp_auto_manager.py`
+- Verify:
+  - `PYTHONPATH=. pytest tests/test_distribution_report.py tests/test_profit_tracker.py tests/test_feedback_loop.py tests/test_kdp_publish_confirmation.py -q` = 18 passed
+  - `python3 -m py_compile distribution_report.py scripts/kdp_auto_manager.py scripts/libra_distribution_report.py` ผ่าน
+  - restart `libra.service` แล้ว active
+  - public `/libra/api/distribution/monitor` คืน score `100`, Pinterest `4/4 done`, CMO `on_plan`, blockers `0`
+  - public `/libra/api/kdp-agent` คืน CMO `on_plan`, free_growth action `free_post`
+
+
 ## 2026-07-08 — Libra Distribution Dashboard + daily Telegram automation
 
 - บุ๋ย approve ให้ทำตามแผน 100% automation เท่าที่ทำได้ และเตรียมส่วนที่ต้องทำผ่าน Claude for Chrome. เพิ่ม `distribution_report.py` เป็น source กลางของรายงาน distribution: แยกเงินจริง KDP royalties ออกจาก orders/free downloads ชัดเจน, อ่าน hero books, free promo windows, LovelyBooks flags, Reddit schedule, และสร้าง today actions.

@@ -85,6 +85,40 @@
   - public monitor มี `Action Queue`, `Decision Gates`, `Paid promo gate`, `Amazon Ads gate`
   - public `/libra/api/kdp-agent` คืน `CMO due_now Paid promo gate closed`
 
+## 2026-07-10 — Auto Free Growth Engine
+
+- บุ๋ยขอให้ agent ตัดสินใจปล่อยฟรีหรือโพสต์ฟรีได้ก่อนสิ้นเดือนโดยใช้ข้อมูลจริง เพื่อ maximize revenue ใน timeline จำกัด
+- ตรวจ official KDP rules แล้ว:
+  - Free Book Promotion ใช้ได้สูงสุด 5 วันต่อ KDP Select 90-day term
+  - ต้อง schedule ล่วงหน้าอย่างน้อย 1 วัน
+  - ระหว่าง free promotion ไม่มี royalty
+  - ในหนึ่ง term ใช้ Free Promo หรือ Countdown ได้อย่างใดอย่างหนึ่ง
+- เพิ่ม `build_free_growth_engine(report, actual_vs_plan, blockers)` ใน `distribution_report.py`
+  - blockers มี → hold
+  - มี promo active/ใกล้เริ่มใน 5 วัน หรือ Pinterest/manual distribution ยังไม่ครบ → decision `free_post`
+  - ไม่มี promo ใกล้เริ่ม + revenue/free-download progress behind + มีวันถึง checkpoint + มี hero LIVE/Select ไม่มี free_promo → decision `free_promo`
+- เพิ่ม `free_growth_engine` เข้า `kdp_agent`
+- ปรับ monitor HTML ให้แสดง `Free Growth Engine` ตาราง action/channel/reason/auto execute
+- ปรับ digest ให้รวม Free Growth Engine decisions
+- ปรับ `scripts/kdp_auto_manager.py`:
+  - เพิ่ม `--execute-free-actions`
+  - decision `free_post` จะบันทึก action log และส่งผ่าน digest/Telegram/reminder path
+  - decision `free_promo` จะเรียก `scripts/free_promo_auto.py --force --only <slug> --start <tomorrow> --days <n>` เมื่อ guard เปิด
+  - เขียน action log ที่ `data/kdp-agent-actions.jsonl`
+- เพิ่ม `data/kdp-agent-actions.jsonl` เข้า `.gitignore`
+- อัปเดต cron เป็น:
+  - `5 10 * * * cd /root/libra && /usr/bin/python3 scripts/kdp_auto_manager.py --send --execute-free-actions >> /root/libra/logs/kdp-agent.log 2>&1`
+- Verify:
+  - RED tests fail ก่อนแก้เพราะไม่มี `free_growth_engine` และ `build_free_growth_engine`
+  - `PYTHONPATH=. pytest tests/test_distribution_report.py tests/test_profit_tracker.py tests/test_feedback_loop.py tests/test_kdp_publish_confirmation.py -q` = 18 passed
+  - `python3 -m py_compile app.py distribution_report.py tests/test_distribution_report.py scripts/kdp_auto_manager.py` ผ่าน
+  - `python3 scripts/kdp_auto_manager.py --execute-free-actions` executed=1, action=`free_post`
+  - `python3 scripts/kdp_auto_manager.py --send --execute-free-actions` sent=True, executed=1
+  - restart `libra.service` active
+  - public `/libra/api/kdp-agent` คืน `free_post True Pinterest/Reddit`
+  - public `/libra/distribution/monitor` มี `Free Growth Engine`, `free_post`, `Auto execute`
+- สถานะ decision ล่าสุด: ยังไม่ schedule free promo ใหม่ เพราะมี promo ใกล้เริ่ม 15 ก.ค. และ Pinterest/manual distribution ยังไม่ครบ; agent เลือก auto free_post เป็น action ที่เหมาะสุดตอนนี้
+
 ## 2026-07-08 — Libra Distribution Dashboard + daily Telegram automation
 
 - บุ๋ย approve ให้ทำตามแผน 100% automation เท่าที่ทำได้ และเตรียมส่วนที่ต้องทำผ่าน Claude for Chrome. เพิ่ม `distribution_report.py` เป็น source กลางของรายงาน distribution: แยกเงินจริง KDP royalties ออกจาก orders/free downloads ชัดเจน, อ่าน hero books, free promo windows, LovelyBooks flags, Reddit schedule, และสร้าง today actions.

@@ -385,7 +385,90 @@ def _build_actual_vs_plan(
     }
 
 
-def _build_kdp_agent(actual_vs_plan: dict, blockers: list[str]) -> dict:
+def _metric_by_name(actual_vs_plan: dict, name: str) -> dict:
+    return next((m for m in actual_vs_plan.get("metrics", []) if m.get("name") == name), {})
+
+
+def _days_until(value: Any) -> int | None:
+    target = _parse_date(value)
+    if not target:
+        return None
+    return (target - date.today()).days
+
+
+def build_free_growth_engine(report: dict, actual_vs_plan: dict, blockers: list[str]) -> dict:
+    """Choose free growth actions that can run before the month-end checkpoint."""
+    decisions = []
+    if blockers:
+        decisions.append({
+            "action": "hold",
+            "channel": "system",
+            "reason": "blockers present; free growth actions paused until fixed",
+            "execute": False,
+        })
+        return {"mode": "auto_free_actions", "decisions": decisions}
+
+    upcoming = report.get("free_promos", {}).get("upcoming", [])
+    active = report.get("free_promos", {}).get("active", [])
+    near_promo = bool(active)
+    if not near_promo:
+        for promo in upcoming:
+            days = _days_until(promo.get("start"))
+            if days is not None and 0 <= days <= 5:
+                near_promo = True
+                break
+
+    pinterest = report.get("manual_progress", {}).get("pinterest", {})
+    if near_promo or int(pinterest.get("remaining_count") or 0) > 0:
+        decisions.append({
+            "action": "free_post",
+            "channel": "Pinterest/Reddit",
+            "reason": "promo approaching or manual distribution unfinished",
+            "execute": True,
+        })
+
+    revenue = _metric_by_name(actual_vs_plan, "Revenue")
+    free_downloads = _metric_by_name(actual_vs_plan, "Free downloads")
+    days_left = report.get("checkpoint", {}).get("days_left")
+    can_add_promo = (
+        not near_promo
+        and isinstance(days_left, int)
+        and days_left >= 2
+        and revenue.get("percent", 100) < 40
+        and free_downloads.get("percent", 100) < 50
+    )
+    if can_add_promo:
+        candidate = next(
+            (
+                h for h in report.get("hero_books", [])
+                if h.get("live_status") == "LIVE"
+                and h.get("select")
+                and not h.get("free_promo")
+            ),
+            None,
+        )
+        if candidate:
+            decisions.append({
+                "action": "free_promo",
+                "channel": "KDP Free Book Promotion",
+                "slug": candidate.get("slug"),
+                "reason": "revenue/free-download progress is behind and no near promo is scheduled",
+                "execute": True,
+                "start_offset_days": 1,
+                "days": min(2, int(days_left)),
+            })
+
+    if not decisions:
+        decisions.append({
+            "action": "observe",
+            "channel": "monitor",
+            "reason": "existing promo windows are already staged; wait for fresh sales/download data",
+            "execute": False,
+        })
+    return {"mode": "auto_free_actions", "decisions": decisions}
+
+
+def _build_kdp_agent(actual_vs_plan: dict, blockers: list[str], report: dict | None = None) -> dict:
     next_actions = []
     if blockers:
         next_actions.append("แก้ blocker ก่อนให้ agent เสนอ growth action")
@@ -433,6 +516,7 @@ def _build_kdp_agent(actual_vs_plan: dict, blockers: list[str]) -> dict:
             "rule": "ทำ distribution ฟรีและ manual tasks ต่อได้ เพราะไม่มี spend risk",
         },
     ]
+    free_growth = build_free_growth_engine(report or {}, actual_vs_plan, blockers)
     return {
         "name": "Libra KDP Auto Manager",
         "mode": "auto_advisor",
@@ -442,6 +526,7 @@ def _build_kdp_agent(actual_vs_plan: dict, blockers: list[str]) -> dict:
         "next_actions": next_actions,
         "action_queue": action_queue,
         "decision_gates": decision_gates,
+        "free_growth_engine": free_growth,
         "guardrails": [
             "KDP royalties are the money source of truth",
             "orders/downloads include free activity and cannot justify spend alone",
@@ -537,7 +622,7 @@ def build_monitor(
         pin_total=pin_total,
         blocker_count=len(blockers),
     )
-    kdp_agent = _build_kdp_agent(actual_vs_plan, blockers)
+    kdp_agent = _build_kdp_agent(actual_vs_plan, blockers, report)
 
     return {
         "generated_at": report.get("generated_at", ""),
@@ -759,6 +844,10 @@ def render_monitor_html(monitor: dict) -> str:
         f"<tr><td>{e(item.get('name'))}</td><td>{e(item.get('status'))}</td><td>{e(item.get('rule'))}</td></tr>"
         for item in monitor.get("kdp_agent", {}).get("decision_gates", [])
     ) or "<tr><td colspan='3'>ยังไม่มี gate</td></tr>"
+    free_growth = "\n".join(
+        f"<tr><td>{e(item.get('action'))}</td><td>{e(item.get('channel'))}</td><td>{e(item.get('reason'))}</td><td>{e(item.get('execute'))}</td></tr>"
+        for item in monitor.get("kdp_agent", {}).get("free_growth_engine", {}).get("decisions", [])
+    ) or "<tr><td colspan='4'>ยังไม่มี decision</td></tr>"
     return f"""<!doctype html>
 <html lang="th">
 <head>
@@ -891,6 +980,14 @@ def render_monitor_html(monitor: dict) -> str:
     </div>
   </section>
 
+  <section class="card" style="margin-top:12px">
+    <h2>Free Growth Engine</h2>
+    <table>
+      <thead><tr><th>Action</th><th>Channel</th><th>Reason</th><th>Auto execute</th></tr></thead>
+      <tbody>{free_growth}</tbody>
+    </table>
+  </section>
+
   <section class="grid two">
     <div class="card">
       <h2>Blockers</h2>
@@ -944,6 +1041,12 @@ def kdp_agent_digest(state: dict) -> str:
     lines.append("Decision Gates:")
     for item in state.get("agent", {}).get("decision_gates", [])[:5]:
         lines.append(f"- {item.get('name')}: {item.get('status')} — {item.get('rule')}")
+    lines.append("")
+    lines.append("Free Growth Engine:")
+    for item in state.get("agent", {}).get("free_growth_engine", {}).get("decisions", [])[:5]:
+        lines.append(
+            f"- {item.get('action')} via {item.get('channel')} | execute={item.get('execute')} | {item.get('reason')}"
+        )
     lines.append("")
     lines.append("Next actions:")
     for item in state.get("agent", {}).get("next_actions", [])[:5]:

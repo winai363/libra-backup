@@ -156,3 +156,39 @@ Set daily cron:
 ```bash
 5 10 * * * cd /root/libra && /usr/bin/python3 scripts/kdp_auto_manager.py --send >> /root/libra/logs/kdp-agent.log 2>&1
 ```
+
+### Task 5: Auto Free Growth Engine
+
+**Files:**
+- Modify: `distribution_report.py`
+- Modify: `scripts/kdp_auto_manager.py`
+- Modify: `tests/test_distribution_report.py`
+- Modify: `.gitignore`
+
+**Interfaces:**
+- Produces: `build_free_growth_engine(report: dict, actual_vs_plan: dict, blockers: list[str]) -> dict`
+- Produces: `monitor["kdp_agent"]["free_growth_engine"]`
+- Produces: `scripts/kdp_auto_manager.py --execute-free-actions`
+
+- [x] **Step 1: Write failing tests**
+
+Require `free_growth_engine` on monitor/HTML/digest and require that a behind-plan state with no near promo can open a guarded `free_promo` decision.
+
+- [x] **Step 2: Implement decision logic**
+
+Rules:
+- Blockers present -> hold
+- Active or near promo, or unfinished manual distribution -> `free_post`
+- No near promo + revenue/free-download progress behind + eligible hero without `free_promo` -> `free_promo`
+
+- [x] **Step 3: Add execute mode**
+
+`--execute-free-actions` logs `free_post` actions and calls `free_promo_auto.py --force --only <slug> --start <tomorrow> --days <n>` only when a `free_promo` decision passes guards.
+
+- [x] **Step 4: Update cron**
+
+Set daily cron:
+
+```bash
+5 10 * * * cd /root/libra && /usr/bin/python3 scripts/kdp_auto_manager.py --send --execute-free-actions >> /root/libra/logs/kdp-agent.log 2>&1
+```

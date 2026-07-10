@@ -229,6 +229,9 @@ def test_build_monitor_summarizes_on_track_distribution_plan():
     assert monitor["kdp_agent"]["action_queue"][0]["status"] == "due_now"
     assert monitor["kdp_agent"]["decision_gates"][0]["name"] == "Paid promo gate"
     assert monitor["kdp_agent"]["decision_gates"][0]["status"] == "closed"
+    assert monitor["kdp_agent"]["free_growth_engine"]["mode"] == "auto_free_actions"
+    assert monitor["kdp_agent"]["free_growth_engine"]["decisions"][0]["action"] == "free_post"
+    assert monitor["kdp_agent"]["free_growth_engine"]["decisions"][0]["execute"] is True
 
 
 def test_render_monitor_html_contains_status_and_next_actions():
@@ -265,6 +268,12 @@ def test_render_monitor_html_contains_status_and_next_actions():
             "decision_gates": [
                 {"name": "Paid promo gate", "status": "closed", "rule": "รอ proof หลัง promo windows"}
             ],
+            "free_growth_engine": {
+                "mode": "auto_free_actions",
+                "decisions": [
+                    {"action": "free_post", "channel": "Pinterest/Reddit", "reason": "promo approaching", "execute": True}
+                ],
+            },
         },
     }
 
@@ -279,6 +288,8 @@ def test_render_monitor_html_contains_status_and_next_actions():
     assert "อย่าเพิ่งซื้อ paid promo" in html
     assert "Action Queue" in html
     assert "Decision Gates" in html
+    assert "Free Growth Engine" in html
+    assert "free_post" in html
     assert "On track" in html
     assert "$6.77" in html
     assert "2/4 done" in html
@@ -302,6 +313,11 @@ def test_kdp_agent_digest_summarizes_roles_queue_and_gates():
             "decision_gates": [
                 {"name": "Paid promo gate", "status": "closed", "rule": "รอ proof หลัง promo windows"}
             ],
+            "free_growth_engine": {
+                "decisions": [
+                    {"action": "free_post", "channel": "Pinterest/Reddit", "reason": "promo approaching", "execute": True}
+                ],
+            },
         },
         "actual_vs_plan": [
             {"name": "Revenue", "actual_label": "$6.77", "plan_label": "$25.00", "percent": 27, "status": "early"}
@@ -317,3 +333,29 @@ def test_kdp_agent_digest_summarizes_roles_queue_and_gates():
     assert "CMO=behind" in msg
     assert "เร่ง Pinterest ที่เหลือ" in msg
     assert "Paid promo gate: closed" in msg
+    assert "free_post" in msg
+
+
+def test_free_growth_engine_can_open_free_promo_when_no_near_promo_and_metrics_behind():
+    report = {
+        "checkpoint": {"days_left": 12},
+        "money": {"mtd_royalties_usd": 1.0, "mtd_orders_all_types": 5, "mtd_kenp": 0},
+        "free_promos": {"total_downloads_in_promo_windows": 0, "active": [], "upcoming": []},
+        "manual_progress": {"pinterest": {"completed_count": 4, "remaining_count": 0, "remaining_slugs": []}},
+        "hero_books": [
+            {"slug": "taxes", "live_status": "LIVE", "select": True, "aplus": "submitted", "free_promo": None},
+        ],
+    }
+    actual_vs_plan = {
+        "metrics": [
+            {"name": "Revenue", "percent": 4, "status": "behind"},
+            {"name": "Free downloads", "percent": 0, "status": "behind"},
+        ],
+        "roles": {"CMO": {"status": "on_plan"}},
+    }
+
+    engine = dr.build_free_growth_engine(report, actual_vs_plan, [])
+
+    assert engine["decisions"][0]["action"] == "free_promo"
+    assert engine["decisions"][0]["slug"] == "taxes"
+    assert engine["decisions"][0]["execute"] is True

@@ -137,6 +137,23 @@
   - public `/libra/api/distribution/monitor` คืน score `100`, Pinterest `4/4 done`, CMO `on_plan`, blockers `0`
   - public `/libra/api/kdp-agent` คืน CMO `on_plan`, free_growth action `free_post`
 
+## 2026-07-10 — Auto AI growth loop activated
+
+- บุ๋ยอนุมัติให้เริ่มระบบ auto AI เพื่อเร่งยอด
+- ตรวจ cron จริง:
+  - 09:50 distribution report sends Telegram
+  - 10:05 KDP Auto Manager runs `--send --execute-free-actions`
+  - 11:05 free promo auto runs
+  - 20:00 Reddit promo reminder runs
+- Manual trigger ทันที:
+  - `python3 scripts/kdp_auto_manager.py --send --execute-free-actions`
+  - output: `kdp_auto_manager status=on_track score=100 blockers=0 send=True sent=True execute_free=True executed=1`
+- Current free growth decision = `free_post True Pinterest/Reddit`
+- No paid spend, no Amazon Ads, no unsafe KDP mutation. Free promo scheduling remains guarded and will only call `free_promo_auto.py` if data says no near promo + progress behind + eligible hero remains.
+- Public `/libra/api/distribution/monitor` ล่าสุด: score `100`, Pinterest `4/4 done`, blockers `0`, free_growth `free_post True`
+- Action log wrote latest runtime row to `data/kdp-agent-actions.jsonl`
+
+
 
 ## 2026-07-08 — Libra Distribution Dashboard + daily Telegram automation
 

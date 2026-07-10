@@ -1,16 +1,16 @@
 ## Last Handoff — libra
 
-**เมื่อ:** 2026-07-08 22:22
+**เมื่อ:** 2026-07-09 08:03
 **ทำโดย:** codex
-**Task:** ตรวจและจัดการไฟล์ค้าง Libra ให้สถานะปัจจุบัน
+**Task:** record Pinterest evidence in distribution dashboard state
 
 ### สิ่งที่ทำ
-จัดการไฟล์ค้าง Libra ให้เป็นปัจจุบัน: commit/push retry price automation, bui reminders path, handoff, memory; verified bash -n, py_compile, targeted pytest; repo clean before finish
+Recorded Pinterest evidence in Libra distribution state: added manual-task-state source, dashboard/API now show 2 done / 2 remaining, updated memory, verified pytest+py_compile+public API/HTML, libra.service restarted active
 
 ### Git state ตอน finish
 - Branch: `main`
-- Last commit: `11fbc56 Record Libra cleanup status`
-- Uncommitted files: 0
+- Last commit: `700b1af Update Libra handoff after cleanup`
+- Uncommitted files: 3
 
 ### ขั้นต่อไป
 _อ่านจาก summary ด้านบน — ถ้าไม่มีระบุ แสดงว่างานนี้เสร็จสมบูรณ์แล้ว_

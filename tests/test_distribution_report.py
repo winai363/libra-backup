@@ -96,3 +96,68 @@ def test_telegram_message_contains_next_actions_and_money_warning():
     assert "115 orders/downloads" in msg
     assert "Pinterest" in msg
     assert "LovelyBooks: ready" in msg
+
+
+def test_build_report_includes_manual_progress_from_evidence(tmp_path, monkeypatch):
+    kdp = tmp_path / "kdp"
+    strategy = tmp_path / "strategy.json"
+    lovely = tmp_path / "lovelybooks"
+    reddit = tmp_path / "reddit.json"
+    manual = tmp_path / "manual-task-state.json"
+
+    write_json(kdp / "sales-sync-state.json", {"updated_at": "2026-07-09T09:15:10", "titles": {}})
+    write_json(kdp / "hero-one" / "listing.json", {
+        "title": "Cuaderno",
+        "asin": "B0AAA",
+        "live_status": "LIVE",
+        "kdp_select": {"status": "Enrolled"},
+        "free_promo": {"status": "Scheduled", "start": "2026-07-15", "end": "2026-07-19"},
+    })
+    write_json(kdp / "hero-two" / "listing.json", {
+        "title": "Enfoque",
+        "asin": "B0BBB",
+        "live_status": "LIVE",
+        "kdp_select": {"status": "Enrolled"},
+        "free_promo": {"status": "Scheduled", "start": "2026-07-22", "end": "2026-07-26"},
+    })
+    write_json(kdp / "hero-three" / "listing.json", {
+        "title": "ADHS German",
+        "asin": "B0CCC",
+        "live_status": "LIVE",
+        "kdp_select": {"status": "Enrolled"},
+        "free_promo": {"status": "Scheduled", "start": "2026-07-25", "end": "2026-07-26"},
+    })
+    write_json(kdp / "hero-four" / "listing.json", {
+        "title": "Easy Taxes",
+        "asin": "B0DDD",
+        "live_status": "LIVE",
+        "kdp_select": {"status": "Enrolled"},
+    })
+    write_json(strategy, {
+        "checkpoint": "2026-07-31",
+        "strategy_name": "Depth Loop",
+        "hero_slugs": ["hero-one", "hero-two", "hero-three", "hero-four"],
+        "promo_days_left": {},
+        "events": [],
+        "actions_bui": [],
+    })
+    write_json(reddit, {"posts": []})
+    write_json(manual, {
+        "pinterest": {
+            "target_slugs": ["hero-one", "hero-two", "hero-three"],
+            "completed_slugs": ["hero-one", "hero-two"]
+        }
+    })
+
+    monkeypatch.setattr(dr, "KDP_DIR", kdp)
+    monkeypatch.setattr(dr, "STRATEGY_FILE", strategy)
+    monkeypatch.setattr(dr, "LOVELY_DIR", lovely)
+    monkeypatch.setattr(dr, "REDDIT_SCHEDULE", reddit)
+    monkeypatch.setattr(dr, "MANUAL_STATE_FILE", manual)
+
+    report = dr.build_report(today=date(2026, 7, 9))
+
+    assert report["manual_progress"]["pinterest"]["completed_slugs"] == ["hero-one", "hero-two"]
+    assert report["manual_progress"]["pinterest"]["completed_count"] == 2
+    assert report["manual_progress"]["pinterest"]["target_slugs"] == ["hero-one", "hero-two", "hero-three"]
+    assert report["manual_progress"]["pinterest"]["remaining_slugs"] == ["hero-three"]

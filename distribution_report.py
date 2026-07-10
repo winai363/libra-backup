@@ -21,6 +21,7 @@ LIBRA_DIR = Path(__file__).parent
 KDP_DIR = LIBRA_DIR.parent / "kdp"
 STRATEGY_FILE = LIBRA_DIR / "data" / "strategy_timeline.json"
 REDDIT_SCHEDULE = LIBRA_DIR / "data" / "reddit_promo_schedule.json"
+MANUAL_STATE_FILE = LIBRA_DIR / "data" / "manual-task-state.json"
 LOVELY_DIR = LIBRA_DIR.parent / "lovelybooks"
 REPORT_JSON = LIBRA_DIR / "data" / "distribution-report.json"
 DOWNLOADS_HTML = LIBRA_DIR.parent / "downloads" / "libra-distribution-dashboard.html"
@@ -127,6 +128,29 @@ def _reddit_posts() -> list[dict]:
     return posts if isinstance(posts, list) else []
 
 
+def _manual_progress(heroes: list[dict]) -> dict:
+    state = _load_json(MANUAL_STATE_FILE, {})
+    pinterest = state.get("pinterest", {}) if isinstance(state, dict) else {}
+    completed = pinterest.get("completed_slugs", []) if isinstance(pinterest, dict) else []
+    targets = pinterest.get("target_slugs", []) if isinstance(pinterest, dict) else []
+    completed_slugs = [slug for slug in completed if isinstance(slug, str)]
+    target_slugs = [slug for slug in targets if isinstance(slug, str)]
+    if not target_slugs:
+        target_slugs = [hero["slug"] for hero in heroes]
+    remaining_slugs = [slug for slug in target_slugs if slug not in completed_slugs]
+    return {
+        "pinterest": {
+            "target_slugs": target_slugs,
+            "completed_slugs": completed_slugs,
+            "completed_count": len(completed_slugs),
+            "remaining_slugs": remaining_slugs,
+            "remaining_count": len(remaining_slugs),
+            "last_updated": pinterest.get("last_updated", ""),
+            "note": pinterest.get("note", ""),
+        }
+    }
+
+
 def _today_actions(today: date, heroes: list[dict], lovely: dict) -> list[dict]:
     actions: list[dict] = []
     today_s = today.isoformat()
@@ -221,6 +245,7 @@ def build_report(today: date | None = None) -> dict:
             "upcoming": upcoming,
         },
         "lovelybooks": lovely,
+        "manual_progress": _manual_progress(heroes),
         "hero_books": heroes,
         "today_actions": [],
         "rules": [
@@ -236,11 +261,13 @@ def build_report(today: date | None = None) -> dict:
 
 def telegram_message(report: dict) -> str:
     money = report["money"]
+    pinterest = report.get("manual_progress", {}).get("pinterest", {})
     lines = [
         "📚 Libra Distribution Daily",
         f"เงินจริง MTD: ${money['mtd_royalties_usd']:.2f} | orders/downloads: {money['mtd_orders_all_types']} orders/downloads",
         f"Checkpoint: {report['checkpoint']['date']} ({report['checkpoint']['days_left']} วัน)",
         f"LovelyBooks: {report['lovelybooks']['status']}",
+        f"Pinterest: done {pinterest.get('completed_count', 0)} / remaining {pinterest.get('remaining_count', 0)}",
         "",
         "งานวันนี้:",
     ]
@@ -299,6 +326,9 @@ def render_html(report: dict) -> str:
         for a in report["today_actions"]
     )
     rules = "\n".join(f"<li>{e(r)}</li>" for r in report["rules"])
+    pinterest = report.get("manual_progress", {}).get("pinterest", {})
+    completed = ", ".join(pinterest.get("completed_slugs", [])) or "-"
+    remaining = ", ".join(pinterest.get("remaining_slugs", [])) or "-"
     return f"""<!doctype html>
 <html lang="th">
 <head>
@@ -329,10 +359,17 @@ def render_html(report: dict) -> str:
     <div class="card"><div class="muted">Orders/Downloads MTD</div><div class="num">{e(report['money']['mtd_orders_all_types'])}</div><small>รวมโหลดฟรี ไม่ใช่เงิน</small></div>
     <div class="card"><div class="muted">Free Downloads Hero</div><div class="num">{e(report['free_promos']['total_downloads_in_promo_windows'])}</div><small>นับเฉพาะช่วงโปรโมชัน</small></div>
     <div class="card"><div class="muted">LovelyBooks</div><div class="num">{e(report['lovelybooks']['status'])}</div><small>{e(report['lovelybooks']['next_action'])}</small></div>
+    <div class="card"><div class="muted">Pinterest Progress</div><div class="num">{e(pinterest.get('completed_count', 0))} done</div><small>remaining {e(pinterest.get('remaining_count', 0))}</small></div>
   </section>
   <section class="card">
     <h2>งานวันนี้</h2>
     <ul>{action_items}</ul>
+  </section>
+  <section class="card" style="margin:18px 0">
+    <h2>Manual Progress</h2>
+    <p><b>Pinterest completed</b>: {e(completed)}</p>
+    <p><b>Pinterest remaining</b>: {e(remaining)}</p>
+    <p><small>{e(pinterest.get('note', ''))}</small></p>
   </section>
   <h2>Hero Books</h2>
   <table>

@@ -1,15 +1,15 @@
 ## Last Handoff — libra
 
-**เมื่อ:** 2026-07-10 11:10
+**เมื่อ:** 2026-07-10 11:21
 **ทำโดย:** codex
-**Task:** ต่อยอด KDP Auto Manager ด้วย action queue decision gates และ Telegram digest
+**Task:** เพิ่ม Auto Free Growth Engine ให้ KDP manager ตัดสินใจ free promo และ free post จากข้อมูลจริง
 
 ### สิ่งที่ทำ
-Extended Libra KDP Auto Manager into a daily operating loop. Added action_queue, decision_gates, kdp_agent_digest, Telegram --send support, monitor Action Queue/Decision Gates sections, cron updated to run kdp_auto_manager.py --send at 10:05. Verified 17 targeted tests passed, py_compile passed, script runs, public monitor/API show queue/gates. Committed 167429b and pushed to backup remote.
+Added Auto Free Growth Engine for Libra. Agent now decides free_post vs guarded free_promo from real data, exposes free_growth_engine on monitor/API/digest, can execute free actions with --execute-free-actions, logs actions, and cron now runs --send --execute-free-actions daily at 10:05. Verified 18 targeted tests passed, py_compile passed, manager runs, public API returns free_post True Pinterest/Reddit. Current guard chose free_post only, not new free promo, because promo is near and manual distribution is unfinished. Committed bbb6962 and pushed to backup remote.
 
 ### Git state ตอน finish
 - Branch: `main`
-- Last commit: `167429b Add KDP manager operating loop`
+- Last commit: `bbb6962 Add auto free growth engine`
 - Uncommitted files: 0
 
 ### ขั้นต่อไป

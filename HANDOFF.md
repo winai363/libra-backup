@@ -1,15 +1,15 @@
 ## Last Handoff — libra
 
-**เมื่อ:** 2026-07-10 11:21
+**เมื่อ:** 2026-07-10 12:19
 **ทำโดย:** codex
-**Task:** เพิ่ม Auto Free Growth Engine ให้ KDP manager ตัดสินใจ free promo และ free post จากข้อมูลจริง
+**Task:** ตรวจสอบและอัปเดตสถานะ Pinterest หลังโพสต์ KDP pins
 
 ### สิ่งที่ทำ
-Added Auto Free Growth Engine for Libra. Agent now decides free_post vs guarded free_promo from real data, exposes free_growth_engine on monitor/API/digest, can execute free actions with --execute-free-actions, logs actions, and cron now runs --send --execute-free-actions daily at 10:05. Verified 18 targeted tests passed, py_compile passed, manager runs, public API returns free_post True Pinterest/Reddit. Current guard chose free_post only, not new free promo, because promo is near and manual distribution is unfinished. Committed bbb6962 and pushed to backup remote.
+Updated Libra Pinterest manual progress after user completed Claude for Chrome posting. Marked German ADHS workbook and Easy Taxes as completed, regenerated distribution report and KDP agent state. Verified 18 targeted tests passed, py_compile passed, service active, public monitor now shows score 100, Pinterest 4/4 done, CMO on_plan, blockers 0. Committed 94d0573 and pushed to backup remote.
 
 ### Git state ตอน finish
 - Branch: `main`
-- Last commit: `bbb6962 Add auto free growth engine`
+- Last commit: `94d0573 Mark Libra Pinterest distribution complete`
 - Uncommitted files: 0
 
 ### ขั้นต่อไป

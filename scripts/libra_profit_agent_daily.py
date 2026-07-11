@@ -99,6 +99,53 @@ def _needs_complete_attribution(experiment: dict) -> bool:
     return experiment["status"] in {"ready", "evaluating"}
 
 
+def complete_manual_action(
+    db_path: Path,
+    action_key: str,
+    evidence: dict,
+    *,
+    now: datetime | None = None,
+) -> dict:
+    """Record operator/browser evidence and resume a manual experiment safely."""
+    now = now or datetime.now(timezone.utc)
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        action_row = connection.execute(
+            "SELECT * FROM agent_actions WHERE action_key=? ORDER BY attempt DESC,id DESC LIMIT 1",
+            (action_key,),
+        ).fetchone()
+        if not action_row:
+            raise ValueError("unknown manual action key")
+        experiment = connection.execute(
+            "SELECT id,status,evaluation_kind FROM experiments WHERE id=?",
+            (action_row["experiment_id"],),
+        ).fetchone()
+    if not experiment or experiment["status"] not in {"manual_required", "failed"}:
+        raise ValueError("experiment is not awaiting manual completion")
+    if int(action_row["attempt"]) >= 3:
+        raise ValueError("manual action retry limit reached")
+
+    original = json.loads(action_row["action_json"])
+    retry = {
+        **original,
+        "attempt": int(action_row["attempt"]) + 1,
+        "manual_completion": True,
+    }
+    recorded = record_action_result(
+        db_path,
+        retry,
+        {**evidence, "observed_at": now.isoformat()},
+    )
+    if recorded["status"] == "executed":
+        delay = timedelta(days=14) if experiment["evaluation_kind"] == "commercial" else timedelta(hours=72)
+        with sqlite3.connect(db_path) as connection:
+            connection.execute(
+                "UPDATE experiments SET status='cooldown', earliest_evaluation_at=?, action_executed_at=? WHERE id=?",
+                ((now + delay).isoformat(), now.isoformat(), experiment["id"]),
+            )
+    return recorded
+
+
 def run_daily(
     db_path: Path,
     state_path: Path,
@@ -310,7 +357,17 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="calculate without writing files or SQLite")
     parser.add_argument("--send", action="store_true", help="send the existing Telegram digest")
+    parser.add_argument("--complete-action", help="action key awaiting verified manual completion")
+    parser.add_argument("--evidence-json", help="JSON object containing confirmation or before/after evidence")
     args = parser.parse_args()
+    if args.complete_action:
+        if not args.evidence_json:
+            parser.error("--complete-action requires --evidence-json")
+        evidence = json.loads(args.evidence_json)
+        if not isinstance(evidence, dict):
+            parser.error("--evidence-json must decode to an object")
+        print(json.dumps(complete_manual_action(LEDGER_FILE, args.complete_action, evidence), sort_keys=True))
+        return
     state = run_daily(LEDGER_FILE, STATE_FILE, dry_run=args.dry_run, send=args.send)
     print(json.dumps(state, sort_keys=True))
 

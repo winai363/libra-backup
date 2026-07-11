@@ -472,8 +472,16 @@ def record_action_result(db_path: Path, action: dict, result: dict) -> dict:
     result_hash = hashlib.sha256(result_json.encode()).hexdigest()
     conflict = False
     with sqlite3.connect(db_path) as connection:
-        terminal = connection.execute("SELECT id,status FROM agent_actions WHERE action_key=? AND terminal=1 AND attempt<?", (action_key, attempt)).fetchone()
-        if terminal and not (terminal[1] == "manual_required" and action.get("manual_completion") is True):
+        terminals = connection.execute(
+            "SELECT id,status FROM agent_actions WHERE action_key=? AND terminal=1 AND attempt<? ORDER BY attempt",
+            (action_key, attempt),
+        ).fetchall()
+        if any(row[1] in {"executed", "recorded"} for row in terminals):
+            raise ValueError("cannot retry terminal action")
+        if terminals and not (
+            all(row[1] == "manual_required" for row in terminals)
+            and action.get("manual_completion") is True
+        ):
             raise ValueError("cannot retry terminal action")
         existing = connection.execute(
             "SELECT id, recorded_at, kind, slug, status, evidence_json, action_hash, result_hash FROM agent_actions WHERE action_key = ? AND attempt = ?",

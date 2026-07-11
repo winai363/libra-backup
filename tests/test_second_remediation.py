@@ -166,3 +166,37 @@ def test_controller_recovers_manual_or_failed_action_with_second_attempt(tmp_pat
         attempts = con.execute("select attempt,status from agent_actions where experiment_id=? and kind!='internal_transition' order by attempt",
                                (experiment["id"],)).fetchall()
     assert attempts[-1] == (2, "executed")
+
+
+def test_executed_manual_completion_cannot_accept_third_attempt(tmp_path):
+    db = tmp_path / "db"
+    base = {"kind": "metadata_update", "slug": "book", "experiment_id": 1,
+            "action_key": "manual:1", "cost_usd": 0}
+    record_action_result(db, {**base, "attempt": 1}, {"returncode": 0})
+    evidence = {"returncode": 0, "confirmation_id": "confirmed"}
+    record_action_result(db, {**base, "attempt": 2, "manual_completion": True}, evidence)
+    with pytest.raises(ValueError, match="terminal action"):
+        record_action_result(db, {**base, "attempt": 3, "manual_completion": True}, evidence)
+
+
+def test_production_manual_completion_command_records_evidence_and_cooldown(tmp_path):
+    db = tmp_path / "db"; state = tmp_path / "state"
+    profit_agent._init_schema(db)
+    experiment = profit_agent.create_experiment(
+        db, slug="book", asin="EXP", variable="metadata",
+        action={"kind": "metadata_update", "cost_usd": 0}, now=NOW,
+    )
+    with sqlite3.connect(db) as con:
+        con.execute("update experiments set status='manual_required' where id=?", (experiment["id"],))
+    pending = profit_agent.create_pending_action(db, {**experiment, "status": "ready"}, NOW)
+    record_action_result(db, pending, {"returncode": 0})
+    evidence = {"returncode": 0, "verified_state_change": {
+        "before": {"title": "old"}, "after": {"title": "new"},
+        "before_snapshot_id": 1, "after_snapshot_id": 2,
+    }}
+    result = daily.complete_manual_action(db, "experiment:%s:%s" % (experiment["id"], experiment["cycle_key"]), evidence, now=NOW)
+    assert result["status"] == "executed"
+    with sqlite3.connect(db) as con:
+        row = con.execute("select status,action_executed_at from experiments where id=?", (experiment["id"],)).fetchone()
+    assert row[0] == "cooldown"
+    assert row[1] == NOW.isoformat()

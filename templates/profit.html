@@ -35,8 +35,11 @@
       </section>
 
       <section class="py-6 border-b border-slate-700">
-        <div class="flex flex-wrap items-baseline justify-between gap-3">
-          <h2 class="font-bold text-white">KPI · Actual vs Plan</h2>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <h2 class="font-bold text-white">KPI · Actual vs Plan</h2>
+            <div id="kpi-toggle" class="flex rounded-lg overflow-hidden border border-slate-700 text-xs"></div>
+          </div>
           <p id="kpi-checkpoint" class="text-xs text-slate-400"></p>
         </div>
         <div id="kpi-bars" class="mt-4 space-y-4"></div>
@@ -92,6 +95,36 @@ function usd(value) { return value === null || value === undefined ? '—' : '$'
 function tone(positive) { return positive ? 'text-emerald-300' : 'text-red-300'; }
 function statusLabel(value) { return String(value || 'unknown').replaceAll('_', ' '); }
 
+const KPI_PERIOD_NAMES = { daily: 'รายวัน', month: 'รายเดือน', mode: '90 วัน' };
+
+function renderKpi(kpi, activeKey) {
+  const periods = kpi.periods || [];
+  const active = periods.find(p => p.key === activeKey) || periods[periods.length - 1] || { metrics: [] };
+  document.getElementById('kpi-toggle').innerHTML = periods.map(p => `
+    <button data-kpi-period="${escapeHtml(p.key)}" class="px-3 py-1.5 ${p.key === active.key ? 'bg-slate-200 text-slate-900 font-semibold' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}">
+      ${escapeHtml(KPI_PERIOD_NAMES[p.key] || p.key)}
+    </button>`).join('');
+  document.querySelectorAll('#kpi-toggle button').forEach(btn =>
+    btn.addEventListener('click', () => renderKpi(kpi, btn.dataset.kpiPeriod)));
+  document.getElementById('kpi-checkpoint').textContent = active.label || '';
+  const kpiBar = { on_plan: 'bg-emerald-400', watch: 'bg-amber-400', early: 'bg-amber-400', behind: 'bg-red-400' };
+  const kpiText = { on_plan: 'text-emerald-300', watch: 'text-amber-300', early: 'text-amber-300', behind: 'text-red-300' };
+  document.getElementById('kpi-bars').innerHTML = active.metrics.map(m => `
+    <div>
+      <div class="flex items-baseline justify-between gap-3 text-sm">
+        <p class="text-slate-300">${escapeHtml(m.name)}</p>
+        <p class="text-xs">
+          <span class="text-white font-medium">${escapeHtml(m.actual_label)}</span>
+          <span class="text-slate-500">/ ${escapeHtml(m.plan_label)}</span>
+          <span class="ml-2 ${kpiText[m.status] || 'text-slate-300'}">${escapeHtml(statusLabel(m.status))}</span>
+        </p>
+      </div>
+      <div class="mt-1 h-2 rounded bg-slate-800 overflow-hidden">
+        <div class="h-full rounded ${kpiBar[m.status] || 'bg-slate-500'}" style="width:${Math.max(2, Math.min(100, Number(m.percent) || 0))}%"></div>
+      </div>
+    </div>`).join('');
+}
+
 function render(data) {
   const f = data.financials;
   const r = data.reconciliation;
@@ -117,24 +150,7 @@ function render(data) {
   commercial.className = `mt-1 font-medium ${tone(data.commercial.status === 'positive_contribution')}`;
   document.getElementById('direct-cost').textContent = usd(f.direct_costs_usd);
 
-  const kpi = data.kpi_plan || { metrics: [] };
-  const kpiBar = { on_plan: 'bg-emerald-400', watch: 'bg-amber-400', early: 'bg-amber-400', behind: 'bg-red-400' };
-  const kpiText = { on_plan: 'text-emerald-300', watch: 'text-amber-300', early: 'text-amber-300', behind: 'text-red-300' };
-  document.getElementById('kpi-checkpoint').textContent = kpi.checkpoint ? `เป้ารอบเรียนรู้ · ถึง ${kpi.checkpoint}` : '';
-  document.getElementById('kpi-bars').innerHTML = kpi.metrics.map(m => `
-    <div>
-      <div class="flex items-baseline justify-between gap-3 text-sm">
-        <p class="text-slate-300">${escapeHtml(m.name)}</p>
-        <p class="text-xs">
-          <span class="text-white font-medium">${escapeHtml(m.actual_label)}</span>
-          <span class="text-slate-500">/ ${escapeHtml(m.plan_label)}</span>
-          <span class="ml-2 ${kpiText[m.status] || 'text-slate-300'}">${escapeHtml(statusLabel(m.status))}</span>
-        </p>
-      </div>
-      <div class="mt-1 h-2 rounded bg-slate-800 overflow-hidden">
-        <div class="h-full rounded ${kpiBar[m.status] || 'bg-slate-500'}" style="width:${Math.max(2, Math.min(100, Number(m.percent) || 0))}%"></div>
-      </div>
-    </div>`).join('');
+  renderKpi(data.kpi_plan || { periods: [] }, 'month');
 
   document.getElementById('experiment-count').textContent = `${data.operations.active_experiment_count} / ${data.policy.active_experiment_limit} active`;
   document.getElementById('experiments').innerHTML = data.experiments.length ? data.experiments.map(item => `

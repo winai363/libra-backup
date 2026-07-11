@@ -218,8 +218,8 @@ def test_build_monitor_summarizes_on_track_distribution_plan():
     assert monitor["decision"]["recommendation"] == "ห้าม paid promo ตลอดโหมด organic 90 วัน"
     assert monitor["actual_vs_plan"]["metrics"][0]["name"] == "Revenue"
     assert monitor["actual_vs_plan"]["metrics"][0]["actual"] == 6.77
-    assert monitor["actual_vs_plan"]["metrics"][0]["plan"] == 25.0
-    assert monitor["actual_vs_plan"]["metrics"][0]["percent"] == 27
+    assert monitor["actual_vs_plan"]["metrics"][0]["plan"] == 75.0
+    assert monitor["actual_vs_plan"]["metrics"][0]["percent"] == 9
     assert monitor["actual_vs_plan"]["roles"]["CFO"]["status"] == "early"
     assert monitor["actual_vs_plan"]["roles"]["COO"]["status"] == "on_plan"
     assert monitor["actual_vs_plan"]["roles"]["CMO"]["status"] == "behind"

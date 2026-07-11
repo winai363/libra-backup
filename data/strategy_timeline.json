@@ -1,96 +1,96 @@
 {
-  "checkpoint": "2026-07-31",
-  "strategy_name": "Depth Loop — 5 เล่มฮีโร่ · เดือนนี้ทดลองช่องทางฟรีล้วน (ตัดสินเรื่องจ่ายเงินสิ้นเดือน)",
-  "hero_slugs": [
-    "adhd-self-help-adults-es",
-    "adhd-adults-workbook-es",
-    "adhd-adults-focus-work-relationships-es",
-    "adhd-workbook-german-adults",
-    "easy-taxes-self-employed-spain"
-  ],
-  "promo_days_left": {
-    "adhd-self-help-adults-es": 0,
-    "adhd-adults-workbook-es": 5,
-    "adhd-adults-focus-work-relationships-es": 5,
-    "adhd-workbook-german-adults": 2,
-    "easy-taxes-self-employed-spain": 5
+ "checkpoint": "2026-10-09",
+ "strategy_name": "90-Day Organic Profit Mode — ทั้งพอร์ต no-paid ถึง 9 ต.ค. 2026 (Profit A ต้องบวกยั่งยืน)",
+ "hero_slugs": [
+  "adhd-self-help-adults-es",
+  "adhd-adults-workbook-es",
+  "adhd-adults-focus-work-relationships-es",
+  "adhd-workbook-german-adults",
+  "easy-taxes-self-employed-spain"
+ ],
+ "promo_days_left": {
+  "adhd-self-help-adults-es": 0,
+  "adhd-adults-workbook-es": 5,
+  "adhd-adults-focus-work-relationships-es": 5,
+  "adhd-workbook-german-adults": 2,
+  "easy-taxes-self-employed-spain": 5
+ },
+ "events": [
+  {
+   "date": "2026-07-05",
+   "title": "✅ Paperback 4 เล่มฮีโร่ LIVE บน Amazon + โปรไฟล์นักเขียน WK Bui สมบูรณ์",
+   "owner": "auto",
+   "done": true
   },
-  "events": [
-    {
-      "date": "2026-07-05",
-      "title": "✅ Paperback 4 เล่มฮีโร่ LIVE บน Amazon + โปรไฟล์นักเขียน WK Bui สมบูรณ์",
-      "owner": "auto",
-      "done": true
-    },
-    {
-      "date": "2026-07-06",
-      "title": "โปรแจกฟรีรอบปัจจุบันจบ (TDAH lead + ADHS เยอรมัน)",
-      "owner": "auto"
-    },
-    {
-      "date": "2026-07-07",
-      "title": "ลดราคา ebook เล่มนำ $5.99→$2.99 (cron 15:00 — เช็ค set_price.log)",
-      "owner": "auto"
-    },
-    {
-      "date": "2026-07-10",
-      "title": "เช็คผล A+ Content moderation 40 เล่ม",
-      "owner": "auto"
-    },
-    {
-      "date": "2026-07-06",
-      "end": "2026-07-31",
-      "title": "พิน Pinterest วันละ 2-3 ชิ้น (downloads/kdp-pins)",
-      "owner": "bui"
-    },
-    {
-      "date": "2026-07-07",
-      "title": "✅ LovelyBooks ตอบ/import แล้ว: หน้า WK Bui + ADHS Workbook ขึ้น, สิทธิ์ Aktion starten เปิด, Leserunde ohne Verlosung publish แล้ว",
-      "owner": "auto",
-      "done": true
-    },
-    {
-      "date": "2026-07-15",
-      "end": "2026-07-19",
-      "title": "แจกฟรี: Cuaderno de Ejercicios + โพสต์ r/FreeEBOOKS",
-      "owner": "auto"
-    },
-    {
-      "date": "2026-07-22",
-      "end": "2026-07-26",
-      "title": "แจกฟรี: Enfoque, Trabajo y Relaciones + Reddit",
-      "owner": "auto"
-    },
-    {
-      "date": "2026-07-25",
-      "end": "2026-07-26",
-      "title": "แจกฟรี: ADHS เยอรมัน (2 วันสุดท้าย) + LovelyBooks",
-      "owner": "auto"
-    },
-    {
-      "date": "2026-07-29",
-      "end": "2026-08-02",
-      "title": "แจกฟรี: คู่มือภาษีสเปน + Reddit",
-      "owner": "auto"
-    },
-    {
-      "date": "2026-07-31",
-      "title": "🔖 CHECKPOINT — วัดผลแผนฟรีล้วน (โหลด/รีวิว/ยอดขาย/KU) แล้วตัดสิน: จ่าย Ebrolis/xtme เดือน ส.ค. หรือแช่แข็ง",
-      "owner": "decision"
-    }
-  ],
-  "actions_bui": [
-    {
-      "text": "พิน Pinterest วันละ 2-3 ชิ้น จาก FileBrowser → downloads → kdp-pins (แยกบอร์ดภาษา ES/DE)",
-      "key": "pinterest"
-    },
-    {
-      "text": "LovelyBooks ไม่ต้องสมัครแล้ว — Leserunde เปิดแล้ว; วันที่ 25-26 ก.ค. ให้ตอบคอมเมนต์/ชวนคนโหลดฟรีจาก Amazon เท่านั้น ห้ามส่งไฟล์เอง",
-      "key": "lovelybooks"
-    },
-    {
-      "text": "Reddit: ระบบเด้ง Telegram ให้ในวันแจกฟรี (16/22/25/29 ก.ค.) พร้อมข้อความ — บุ๋ยแค่ก๊อป→วางในแอป Reddit→Post (ล็อกอิน WK_Bui_Books + Join r/FreeEBOOKS ไว้)",
-      "key": "reddit"
-    }
-  ]
+  {
+   "date": "2026-07-06",
+   "title": "โปรแจกฟรีรอบปัจจุบันจบ (TDAH lead + ADHS เยอรมัน)",
+   "owner": "auto"
+  },
+  {
+   "date": "2026-07-07",
+   "title": "ลดราคา ebook เล่มนำ $5.99→$2.99 (cron 15:00 — เช็ค set_price.log)",
+   "owner": "auto"
+  },
+  {
+   "date": "2026-07-10",
+   "title": "เช็คผล A+ Content moderation 40 เล่ม",
+   "owner": "auto"
+  },
+  {
+   "date": "2026-07-06",
+   "end": "2026-07-31",
+   "title": "พิน Pinterest วันละ 2-3 ชิ้น (downloads/kdp-pins)",
+   "owner": "bui"
+  },
+  {
+   "date": "2026-07-07",
+   "title": "✅ LovelyBooks ตอบ/import แล้ว: หน้า WK Bui + ADHS Workbook ขึ้น, สิทธิ์ Aktion starten เปิด, Leserunde ohne Verlosung publish แล้ว",
+   "owner": "auto",
+   "done": true
+  },
+  {
+   "date": "2026-07-15",
+   "end": "2026-07-19",
+   "title": "แจกฟรี: Cuaderno de Ejercicios + โพสต์ r/FreeEBOOKS",
+   "owner": "auto"
+  },
+  {
+   "date": "2026-07-22",
+   "end": "2026-07-26",
+   "title": "แจกฟรี: Enfoque, Trabajo y Relaciones + Reddit",
+   "owner": "auto"
+  },
+  {
+   "date": "2026-07-25",
+   "end": "2026-07-26",
+   "title": "แจกฟรี: ADHS เยอรมัน (2 วันสุดท้าย) + LovelyBooks",
+   "owner": "auto"
+  },
+  {
+   "date": "2026-07-29",
+   "end": "2026-08-02",
+   "title": "แจกฟรี: คู่มือภาษีสเปน + Reddit",
+   "owner": "auto"
+  },
+  {
+   "date": "2026-07-31",
+   "title": "🔖 CHECKPOINT — วัดผลแผนฟรีล้วน (โหลด/รีวิว/ยอดขาย/KU) แล้วตัดสิน: จ่าย Ebrolis/xtme เดือน ส.ค. หรือแช่แข็ง",
+   "owner": "decision"
+  }
+ ],
+ "actions_bui": [
+  {
+   "text": "พิน Pinterest วันละ 2-3 ชิ้น จาก FileBrowser → downloads → kdp-pins (แยกบอร์ดภาษา ES/DE)",
+   "key": "pinterest"
+  },
+  {
+   "text": "LovelyBooks ไม่ต้องสมัครแล้ว — Leserunde เปิดแล้ว; วันที่ 25-26 ก.ค. ให้ตอบคอมเมนต์/ชวนคนโหลดฟรีจาก Amazon เท่านั้น ห้ามส่งไฟล์เอง",
+   "key": "lovelybooks"
+  },
+  {
+   "text": "Reddit: ระบบเด้ง Telegram ให้ในวันแจกฟรี (16/22/25/29 ก.ค.) พร้อมข้อความ — บุ๋ยแค่ก๊อป→วางในแอป Reddit→Post (ล็อกอิน WK_Bui_Books + Join r/FreeEBOOKS ไว้)",
+   "key": "reddit"
+  }
+ ]
 }

@@ -246,40 +246,102 @@ def _checkpoint_outcomes(
 
 
 def _profit_kpi_plan(ledger: dict) -> dict:
-    """Actual vs Plan bars for the /profit page. Plan targets and progress
-    semantics come from distribution_report (single source of the approved
-    learning-cycle plan); actuals come from the verified ledger only."""
-    from distribution_report import DEFAULT_PLAN_TARGETS, STRATEGY_FILE, _metric
+    """Actual vs Plan bars for the /profit page, aligned to the ONE operating
+    plan: the 90-day organic mode (window read from the persisted policy).
+    DEFAULT_PLAN_TARGETS are full-window (90-day) totals — daily bars compare
+    the day-over-day snapshot delta to target/90, monthly bars compare MTD to
+    target/3, and the mode view compares the cumulative window total to the
+    full target. Actuals come from the verified ledger only."""
+    from distribution_report import DEFAULT_PLAN_TARGETS, _metric
+    from profit_agent import read_policy_mode
 
-    orders = kenp = 0
+    latest = previous = None
+    manual_costs_today = 0.0
+    window_rows = []
     if PROFIT_LEDGER_FILE.exists():
         try:
             with sqlite3.connect(PROFIT_LEDGER_FILE) as connection:
-                row = connection.execute(
-                    "SELECT orders_all_types, kenp FROM kdp_snapshots ORDER BY observed_at DESC, id DESC LIMIT 1"
+                latest = connection.execute(
+                    "SELECT observed_at, month, royalties_usd, orders_all_types, kenp "
+                    "FROM kdp_snapshots ORDER BY observed_at DESC, id DESC LIMIT 1"
                 ).fetchone()
-            if row:
-                orders, kenp = int(row[0]), int(row[1])
+                if latest:
+                    previous = connection.execute(
+                        "SELECT royalties_usd, orders_all_types, kenp FROM kdp_snapshots "
+                        "WHERE month = ? AND date(observed_at) < date(?) "
+                        "ORDER BY observed_at DESC, id DESC LIMIT 1",
+                        (latest[1], latest[0]),
+                    ).fetchone()
+                    # Operational spend recorded today only — cost-report/estimate
+                    # ingestion is bookkeeping of past production, not a daily cost.
+                    manual_costs_today = float(connection.execute(
+                        "SELECT COALESCE(SUM(amount_usd), 0) FROM direct_costs "
+                        "WHERE source_key NOT LIKE 'cost-report:%' AND source_key NOT LIKE 'cost-estimate:%' "
+                        "AND date(incurred_at) = date(?)",
+                        (latest[0],),
+                    ).fetchone()[0])
+                # Latest snapshot of each month = that month's total; the mode
+                # window sums them (snapshots only exist from mode start).
+                window_rows = connection.execute(
+                    "SELECT royalties_usd, orders_all_types, kenp FROM kdp_snapshots s "
+                    "WHERE id = (SELECT id FROM kdp_snapshots WHERE month = s.month "
+                    "ORDER BY observed_at DESC, id DESC LIMIT 1)"
+                ).fetchall()
         except sqlite3.Error:
             pass
+
+    policy = read_policy_mode(PROFIT_LEDGER_FILE) or {}
+    window_start = (policy.get("started_at") or "")[:10]
+    window_end = (policy.get("ends_at") or "")[:10]
     try:
-        checkpoint = json.loads(STRATEGY_FILE.read_text(encoding="utf-8")).get("checkpoint", "")
-    except (OSError, json.JSONDecodeError):
-        checkpoint = ""
-    royalties = float(ledger["verified_royalties_usd"])
-    profit_a = float(ledger["contribution_profit_usd"])
-    return {
-        "checkpoint": checkpoint,
-        "metrics": [
-            _metric("Verified royalties", royalties, DEFAULT_PLAN_TARGETS["revenue_usd"],
-                    f"${royalties:.2f}", f"${DEFAULT_PLAN_TARGETS['revenue_usd']:.2f}"),
-            _metric("Orders / downloads", orders, DEFAULT_PLAN_TARGETS["orders_downloads"],
-                    str(orders), str(DEFAULT_PLAN_TARGETS["orders_downloads"])),
-            _metric("KENP", kenp, DEFAULT_PLAN_TARGETS["kenp"],
-                    str(kenp), str(DEFAULT_PLAN_TARGETS["kenp"])),
+        window_days = max(1, (datetime.fromisoformat(policy["ends_at"])
+                              - datetime.fromisoformat(policy["started_at"])).days)
+    except (KeyError, ValueError):
+        window_days = 90
+    window_months = max(1, round(window_days / 30))
+
+    def bars(royalties, orders, kenp, profit_a, plan_scale):
+        plan_rev = round(DEFAULT_PLAN_TARGETS["revenue_usd"] * plan_scale, 2)
+        plan_orders = max(1, round(DEFAULT_PLAN_TARGETS["orders_downloads"] * plan_scale))
+        plan_kenp = max(1, round(DEFAULT_PLAN_TARGETS["kenp"] * plan_scale))
+        return [
+            _metric("Verified royalties", royalties, plan_rev,
+                    f"${royalties:.2f}", f"${plan_rev:.2f}"),
+            _metric("Orders / downloads", orders, plan_orders, str(orders), str(plan_orders)),
+            _metric("KENP", kenp, plan_kenp, str(kenp), str(plan_kenp)),
             _metric("Profit A · break-even", profit_a, 0.0,
                     f"${profit_a:.2f}", "$0.00",
                     "on_plan" if profit_a > 0 else "behind"),
+        ]
+
+    base = previous or (0.0, 0, 0)
+    day_royalties = round(float(latest[2]) - float(base[0]), 2) if latest else 0.0
+    day_orders = (int(latest[3]) - int(base[1])) if latest else 0
+    day_kenp = (int(latest[4]) - int(base[2])) if latest else 0
+    day_profit = round(day_royalties - manual_costs_today, 2)
+    day_label = f"วันนี้ · {latest[0][:10]}" if latest else "วันนี้"
+    if latest and previous is None:
+        day_label += " (ยังไม่มี snapshot วันก่อนหน้าในเดือนนี้ = ยอดสะสมเดือน)"
+
+    profit_a = float(ledger["contribution_profit_usd"])
+    mode_royalties = round(sum(float(r[0]) for r in window_rows), 2)
+    mode_orders = sum(int(r[1]) for r in window_rows)
+    mode_kenp = sum(int(r[2]) for r in window_rows)
+
+    return {
+        "checkpoint": window_end,
+        "periods": [
+            {"key": "daily", "label": day_label,
+             "metrics": bars(day_royalties, day_orders, day_kenp, day_profit, 1 / window_days)},
+            {"key": "month",
+             "label": f"เดือนนี้ (MTD) · เป้าเฉลี่ยต่อเดือนของรอบ 90 วัน",
+             "metrics": bars(float(ledger["verified_royalties_usd"]),
+                             int(latest[3]) if latest else 0,
+                             int(latest[4]) if latest else 0,
+                             profit_a, 1 / window_months)},
+            {"key": "mode",
+             "label": f"ทั้งรอบ 90 วัน · {window_start} → {window_end}" if window_start else "ทั้งรอบ 90 วัน",
+             "metrics": bars(mode_royalties, mode_orders, mode_kenp, profit_a, 1)},
         ],
     }
 

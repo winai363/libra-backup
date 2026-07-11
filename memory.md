@@ -373,3 +373,12 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - **Actuals จาก verified ledger เท่านั้น** (ตามปรัชญาหน้านี้) + แถบที่ 4 = Profit A vs break-even $0
 - 4 แถบ ณ ตอนนี้: Royalties $7.63/$25 (31% early เหลือง), Orders 256/120 (100% on_plan เขียว), KENP 361/500 (72% watch เหลือง), Profit A −$1.27/$0 (behind แดง)
 - เทสต์ใหม่ใน test_profit_api.py; suite **163 passed**; screenshot ยืนยันหน้าจริงสวยครบ
+
+# 2026-07-11 (ค่ำ 3) — KPI bar เพิ่ม filter รายวัน/รายเดือน/90 วัน + ยุบแผนเหลือชุดเดียว
+
+บุ๋ยขอ filter daily/month แล้วสั่งเพิ่ม: ชุดเป้ารอบเรียนรู้เดิม (ถึง 31 ก.ค.) ถูกแทนด้วยระบบ 90 วันแล้ว ให้ปรับไม่ให้ซ้ำซ้อน →
+- **แผนเหลือชุดเดียว = รอบ 90 วัน (11 ก.ค. → 9 ต.ค. อ่านจาก policy_modes จริง):** `DEFAULT_PLAN_TARGETS` ใน distribution_report เปลี่ยนเป็นยอดทั้งรอบ $75 / 360 orders / 1,500 KENP / 300 free downloads (= pace เดือนละ $25/120/500 เดิม ×3) + `strategy_timeline.json` checkpoint → 2026-10-09 (กระทบ /distribution/monitor ด้วย = สอดคล้องกันทั้งระบบ)
+- **หน้า /profit KPI มี toggle 3 มุมมอง:** รายวัน (delta snapshot วันต่อวัน vs เป้า/90) · รายเดือน (MTD vs เป้า/3) · 90 วัน (ยอดสะสมทั้งรอบ vs เป้าเต็ม)
+- รายวัน: Profit A วัน = รายได้วัน − ต้นทุน manual ที่เกิดวันนั้น (ไม่นับ ingest cost report เก่า) ; วันแรกไม่มี snapshot ก่อนหน้า → delta = ยอดสะสม (label บอกชัด)
+- ⚠️ checkpoint 31 ก.ค. ในฐานะ "วันตัดสิน ADHD ads" ยังอยู่ (cron checkpoint_20260731.py แยกเรื่องกัน ไม่ได้แตะ)
+- Suite **164 passed**; QA screenshot ครบ 3 มุมมอง; toggle กดจริงบนหน้า

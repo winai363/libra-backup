@@ -1,15 +1,15 @@
 ## Last Handoff — libra
 
-**เมื่อ:** 2026-07-11 13:38
+**เมื่อ:** 2026-07-11 14:22
 **ทำโดย:** claude
-**Task:** Auto experiment proposer under safety framework
+**Task:** Add KPI bar actual-vs-plan to /profit dashboard
 
 ### สิ่งที่ทำ
-Experiment proposer live: deterministic proposals under the same executor gates (skip-when-unsure semantics, <=1 new/day, <=3 active, auto-close 3/3-failed). Fixed critical run_daily registry bug (only APPROVED slugs were processed — proposer cycles would have stalled forever). Proposer created exp 6 (ai-creative-workbook-italian free promo), advanced to ready; executes tomorrow 10:15. Queue: 11 free-promo candidates. Suite 162 passed, service healthy, backup 45e92ee.
+KPI actual-vs-plan bars live on /libra/profit: Royalties $7.63/$25 (early), Orders 256/120 (on plan), KENP 361/500 (watch), Profit A -$1.27/$0 (behind); targets from approved learning-cycle plan (single source with distribution monitor), actuals from verified ledger only. Suite 163 passed, page QA'd with screenshot, backup pushed.
 
 ### Git state ตอน finish
 - Branch: `main`
-- Last commit: `45e92ee Add deterministic experiment proposer to complete the auto loop`
+- Last commit: `13aba9e Add KPI actual-vs-plan bars to the profit dashboard`
 - Uncommitted files: 0
 
 ### ขั้นต่อไป

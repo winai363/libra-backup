@@ -28,11 +28,15 @@ DOWNLOADS_HTML = LIBRA_DIR.parent / "downloads" / "libra-distribution-dashboard.
 CHROME_GUIDE = LIBRA_DIR.parent / "downloads" / "kdp-pins" / "CLAUDE-CHROME-POSTING-GUIDE.md"
 CATEGORY_HEALTH_STATE = LIBRA_DIR / "data" / "category_health_state.json"
 
+# Plan targets for the FULL 90-day organic window (2026-07-11 → 2026-10-09).
+# Replaces the July learning-cycle targets ($25/120/500/100 per month) when
+# the 90-day profit system became the single operating plan on 2026-07-11 —
+# same monthly pace, extended to the mode window (×3).
 DEFAULT_PLAN_TARGETS = {
-    "revenue_usd": 25.0,
-    "orders_downloads": 120,
-    "kenp": 500,
-    "free_downloads": 100,
+    "revenue_usd": 75.0,
+    "orders_downloads": 360,
+    "kenp": 1500,
+    "free_downloads": 300,
 }
 
 

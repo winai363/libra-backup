@@ -263,20 +263,46 @@ def test_terminal_history_drives_day_60_evidence_and_anchor(tmp_path, monkeypatc
     ]
 
 
-def test_profit_dashboard_reports_kpi_actual_vs_plan(tmp_path, monkeypatch):
+def test_profit_dashboard_reports_kpi_actual_vs_plan_periods(tmp_path, monkeypatch):
     client = _client(tmp_path, monkeypatch)
 
     kpi = client.get("/api/profit/portfolio").json()["kpi_plan"]
 
-    names = [metric["name"] for metric in kpi["metrics"]]
-    assert names == ["Verified royalties", "Orders / downloads", "KENP", "Profit A · break-even"]
-    for metric in kpi["metrics"]:
-        assert set(metric) >= {"actual", "plan", "actual_label", "plan_label", "percent", "status"}
-        assert 0 <= metric["percent"] <= 100
-    royalties = kpi["metrics"][0]
-    assert royalties["actual"] == 7.63
-    assert royalties["plan"] == 25.0
-    orders = kpi["metrics"][1]
-    assert orders["actual"] == 252
-    profit_a = kpi["metrics"][3]
-    assert profit_a["status"] in {"on_plan", "behind"}
+    periods = {period["key"]: period for period in kpi["periods"]}
+    assert set(periods) == {"daily", "month", "mode"}
+    for period in periods.values():
+        names = [metric["name"] for metric in period["metrics"]]
+        assert names == ["Verified royalties", "Orders / downloads", "KENP", "Profit A · break-even"]
+        for metric in period["metrics"]:
+            assert set(metric) >= {"actual", "plan", "actual_label", "plan_label", "percent", "status"}
+            assert 0 <= metric["percent"] <= 100
+    # 90-day plan totals scale down: month = total/3, daily = total/90.
+    mode = periods["mode"]["metrics"]
+    assert mode[0]["actual"] == 7.63 and mode[0]["plan"] == 75.0
+    assert mode[1]["plan"] == 360
+    month = periods["month"]["metrics"]
+    assert month[0]["actual"] == 7.63 and month[0]["plan"] == 25.0
+    assert month[1]["actual"] == 252
+    # Single snapshot in the month → the daily delta IS the MTD value.
+    daily = periods["daily"]["metrics"]
+    assert daily[0]["actual"] == 7.63
+    assert daily[0]["plan"] < 1.0  # 90-day target averaged per day
+
+
+def test_daily_kpi_uses_day_over_day_snapshot_delta(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    record_kdp_snapshot(libra_app.PROFIT_LEDGER_FILE, {
+        "observed_at": "2026-07-12T09:15:00+07:00",
+        "month": "2026-07",
+        "overview": {"royalties_usd": 9.13, "orders_all_types": 260, "kenp": 400},
+        "titles": [{"asin": "A", "royalties_usd": 9.13, "orders": 64, "kenp": 200}],
+    })
+
+    kpi = client.get("/api/profit/portfolio").json()["kpi_plan"]
+
+    daily = {m["name"]: m for m in next(
+        p for p in kpi["periods"] if p["key"] == "daily")["metrics"]}
+    assert daily["Verified royalties"]["actual"] == 1.50  # 9.13 - 7.63
+    assert daily["Orders / downloads"]["actual"] == 8
+    assert daily["KENP"]["actual"] == 39
+    assert daily["Profit A · break-even"]["status"] == "on_plan"

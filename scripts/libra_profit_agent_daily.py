@@ -367,6 +367,8 @@ def main() -> None:
     parser.add_argument("--send", action="store_true", help="send the existing Telegram digest")
     parser.add_argument("--complete-action", help="action key awaiting verified manual completion")
     parser.add_argument("--evidence-json", help="JSON object containing confirmation or before/after evidence")
+    parser.add_argument("--execute-actions", action="store_true",
+                        help="auto-execute validated zero-cost actions on KDP (safety gates + real-state verification)")
     args = parser.parse_args()
     if args.complete_action:
         if not args.evidence_json:
@@ -376,7 +378,11 @@ def main() -> None:
             parser.error("--evidence-json must decode to an object")
         print(json.dumps(complete_manual_action(LEDGER_FILE, args.complete_action, evidence), sort_keys=True))
         return
-    state = run_daily(LEDGER_FILE, STATE_FILE, dry_run=args.dry_run, send=args.send)
+    executor = None
+    if args.execute_actions and not args.dry_run:
+        from kdp_action_executor import build_executor
+        executor = build_executor()
+    state = run_daily(LEDGER_FILE, STATE_FILE, dry_run=args.dry_run, send=args.send, executor=executor)
     print(json.dumps(state, sort_keys=True))
 
 

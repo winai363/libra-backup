@@ -324,3 +324,26 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 **4. Verify:** full suite **144 passed** (142 เดิม + 2 เทสต์ใหม่เรื่อง estimate), daily agent live run ปกติ, restart libra.service แล้ว /profit ตอบ 200. Gate `cost_completeness` ตอนนี้ **closed** (เพราะ 3 เล่ม estimated) — ถูกต้องตามหลัก อย่าพยายาม "แก้" gate นี้ด้วยการ mark verified; ทางเดียวที่เปิดได้คือมี cost report จริง.
 
 **เหลือให้มนุษย์/รอบหน้า:** Exp 4 category change ต้อง execute บน KDP UI + บันทึก evidence ผ่าน `scripts/libra_profit_agent_daily.py --complete-action <key> --evidence-json ...`; Free promo 12-13 ก.ค. รอวัดผล; Exp 2 evaluate หลัง 25 ก.ค.
+
+# 2026-07-11 (เย็น) — Auto-Executor: ปิดลูป 90-Day Profit Agent เป็น full-auto
+
+**บุ๋ยสั่ง: "ให้ทำเป็น auto ทั้งหมด แต่ทำด้วยความระมัดระวังและตรวจเชค"**
+
+**สร้าง `scripts/kdp_action_executor.py`** — executor สำหรับ run_daily(executor=...) ทำให้ experiment actions execute เองบน KDP:
+- **Safety gates (pure function, มีเทสต์):** category ต้องมีจริงใน tree ที่ audit แล้ว, replaces ต้องอยู่บน listing, title change = ปฏิเสธถาวร, paid = ปฏิเสธ, kind ที่ไม่รองรับ → คง manual_required
+- **Real-state verification:** อ่าน chips จริงก่อนแก้ (before), verify ที่ระดับ modal (chips + ตัวนับ "N out of 3 placements") **ก่อน** Save and Continue — mismatch = ทิ้งหน้าโดยไม่เซฟ, เช็ค validation error ("error(s) to continue") ทุกจังหวะ, publish แล้วต้องเห็นคำยืนยัน
+- **Budget:** mutation สูงสุด 1 ครั้ง/รอบ + Telegram ทุกผล (executed/failed/skip)
+- **free_promo:** delegate ไป free_promo_auto.schedule_one (verify "Scheduled" ในตัว)
+- Wire แล้ว: cron 10:15 = `--send --execute-actions`
+
+**บทเรียนจากการ execute จริง (สำคัญมากสำหรับงานหน้า):**
+1. **Signin redirect มี "title-setup" ใน query param** — เช็ค URL ต้องดู path เท่านั้น (urlsplit().path)
+2. **ปุ่ม Cancel ของ modal**: `button:has-text("Cancel")` จับ dialog "unsaved-changes" ที่ซ่อนอยู่ → ต้อง JS click เฉพาะปุ่ม visible
+3. **Live state ≠ listing.json**: acuarela บน KDP จริงมีแค่ 1 หมวดตื้น (ร่องรอยบั๊ก 1/3 เก่า) ทั้งที่ listing อ้าง 3 — before evidence ต้องอ่านจากจอจริง
+4. **หมวดที่ leaf เป็น stop-word ("General") drive ไม่ได้** — matcher ใน kdp_categories ตัดคำ general ทิ้ง → "Painting > General" เลือกไม่ได้ ห้ามใช้เป็น target
+5. **Placement ใต้ parent เดียวกันรวมเป็น accordion แถวเดียว** — chips 2 แถว แต่ placements=3 คือปกติ; verify ต้องยึดตัวนับ placements + parent coverage
+6. **Attempt limit = 3** ต่อ action; ถ้าหมด → experiment ค้าง failed; ทางกู้ = ปิด inconclusive + เปิด cycle ใหม่ (ทำแล้ว 2 ครั้งวันนี้: exp 4 → exp 5)
+
+**ผลจริง:** exp 5 (cycle 3) executed + verified สำเร็จ — acuarela เปลี่ยนจาก 1 หมวดตื้นเป็น 3 leaf เต็ม (Crafts&Hobbies>Painting + Instruction&Reference>Study&Teaching + >Color), republish แล้ว มี screenshot ยืนยัน "Congratulations...submitted" ที่ `logs/action-shots/`, ราคาคงเดิม $4.49, cooldown ถึง **14 ก.ค.** แล้ว evaluate อัตโนมัติ. Suite **154 passed**. Service healthy.
+
+**ขอบเขตที่ยังไม่ auto (ตั้งใจ):** การ*เสนอ* experiment ใหม่ (ค่า proposed) ยังต้องมนุษย์/AI session คิด — gates กันค่าเลว แต่การออกแบบ hypothesis ที่ดีต้องใช้วิจารณญาณ; นโยบาย 90 วัน (ห้าม paid, พัก generation) คงเดิม.

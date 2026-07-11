@@ -22,6 +22,8 @@ data/category_health.md
 data/category_health_state.json
 data/kdp-agent-state.json
 data/kdp-agent-actions.jsonl
+data/profit-agent-state.json
+data/libra-business.db.bak-*
 data/new-title-submissions.log
 data/distribution-report.json
 kdp_session_aplus.json

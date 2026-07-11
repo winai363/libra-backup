@@ -294,3 +294,10 @@
 
 ## 2026-07-01 — หยุด libra_kdp_sales_post (บุ๋ยสั่ง) ⛔
 Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพสต์โปรโมตหนังสือ KDP แบบ organic ลงเพจ FB "AI ใช้จริง" (page 1167163833140098) ผ่านระบบ Loom + cron จ/พ/ศ 15:10 + daily 15:05 promo-window. **บุ๋ยสั่งหยุด** — เหตุผล: เอาโพสต์หนังสือสเปน (ADHD) ไปแปะเพจ AI ไทย = คนละกลุ่มเป้าหมาย ฟีดไม่โฟกัส. ลบ cron ทั้ง 2 ตัวแล้ว (สคริปต์ยังอยู่ ไม่ลบ). โพสต์เก่าที่ลงไป 1 โพสต์ (18:33 น. 1 ก.ค.) ยังค้างบนเพจ. **อย่าเปิด cron นี้กลับโดยไม่ถามบุ๋ย.**
+# 2026-07-11 — 90-Day Profit Agent activated
+
+- Activated verified SQLite business ledger, immutable KDP snapshots, cost inventory, Profit A/B, title-specific experiments, persisted no-spend policy, audited actions/retries/manual completion, and 30/60/90 checkpoints.
+- Production baseline: KDP royalties `$7.63`, 256 all-type orders/downloads, 361 KENP; attributed top titles `$6.85`, disclosed gap `$0.78`; verified known direct costs `$7.40`; preliminary Profit A `$0.23`, but cost inventory is incomplete so positive contribution is not yet proven.
+- Three zero-cost experiments: `adhd-self-help-adults-es` metadata, `ai-augmented-productivity-toolkit` free promo, `acuarela-para-principiantes-guia-paso-a-paso` category. All are `manual_required` pending external before/after evidence; no KDP mutation was claimed or performed by the new controller.
+- Daily profit agent cron is 10:15. Conflicting KDP writers paused for the 90-day mode: upload queue, A+, free-promo auto, ADHD price retry, and legacy KDP auto manager; new-title generation remains paused.
+- Verification: final review approved; main full suite `142 passed`; production dry-run read-only regression covered; `libra.service` active; profit API/page HTTP 200; session files 600.

@@ -54,22 +54,27 @@ FX_TO_USD = {
 }
 
 
-def _to_usd(amount: float, currency: str) -> float:
+def _to_usd(amount: float, currency: str, *, persist_log: bool = True) -> float:
     """Convert a native-currency royalty to USD. Unknown currency -> 0.0 + warn
     (a visible zero beats a silently wrong number)."""
     cur = (currency or "").upper()
     rate = FX_TO_USD.get(cur)
     if rate is None:
-        _log(f"    !! unknown currency '{cur}' — revenue_usd left 0 (add to FX_TO_USD)")
+        _log(
+            f"    !! unknown currency '{cur}' — revenue_usd left 0 (add to FX_TO_USD)",
+            persist=persist_log,
+        )
         return 0.0
     return round(amount * rate, 2)
 
 
 # ---------- helpers ----------
 
-def _log(msg: str) -> None:
+def _log(msg: str, persist: bool = True) -> None:
     line = f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {msg}"
     print(line)
+    if not persist:
+        return
     try:
         LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         with LOG_FILE.open("a", encoding="utf-8") as fh:
@@ -129,7 +134,9 @@ def merge_title_baselines(previous: dict, current_rows: list[dict]) -> dict:
     return merged
 
 
-def ledger_snapshot_from_kdp(data: dict, observed_at: str) -> dict:
+def ledger_snapshot_from_kdp(
+    data: dict, observed_at: str, *, persist_log: bool = True
+) -> dict:
     """Convert a KDP dashboard response to the business-ledger contract."""
     overview = data["overview"]
     return {
@@ -139,6 +146,7 @@ def ledger_snapshot_from_kdp(data: dict, observed_at: str) -> dict:
             "royalties_usd": _to_usd(
                 float(overview.get("totalRoyalties", 0.0) or 0.0),
                 overview.get("currency", ""),
+                persist_log=persist_log,
             ),
             "orders_all_types": int(overview.get("digitalOrders", 0) or 0),
             "kenp": int(overview.get("kenpRead", 0) or 0),
@@ -151,6 +159,7 @@ def ledger_snapshot_from_kdp(data: dict, observed_at: str) -> dict:
                 "royalties_usd": _to_usd(
                     float(row.get("royalties", 0.0) or 0.0),
                     row.get("currency", ""),
+                    persist_log=persist_log,
                 ),
             }
             for row in data["titles"]
@@ -206,7 +215,9 @@ def _backfill_asin(slug: str, asin: str, idx) -> None:
         _log(f"  backfilled asin {asin} -> {slug}")
 
 
-def resolve_slug(asin: str, title: str, idx) -> str | None:
+def resolve_slug(
+    asin: str, title: str, idx, *, backfill: bool = True, persist_log: bool = True
+) -> str | None:
     by_asin, by_title, listings = idx
     if asin in by_asin:
         return by_asin[asin]
@@ -214,7 +225,8 @@ def resolve_slug(asin: str, title: str, idx) -> str | None:
     # Exact normalized title (fast path).
     slug = by_title.get(_norm_title(title))
     if slug:
-        _backfill_asin(slug, asin, idx)
+        if backfill:
+            _backfill_asin(slug, asin, idx)
         return slug
 
     # Token-overlap: KDP often merges title+subtitle, so match by how much of a
@@ -231,8 +243,9 @@ def resolve_slug(asin: str, title: str, idx) -> str | None:
         if score > best_score:
             best_slug, best_score = s, score
     if best_slug and best_score >= 0.6 and len(listings[best_slug]["tokens"] & api_tokens) >= 3:
-        _log(f"  matched by tokens ({best_score:.2f}) -> {best_slug}")
-        _backfill_asin(best_slug, asin, idx)
+        _log(f"  matched by tokens ({best_score:.2f}) -> {best_slug}", persist=persist_log)
+        if backfill:
+            _backfill_asin(best_slug, asin, idx)
         return best_slug
     return None
 
@@ -290,16 +303,21 @@ def sync(dry_run: bool = False) -> None:
     today = date.today().isoformat()
     month = today[:7]
 
-    _log(f"=== KDP sales sync {today} (dry_run={dry_run}) ===")
+    def emit(message: str) -> None:
+        _log(message, persist=not dry_run)
+
+    emit(f"=== KDP sales sync {today} (dry_run={dry_run}) ===")
     data = asyncio.run(fetch_kdp())
     ov = data["overview"]
-    _log(f"Overview THIS_MONTH: digitalOrders={ov.get('digitalOrders')} "
+    emit(f"Overview THIS_MONTH: digitalOrders={ov.get('digitalOrders')} "
          f"kenpRead={ov.get('kenpRead')} royalties={ov.get('totalRoyalties')} {ov.get('currency')}")
 
     observed_at = datetime.now().astimezone().isoformat(timespec="seconds")
-    ledger_snapshot = ledger_snapshot_from_kdp(data, observed_at)
+    ledger_snapshot = ledger_snapshot_from_kdp(
+        data, observed_at, persist_log=not dry_run
+    )
     if dry_run:
-        _log(f"[dry-run] reconciliation input: {ledger_snapshot}")
+        emit(f"[dry-run] reconciliation input: {ledger_snapshot}")
     else:
         record_kdp_snapshot(LEDGER_FILE, ledger_snapshot)
 
@@ -323,13 +341,19 @@ def sync(dry_run: bool = False) -> None:
         d_pages = max(0, cur_pages - int(prev.get("pagesRead", 0)))
         d_roy = round(max(0.0, cur_roy - float(prev.get("royalties", 0.0))), 2)
 
-        slug = resolve_slug(asin, t.get("title", ""), idx)
+        slug = resolve_slug(
+            asin,
+            t.get("title", ""),
+            idx,
+            backfill=not dry_run,
+            persist_log=not dry_run,
+        )
         tag = slug or f"UNMATCHED({asin})"
-        _log(f"  {tag}: MTD orders={cur_orders} pages={cur_pages} roy={cur_roy} "
+        emit(f"  {tag}: MTD orders={cur_orders} pages={cur_pages} roy={cur_roy} "
              f"| today +{d_orders}o +{d_pages}p +{d_roy}{t.get('currency','')}")
 
         if slug is None:
-            _log(f"    !! no listing.json matches '{t.get('title','')[:60]}' — skipped")
+            emit(f"    !! no listing.json matches '{t.get('title','')[:60]}' — skipped")
             continue
 
         # Record a snapshot when there is a daily increment, or to seed the first
@@ -343,17 +367,19 @@ def sync(dry_run: bool = False) -> None:
             "source": "kdp_sales_sync",
             "units_7d": d_orders,
             "kenp_7d": d_pages,
-            "revenue_usd": _to_usd(d_roy, t.get("currency", "")),
+            "revenue_usd": _to_usd(
+                d_roy, t.get("currency", ""), persist_log=not dry_run
+            ),
             "mtd_orders": cur_orders,
             "mtd_kenp": cur_pages,
             "mtd_royalties": cur_roy,
             "currency": t.get("currency", ""),
         }
         if dry_run:
-            _log(f"    [dry-run] would record -> {slug}: {snap}")
+            emit(f"    [dry-run] would record -> {slug}: {snap}")
         else:
             how = upsert_today_snapshot(slug, snap)
-            _log(f"    {how} snapshot -> {slug}")
+            emit(f"    {how} snapshot -> {slug}")
             recorded += 1
             events.append(
                 f"• {slug}: +{d_orders} order, +{d_pages} KU pages, "
@@ -363,11 +389,11 @@ def sync(dry_run: bool = False) -> None:
         state["titles"] = new_baseline
         state["updated_at"] = datetime.now().isoformat(timespec="seconds")
         STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
-        _log(f"Done. {recorded} book(s) updated. State saved -> {STATE_FILE.name}")
+        emit(f"Done. {recorded} book(s) updated. State saved -> {STATE_FILE.name}")
         if events:
             _tg("📚 Libra KDP — ความเคลื่อนไหววันนี้:\n" + "\n".join(events))
     else:
-        _log("Done (dry-run, nothing written).")
+        emit("Done (dry-run, nothing written).")
 
 
 if __name__ == "__main__":

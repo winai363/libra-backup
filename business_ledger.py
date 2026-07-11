@@ -121,6 +121,21 @@ def record_direct_cost(
         ).fetchone()[0]
 
 
+def direct_costs_for_slug(path: Path, slug: str) -> float:
+    """Return all direct costs explicitly attributed to one book slug."""
+    init_ledger(path)
+    with sqlite3.connect(path) as connection:
+        total = connection.execute(
+            """
+            SELECT COALESCE(SUM(amount_usd), 0)
+            FROM direct_costs
+            WHERE slug = ?
+            """,
+            (slug,),
+        ).fetchone()[0]
+    return round(float(total), 2)
+
+
 def portfolio_financials(path: Path, month: str, overhead: dict | None = None) -> dict:
     init_ledger(path)
     with sqlite3.connect(path) as connection:

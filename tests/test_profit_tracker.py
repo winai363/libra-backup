@@ -2,7 +2,7 @@ import json
 from datetime import date
 
 import profit_tracker
-from business_ledger import record_kdp_snapshot
+from business_ledger import record_direct_cost, record_kdp_snapshot
 
 
 def write_json(path, data):
@@ -80,3 +80,25 @@ def test_portfolio_uses_ledger_for_verified_profit_and_reconciliation(tmp_path, 
         "unattributed_royalties_usd": 0.79,
         "snapshot_count": 1,
     }
+
+
+def test_ledger_attributed_cost_prevents_book_winner(tmp_path, monkeypatch):
+    kdp_dir = tmp_path / "kdp"
+    ledger = tmp_path / "ledger.db"
+    monkeypatch.setattr(profit_tracker, "KDP_DIR", kdp_dir)
+    monkeypatch.setattr(profit_tracker, "LEDGER_FILE", ledger)
+    write_json(kdp_dir / "loss-book" / "listing.json", {
+        "title": "Loss Book", "status": "uploaded", "uploaded_at": "2026-07-01",
+    })
+    write_json(kdp_dir / "loss-book" / "feedback-history.json", [{
+        "date": "2026-07-10", "units_7d": 2, "kenp_7d": 0,
+        "revenue_usd": 4.25,
+    }])
+    record_direct_cost(
+        ledger, incurred_at="2026-07-05T12:00:00+07:00", slug="loss-book",
+        category="cover", amount_usd=5.0, source_key="cover:loss-book",
+    )
+
+    book = profit_tracker.build_portfolio(today=date(2026, 7, 11))["books"][0]
+
+    assert book["action"] != "winner"

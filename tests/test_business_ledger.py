@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from business_ledger import (
+    direct_costs_for_slug,
     portfolio_financials,
     record_direct_cost,
     record_kdp_snapshot,
@@ -73,3 +74,19 @@ def test_direct_costs_and_complete_overhead_are_deducted(tmp_path: Path):
     assert result["contribution_profit_usd"] == 8.75
     assert result["fully_loaded_net_profit_usd"] == 3.25
     assert result["overhead_complete"] is True
+
+
+def test_direct_costs_for_slug_only_sums_attributed_book_costs(tmp_path: Path):
+    db = tmp_path / "ledger.db"
+    for slug, amount, key in [
+        ("book-a", 1.25, "a:cover"),
+        ("book-a", 0.75, "a:edit"),
+        ("book-b", 9.0, "b:cover"),
+        (None, 12.0, "overhead"),
+    ]:
+        record_direct_cost(
+            db, incurred_at="2026-07-05T12:00:00+07:00", slug=slug,
+            category="test", amount_usd=amount, source_key=key,
+        )
+
+    assert direct_costs_for_slug(db, "book-a") == 2.0

@@ -20,7 +20,10 @@ import sys
 from datetime import date
 from pathlib import Path
 
+from business_ledger import direct_costs_for_slug
+
 KDP_DIR = Path(__file__).parent.parent / "kdp"
+LEDGER_FILE = Path(__file__).parent / "data" / "libra-business.db"
 WINDOW_DAYS = 90
 
 
@@ -68,13 +71,16 @@ def get_winners(window_days: int = WINDOW_DAYS, today: date | None = None) -> li
         revenue = round(_sum_recent(history, "revenue_usd", window_days, today), 2)
         if revenue <= 0:
             continue
+        ledger_cost_usd = direct_costs_for_slug(LEDGER_FILE, slug)
         cost_report = _load_json(hf.parent / "cost-report.json", {})
-        if "total_usd" in cost_report:
+        attributable_cost_usd = ledger_cost_usd
+        if attributable_cost_usd <= 0 and "total_usd" in cost_report:
             try:
-                if revenue - float(cost_report["total_usd"]) <= 0:
-                    continue
+                attributable_cost_usd = float(cost_report["total_usd"])
             except (TypeError, ValueError):
                 pass
+        if attributable_cost_usd > 0 and revenue - attributable_cost_usd <= 0:
+            continue
         listing = _load_json(hf.parent / "listing.json", {})
         winners.append({
             "slug": slug,
@@ -104,11 +110,11 @@ def proven_sets(winners: list[dict]) -> tuple[set[str], set[str]]:
 def format_for_prompt(winners: list[dict]) -> str:
     """Build the PROVEN WINNERS block injected into the discovery prompt."""
     if not winners:
-        return ("PROVEN WINNERS: none yet — no book has recorded a sale. "
+        return ("PROVEN WINNERS: none yet — no book has positive verified royalty. "
                 "Explore freely for high-demand, low-competition niches.")
     lines = [
-        "PROVEN WINNERS — these books ALREADY SOLD on KDP. Real buyers paid money "
-        "for them, so the demand is verified (not guessed):",
+        "PROVEN WINNERS — these books have positive verified royalty on KDP. "
+        "This is a verified royalty or reading signal, not modeled demand:",
     ]
     for w in winners[:6]:
         sig = []
@@ -136,7 +142,7 @@ def format_for_prompt(winners: list[dict]) -> str:
 if __name__ == "__main__":
     ws = get_winners()
     if not ws:
-        print("No winners yet — no book has recorded a sale.")
+        print("No winners yet — no book has positive verified royalty.")
         sys.exit(0)
     print(f"=== Proven winners (last {WINDOW_DAYS} days) ===")
     for w in ws:

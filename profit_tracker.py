@@ -13,7 +13,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from business_ledger import portfolio_financials
+from business_ledger import direct_costs_for_slug, portfolio_financials
 
 
 LIBRA_DIR = Path(__file__).parent
@@ -169,8 +169,13 @@ def build_book_profit(slug: str, today: date | None = None) -> dict:
 
     price_usd = _price_usd(listing, book_dir)
     cost_report = _load_json(book_dir / "cost-report.json", {})
-    cost_usd = round(float(cost_report["total_usd"]) if cost_report and "total_usd" in cost_report else COST_PER_BOOK_USD, 4)
-    cost_is_real = bool(cost_report and "total_usd" in cost_report)
+    ledger_cost_usd = direct_costs_for_slug(LEDGER_FILE, slug)
+    if ledger_cost_usd > 0:
+        cost_usd = ledger_cost_usd
+        cost_is_real = True
+    else:
+        cost_usd = round(float(cost_report["total_usd"]) if cost_report and "total_usd" in cost_report else COST_PER_BOOK_USD, 4)
+        cost_is_real = bool(cost_report and "total_usd" in cost_report)
     action, reason = _action_for_book(
         days_live,
         latest,

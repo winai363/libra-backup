@@ -121,21 +121,28 @@ def _load_profit_agent_state() -> dict:
         payload = json.loads(PROFIT_AGENT_STATE_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
-    allowed = ("generated_at", "mode", "gates", "gate_reason", "experiments")
+    allowed = (
+        "generated_at", "mode_started_at", "mode", "gates", "gate_reason", "experiments"
+    )
     return {key: payload[key] for key in allowed if key in payload}
 
 
-def _ledger_experiments() -> list[dict]:
+def _ledger_experiments() -> tuple[list[dict], int]:
     if not PROFIT_LEDGER_FILE.exists():
-        return []
+        return [], 0
     try:
         with sqlite3.connect(PROFIT_LEDGER_FILE) as connection:
             connection.row_factory = sqlite3.Row
             rows = connection.execute(
-                "SELECT * FROM experiments ORDER BY started_at, id"
+                """
+                SELECT * FROM experiments
+                WHERE status IN ('planned', 'ready', 'executing', 'cooldown',
+                                 'evaluating', 'manual_required')
+                ORDER BY started_at, id
+                """
             ).fetchall()
     except sqlite3.Error:
-        return []
+        return [], 0
     experiments = []
     for row in rows[:3]:
         experiments.append({
@@ -150,11 +157,11 @@ def _ledger_experiments() -> list[dict]:
             "status": row["status"],
             "result": json.loads(row["result_json"]) if row["result_json"] else None,
         })
-    return experiments
+    return experiments, len(rows)
 
 
 def _checkpoint_outcomes(
-    started_at: datetime,
+    started_at: datetime | None,
     now: datetime,
     financials: dict,
     reconciliation: dict,
@@ -174,16 +181,31 @@ def _checkpoint_outcomes(
     )
     checkpoints = []
     for day, key, label in definitions:
+        if started_at is None:
+            checkpoints.append({
+                "day": day,
+                "key": key,
+                "date": None,
+                "outcome": "not_started",
+                "detail": "The 90-day mode activation date is not persisted.",
+                **({"missing_plan_inputs": []} if day == 90 else {}),
+            })
+            continue
         due_at = started_at + timedelta(days=day)
         outcome = "pending"
         detail = "Checkpoint has not been reached."
         if now >= due_at:
             if day == 30:
-                ledger_verified = reconciliation["snapshot_count"] > 0
+                ledger_verified = bool(
+                    reconciliation["snapshot_count"] > 0
+                    and reconciliation.get("fresh") is True
+                    and abs(float(reconciliation["unattributed_royalties_usd"])) <= 0.01
+                )
                 outcome = "passed" if ledger_verified else "missed"
                 detail = (
-                    "KDP overview is recorded as source truth; modeled revenue is excluded."
-                    if ledger_verified else "No verified KDP overview snapshot is available."
+                    "Fresh KDP overview data reconciles within one cent."
+                    if ledger_verified
+                    else "Fresh KDP overview data does not reconcile within one cent."
                 )
             elif day == 60:
                 outcome = "passed" if positive_windows >= 2 else "missed"
@@ -228,7 +250,7 @@ def build_profit_dashboard() -> dict:
     now = _profit_now()
     ledger = portfolio_financials(PROFIT_LEDGER_FILE, now.strftime("%Y-%m"))
     portfolio = build_portfolio(today=now.date())
-    experiments = _ledger_experiments()
+    experiments, active_experiment_count = _ledger_experiments()
     state = _load_profit_agent_state()
     latest_observed_at = None
     if PROFIT_LEDGER_FILE.exists():
@@ -262,23 +284,27 @@ def build_profit_dashboard() -> dict:
     }
     gates = state.get("gates", {})
     operations_ready = bool(gates) and all(value == "open" for value in gates.values())
-    started_at = min(
-        (datetime.fromisoformat(item["started_at"]) for item in experiments),
-        default=now,
-    )
+    persisted_start = state.get("mode_started_at")
+    start_candidates = [
+        datetime.fromisoformat(item["started_at"]) for item in experiments
+    ]
+    if persisted_start:
+        start_candidates.append(datetime.fromisoformat(persisted_start))
+    started_at = min(start_candidates) if start_candidates else None
     return {
         "generated_at": now.isoformat(),
         "financials": financials,
         "reconciliation": reconciliation,
-        "policy": {"paid_spend_allowed": False, "active_experiment_limit": 3},
+        "policy": {
+            "paid_spend_allowed": False,
+            "active_experiment_limit": 3,
+            "active_experiment_limit_violated": active_experiment_count > 3,
+        },
         "experiments": experiments,
         "operations": {
             "status": "ready" if operations_ready else "blocked",
             "gates": gates,
-            "active_experiment_count": sum(
-                item["status"] in {"planned", "ready", "executing", "cooldown", "evaluating", "manual_required"}
-                for item in experiments
-            ),
+            "active_experiment_count": active_experiment_count,
         },
         "commercial": {
             "status": "positive_contribution" if ledger["contribution_profit_usd"] > 0 else "not_proven",

@@ -44,6 +44,14 @@ def _write_atomic(path: Path, payload: dict) -> None:
     os.replace(temporary, path)
 
 
+def _persisted_mode_start(state_path: Path) -> str | None:
+    try:
+        value = json.loads(state_path.read_text(encoding="utf-8")).get("mode_started_at")
+        return datetime.fromisoformat(value).isoformat() if value else None
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        return None
+
+
 def _policy_registry(db_path: Path, experiments: list[dict]) -> list[dict]:
     if not db_path.exists():
         return experiments
@@ -107,6 +115,13 @@ def run_daily(
         latest = _latest_observation(db_path)
         experiments = create_initial_experiments(db_path, now)
 
+    mode_started_at = _persisted_mode_start(state_path)
+    if mode_started_at is None:
+        mode_started_at = min(
+            (item["started_at"] for item in experiments),
+            default=now.isoformat(),
+        )
+
     freshness_open = bool(
         latest and (now.astimezone(timezone.utc) - latest.astimezone(timezone.utc)).total_seconds() <= 86400
     )
@@ -166,6 +181,7 @@ def run_daily(
 
     state = {
         "generated_at": now.isoformat(),
+        "mode_started_at": mode_started_at,
         "mode": "dry_run" if dry_run else "live",
         "financials": financials,
         "gates": gates,

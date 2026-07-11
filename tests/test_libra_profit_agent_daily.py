@@ -60,8 +60,20 @@ def test_fresh_reconciled_ledger_advances_and_audits_experiments(tmp_path):
     assert state["gates"] == {"policy": "open", "freshness": "open", "reconciliation": "open"}
     assert all(item["status"] == "ready" for item in state["experiments"])
     assert state_path.exists()
+    assert state["mode_started_at"] == NOW.isoformat()
     with sqlite3.connect(db) as connection:
         assert connection.execute("SELECT COUNT(*) FROM agent_actions").fetchone()[0] == 3
+
+
+def test_mode_start_is_preserved_across_controller_runs(tmp_path):
+    db = tmp_path / "ledger.db"
+    state_path = tmp_path / "state.json"
+    _snapshot(db)
+
+    first = run_daily(db, state_path, now=NOW)
+    second = run_daily(db, state_path, now=NOW + timedelta(days=5))
+
+    assert second["mode_started_at"] == first["mode_started_at"] == NOW.isoformat()
 
 
 def test_stale_financials_hold_experiments(tmp_path):

@@ -118,11 +118,15 @@ def test_persisted_active_capacity_blocks_each_new_transition(tmp_path):
 
     state = run_daily(db, tmp_path / "capacity.json", now=NOW)
 
-    assert all(item["status"] == "planned" for item in state["experiments"])
+    seeded = [item for item in state["experiments"] if item["slug"] != "existing-active"]
+    assert seeded and all(item["status"] == "planned" for item in seeded)
     assert all(
         item["policy_reason"] == "active experiment limit reached"
-        for item in state["experiments"]
+        for item in seeded
     )
+    # The over-capacity row itself is now part of the registry and holds state.
+    extra = [item for item in state["experiments"] if item["slug"] == "existing-active"]
+    assert extra and extra[0]["status"] == "ready"
 
 
 def test_persisted_title_cooldown_blocks_only_conflicting_experiment(tmp_path):
@@ -146,3 +150,32 @@ def test_persisted_title_cooldown_blocks_only_conflicting_experiment(tmp_path):
         for slug, item in by_slug.items()
         if slug != blocked_slug
     )
+
+
+def test_proposer_created_experiments_are_processed(tmp_path):
+    from datetime import timezone as _tz
+
+    from profit_agent import create_experiment
+
+    db = tmp_path / "ledger.db"
+    state_path = tmp_path / "state.json"
+    _snapshot(db)
+    create_experiment(
+        db, slug="proposer-book", asin="PX1", variable="promotion",
+        action={"kind": "free_promo", "cost_usd": 0,
+                "proposed_value": "2-day KDP Select free promotion"},
+        now=NOW,
+    )
+    # Retire the seeded APPROVED experiments so capacity can't mask the
+    # registry behavior under test.
+    create_initial_experiments(db, NOW)
+    with sqlite3.connect(db) as connection:
+        connection.execute(
+            "UPDATE experiments SET status='inconclusive' WHERE slug != 'proposer-book'"
+        )
+
+    state = run_daily(db, state_path, now=NOW)
+
+    proposer_rows = [e for e in state["experiments"] if e["slug"] == "proposer-book"]
+    assert proposer_rows, "non-approved-slug experiment missing from the daily registry"
+    assert proposer_rows[0]["status"] != "planned", "proposer experiment never advanced"

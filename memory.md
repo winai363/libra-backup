@@ -347,3 +347,21 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 **ผลจริง:** exp 5 (cycle 3) executed + verified สำเร็จ — acuarela เปลี่ยนจาก 1 หมวดตื้นเป็น 3 leaf เต็ม (Crafts&Hobbies>Painting + Instruction&Reference>Study&Teaching + >Color), republish แล้ว มี screenshot ยืนยัน "Congratulations...submitted" ที่ `logs/action-shots/`, ราคาคงเดิม $4.49, cooldown ถึง **14 ก.ค.** แล้ว evaluate อัตโนมัติ. Suite **154 passed**. Service healthy.
 
 **ขอบเขตที่ยังไม่ auto (ตั้งใจ):** การ*เสนอ* experiment ใหม่ (ค่า proposed) ยังต้องมนุษย์/AI session คิด — gates กันค่าเลว แต่การออกแบบ hypothesis ที่ดีต้องใช้วิจารณญาณ; นโยบาย 90 วัน (ห้าม paid, พัก generation) คงเดิม.
+
+# 2026-07-11 (ค่ำ) — Experiment Proposer: ระบบคิด experiment ใหม่เอง (ปิด gap สุดท้ายของ full-auto)
+
+**บุ๋ยสั่ง: "การคิด experiment ใหม่ ให้ AI คิดภายใต้ skill และกรอบที่เรา setup ไว้ — ทำได้ auto"**
+
+**สร้าง `scripts/experiment_proposer.py`** — deterministic proposer (ไม่ใช้ LLM เดาค่า — นั่นคือต้นเหตุค่าอันตรายเดิม):
+- **แหล่งข้อเสนอ:** (1) category_update จาก listing ที่มี path ไม่อยู่ใน tree จริง — ค่าที่เสนอต้องเป็น structural relative + overlap กับ title/keywords ≥2 คำแบบ non-generic (2) free_promo สำหรับเล่ม Enrolled ที่ไม่เคยโปรโม
+- **หลักการสำคัญ: ไม่มั่นใจ = ข้าม ไม่เดา** — คัด "Prostate Health"/"PTSD"/"Computer Mathematics" ที่ token หลอก (คำ generic: health, stress, computer) ออกด้วย GENERIC_TOKENS blocklist + คิดจาก title/keywords เท่านั้น (ไม่ใช่หมวดตัวเอง)
+- Path มี "Kindle eBooks >" prefix = recording artifact ไม่ใช่ปัญหาจริง — ไม่เปลืองสล็อต; ทุก target ที่เหลือของเล่มต้อง drivable (ไม่งั้น executor abort เปล่าๆ)
+- ทุกข้อเสนอผ่าน validate_action **ตัวเดียวกับ executor** ก่อนสร้าง + กันเสนอค่าซ้ำที่เคยลอง (already_tried) + ปิด experiment ที่ fail ครบ 3/3 อัตโนมัติ (close_exhausted_failures)
+- **Caps:** สร้างใหม่ ≤1/วัน, active รวม ≤3 — คิวปัจจุบัน: ฟรีโปรโม 11 เล่ม (หมวด 0 เพราะเคสที่เหลือต้องใช้วิจารณญาณ → คงไว้ให้คน)
+- Wire ใน daily main() หลัง run_daily (เฉพาะโหมด --execute-actions), พังไม่ทำ daily ล่ม
+
+**🐛 บั๊กใหญ่ที่เจอ+แก้:** run_daily เดิมประมวลผลเฉพาะ slug ใน APPROVED_EXPERIMENTS → experiment ที่ proposer สร้าง**จะค้าง planned ตลอดกาล**. แก้: เพิ่ม `load_all_experiments()` ใน profit_agent แล้วให้ daily โหลดทุกแถวจาก DB + regression test. (เทสต์ capacity เดิมต้องปรับ scope เพราะ registry ใหม่เห็นทุกแถว)
+
+**ผลจริง:** proposer สร้าง exp 6 (ai-creative-workbook-italian ฟรีโปรโม 2 วัน) → daily รอบถัดมาขยับเป็น ready แล้ว; พรุ่งนี้ 10:15 executor ตั้งโปรโมจริง. Suite **162 passed**. Service healthy.
+
+**Lifecycle เต็มตอนนี้ (ไม่มีมือคนใน loop):** proposer เสนอ (จากข้อมูลจริง+gate) → daily ขยับ → executor ทำบน KDP + verify ผลจริง → cooldown → evaluate → ปิด won/lost/inconclusive → proposer เติมคิวถัดไป → Telegram รายงานทุกจุด. งานที่จงใจเหลือให้คน: เคสหมวดที่ semantic กำกวม (ระบบ skip ให้เอง) + นโยบาย 90 วัน.

@@ -25,6 +25,7 @@ from profit_agent import (  # noqa: E402
     ensure_no_spend_mode,
     evaluate_experiment,
     latest_experiment_action,
+    load_all_experiments,
     propose_transition,
     record_action_result,
     title_financial_boundary,
@@ -196,7 +197,8 @@ def run_daily(
         ingest_uploaded_title_costs(db_path, KDP_DIR, checked_at=now.isoformat())
         financials = portfolio_financials(db_path, month)
         latest = _latest_observation(db_path)
-        experiments = create_initial_experiments(db_path, now)
+        create_initial_experiments(db_path, now)
+        experiments = load_all_experiments(db_path)
         policy_mode = ensure_no_spend_mode(db_path, now)
 
     mode_started_at = _persisted_mode_start(state_path)
@@ -383,7 +385,15 @@ def main() -> None:
         from kdp_action_executor import build_executor
         executor = build_executor()
     state = run_daily(LEDGER_FILE, STATE_FILE, dry_run=args.dry_run, send=args.send, executor=executor)
-    print(json.dumps(state, sort_keys=True))
+    if executor is not None:
+        # Propose the next experiment from observable state under the same
+        # gates the executor enforces. Never allowed to break the daily run.
+        try:
+            from experiment_proposer import run_proposer
+            state["proposer"] = run_proposer()
+        except Exception as exc:
+            state["proposer"] = {"error": f"{type(exc).__name__}: {exc}"}
+    print(json.dumps(state, sort_keys=True, default=str))
 
 
 if __name__ == "__main__":

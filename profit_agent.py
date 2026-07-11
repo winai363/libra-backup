@@ -218,6 +218,16 @@ def create_initial_experiments(db_path: Path, now: datetime) -> list[dict]:
     return [_experiment_from_row(row) for row in rows]
 
 
+def load_all_experiments(db_path: Path) -> list[dict]:
+    """Every experiment in the ledger — proposer-created cycles included, not
+    just the seeded APPROVED_EXPERIMENTS slugs."""
+    _init_schema(db_path)
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        rows = connection.execute("SELECT * FROM experiments ORDER BY id").fetchall()
+    return [_experiment_from_row(row) for row in rows]
+
+
 def create_experiment(db_path: Path, *, slug: str, asin: str, variable: str,
                       action: dict, now: datetime, hypothesis: str = "Controlled one-variable cycle") -> dict:
     _init_schema(db_path)

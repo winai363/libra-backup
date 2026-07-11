@@ -112,6 +112,38 @@ def test_non_experiment_title_revenue_cannot_make_experiment_win(tmp_path):
     assert result["outcome"] != "won"
 
 
+def test_title_boundary_uses_explicit_slug_cost_before_asin_is_persisted(tmp_path):
+    db = tmp_path / "db"
+    snap(db, "boundary-s1", NOW, 2)
+    with sqlite3.connect(db) as con:
+        con.execute(
+            "insert into cost_report_versions(logical_key,slug,observed_at,semantic_hash,cumulative_amount_usd,raw_json) values(?,?,?,?,?,?)",
+            ("cost-report:book", "book", NOW.isoformat(), "hash", 0.5, "{}"),
+        )
+        con.execute(
+            "insert into cost_inventory(slug,status,source_key,checked_at) values(?,?,?,?)",
+            ("book", "verified", "cost-report:book", NOW.isoformat()),
+        )
+    boundary = profit_agent.title_financial_boundary(db, "EXP", 1, slug="book")
+    assert boundary["direct_costs_usd"] == 0.5
+    assert boundary["contribution_profit_usd"] == 1.5
+    assert boundary["complete"] is True
+
+
+def test_ready_experiment_with_incomplete_cost_baseline_cannot_create_action(tmp_path, monkeypatch):
+    db = tmp_path / "db"; state = tmp_path / "state"
+    books = tmp_path / "kdp"; folder = books / "adhd-self-help-adults-es"; folder.mkdir(parents=True)
+    (folder / "listing.json").write_text(json.dumps({"status": "uploaded", "asin": "EXP"}))
+    monkeypatch.setattr(daily, "KDP_DIR", books)
+    snap(db, "missing-cost-s1", NOW, 2)
+    daily.run_daily(db, state, now=NOW)
+    result = daily.run_daily(db, state, now=NOW + timedelta(minutes=1), executor=lambda _: pytest.fail("executed"))
+    experiment = next(e for e in result["experiments"] if e["slug"] == "adhd-self-help-adults-es")
+    assert experiment["status"] == "ready"
+    with sqlite3.connect(db) as con:
+        assert con.execute("select count(*) from agent_actions where kind!='internal_transition'").fetchone()[0] == 0
+
+
 def test_two_distinct_cycles_for_same_title_prove_two_windows():
     from app import _checkpoint_outcomes
 

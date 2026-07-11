@@ -252,7 +252,8 @@ def run_daily(
             asin = str(experiment.get("asin") or "").strip()
         experiment_attribution_open = bool(asin and _title_attribution_complete(db_path, experiment["slug"]))
         title_allows = experiment_attribution_open or not _needs_complete_attribution(experiment)
-        can_advance = policy_open and freshness_open and overview_open and title_allows
+        cost_allows = experiment["status"] != "ready" or bool((experiment.get("baseline") or {}).get("cost_complete"))
+        can_advance = policy_open and freshness_open and overview_open and title_allows and cost_allows
         transition_input = {}
         result = None
         changed = experiment.copy()
@@ -260,7 +261,7 @@ def run_daily(
             changed = experiment.copy()
         elif experiment["status"] == "planned" and can_advance:
             snapshot_id = _latest_snapshot_id(db_path)
-            baseline = title_financial_boundary(db_path, asin, snapshot_id) if asin and snapshot_id else {"complete": False}
+            baseline = title_financial_boundary(db_path, asin, snapshot_id, slug=experiment["slug"]) if asin and snapshot_id else {"complete": False}
             changed = propose_transition(experiment, {}, now)
             changed.update({"asin": asin, "baseline_snapshot_id": snapshot_id, "baseline": baseline})
         elif experiment["status"] == "ready" and can_advance:
@@ -308,7 +309,7 @@ def run_daily(
                     changed["status"] = recorded["status"]
         if experiment["status"] == "evaluating" and can_advance:
             snapshot_id = _latest_snapshot_id(db_path)
-            current = title_financial_boundary(db_path, experiment["asin"], snapshot_id)
+            current = title_financial_boundary(db_path, experiment["asin"], snapshot_id, slug=experiment["slug"])
             result = evaluate_experiment(
                 experiment,
                 current,

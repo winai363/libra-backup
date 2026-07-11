@@ -235,7 +235,7 @@ def create_experiment(db_path: Path, *, slug: str, asin: str, variable: str,
     return _experiment_from_row(row)
 
 
-def title_financial_boundary(db_path: Path, asin: str, snapshot_id: int) -> dict:
+def title_financial_boundary(db_path: Path, asin: str, snapshot_id: int, *, slug: str | None = None) -> dict:
     """Return cumulative title royalties and costs as-of an immutable snapshot."""
     _init_schema(db_path)
     with sqlite3.connect(db_path) as connection:
@@ -249,8 +249,9 @@ def title_financial_boundary(db_path: Path, asin: str, snapshot_id: int) -> dict
         ).fetchall()
         complete = bool(monthly) and all(row[1] is not None for row in monthly)
         royalties = sum(float(row[1] or 0) for row in monthly)
-        slug_row = connection.execute("SELECT slug FROM experiments WHERE asin=? ORDER BY id DESC LIMIT 1", (asin,)).fetchone()
-        slug = slug_row[0] if slug_row else None
+        if slug is None:
+            slug_row = connection.execute("SELECT slug FROM experiments WHERE asin=? ORDER BY id DESC LIMIT 1", (asin,)).fetchone()
+            slug = slug_row[0] if slug_row else None
         manual = connection.execute("SELECT COALESCE(SUM(amount_usd),0) FROM direct_costs WHERE slug=? AND incurred_at<=? AND source_key NOT LIKE 'cost-report:%'", (slug, observed_at)).fetchone()[0] if slug else 0
         # A production cost report is cumulative lifetime cost incurred before the
         # title went live. Apply the latest verified total to every observation

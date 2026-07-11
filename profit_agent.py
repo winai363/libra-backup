@@ -310,8 +310,8 @@ def check_policy(action: dict, context: dict) -> tuple[bool, str]:
     if active_variable and action.get("variable") not in (None, active_variable):
         return False, "experiments may change only one variable"
 
-    if context.get("title_in_cooldown") or action.get("slug") in set(
-        context.get("cooldown_slugs", [])
+    if action.get("kind") != "evaluate_experiment" and (
+        context.get("title_in_cooldown") or action.get("slug") in set(context.get("cooldown_slugs", []))
     ):
         return False, "title is already in cooldown"
 
@@ -472,8 +472,8 @@ def record_action_result(db_path: Path, action: dict, result: dict) -> dict:
     result_hash = hashlib.sha256(result_json.encode()).hexdigest()
     conflict = False
     with sqlite3.connect(db_path) as connection:
-        terminal = connection.execute("SELECT id FROM agent_actions WHERE action_key=? AND terminal=1 AND attempt<?", (action_key, attempt)).fetchone()
-        if terminal:
+        terminal = connection.execute("SELECT id,status FROM agent_actions WHERE action_key=? AND terminal=1 AND attempt<?", (action_key, attempt)).fetchone()
+        if terminal and not (terminal[1] == "manual_required" and action.get("manual_completion") is True):
             raise ValueError("cannot retry terminal action")
         existing = connection.execute(
             "SELECT id, recorded_at, kind, slug, status, evidence_json, action_hash, result_hash FROM agent_actions WHERE action_key = ? AND attempt = ?",

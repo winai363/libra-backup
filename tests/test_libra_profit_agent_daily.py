@@ -140,7 +140,7 @@ def test_persisted_title_cooldown_blocks_only_conflicting_experiment(tmp_path):
 
     by_slug = {item["slug"]: item for item in state["experiments"]}
     assert by_slug[blocked_slug]["status"] == "cooldown"
-    assert by_slug[blocked_slug]["policy_reason"] == "title is already in cooldown"
+    assert by_slug[blocked_slug]["policy_reason"] == "allowed"
     assert all(
         item["status"] == "ready"
         for slug, item in by_slug.items()

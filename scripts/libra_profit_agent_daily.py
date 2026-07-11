@@ -8,7 +8,7 @@ import json
 import os
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 LIBRA_DIR = Path(__file__).resolve().parents[1]
@@ -178,6 +178,8 @@ def run_daily(
         action = experiment.get("action") or {"kind": "start_experiment", "cost_usd": 0}
         if experiment["status"] == "planned":
             action = {"kind": "start_experiment", "slug": experiment["slug"], "variable": experiment["variable"], "cost_usd": 0}
+        elif experiment["status"] in {"cooldown", "evaluating"}:
+            action = {"kind": "evaluate_experiment", "slug": experiment["slug"], "cost_usd": 0}
         context = {
             "policy": policy_mode,
             "no_spend": dry_run,
@@ -187,7 +189,7 @@ def run_daily(
             ),
             "active_variable": experiment["variable"],
             "cooldown_slugs": cooldown_slugs,
-            "title_in_cooldown": experiment["status"] == "cooldown",
+            "title_in_cooldown": experiment["status"] == "cooldown" and action["kind"] != "evaluate_experiment",
         }
         policy_open, policy_reason = check_policy(action, context)
         policy_reasons.append(policy_reason)
@@ -228,6 +230,28 @@ def run_daily(
                 changed = propose_transition(experiment, {"external_action": {"status": "executed", **state_change}}, now)
             elif recorded and recorded["status"] in {"failed", "manual_required"}:
                 changed["status"] = recorded["status"]
+        elif experiment["status"] in {"failed", "manual_required"} and executor and can_advance:
+            previous = latest_experiment_action(db_path, experiment["id"])
+            if previous and int(previous["attempt"]) < 3:
+                retry = {
+                    **previous["action"],
+                    "attempt": int(previous["attempt"]) + 1,
+                    "manual_completion": experiment["status"] == "manual_required",
+                }
+                execution_result = executor(retry)
+                recorded = record_action_result(
+                    db_path, retry,
+                    {**(execution_result or {"returncode": 0}), "observed_at": now.isoformat()},
+                )
+                if recorded["status"] == "executed":
+                    delay = timedelta(days=14) if experiment.get("evaluation_kind") == "commercial" else timedelta(hours=72)
+                    changed.update({
+                        "status": "cooldown",
+                        "earliest_evaluation_at": (now + delay).isoformat(),
+                        "action_executed_at": now.isoformat(),
+                    })
+                else:
+                    changed["status"] = recorded["status"]
         if experiment["status"] == "evaluating" and can_advance:
             snapshot_id = _latest_snapshot_id(db_path)
             current = title_financial_boundary(db_path, experiment["asin"], snapshot_id)

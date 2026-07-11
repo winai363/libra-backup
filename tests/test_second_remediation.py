@@ -126,3 +126,43 @@ def test_two_distinct_cycles_for_same_title_prove_two_windows():
         ],
     )
     assert checkpoints[1]["outcome"] == "passed"
+
+
+def test_cooldown_can_advance_to_evaluating_after_deadline(tmp_path, monkeypatch):
+    db = tmp_path / "db"; state = tmp_path / "state"
+    books = tmp_path / "kdp"; folder = books / "adhd-self-help-adults-es"; folder.mkdir(parents=True)
+    (folder / "listing.json").write_text(json.dumps({"status": "uploaded", "asin": "EXP"}))
+    (folder / "cost-report.json").write_text('{"total_usd": 1}')
+    monkeypatch.setattr(daily, "KDP_DIR", books)
+    snap(db, "cooldown-s1", NOW, 2)
+    daily.run_daily(db, state, now=NOW)
+    with sqlite3.connect(db) as con:
+        con.execute("update experiments set status='cooldown', earliest_evaluation_at=? where slug='adhd-self-help-adults-es'",
+                    ((NOW - timedelta(minutes=1)).isoformat(),))
+    result = daily.run_daily(db, state, now=NOW + timedelta(minutes=1))
+    experiment = next(e for e in result["experiments"] if e["slug"] == "adhd-self-help-adults-es")
+    assert experiment["status"] == "evaluating"
+
+
+@pytest.mark.parametrize("first_result", [None, {"returncode": 1}])
+def test_controller_recovers_manual_or_failed_action_with_second_attempt(tmp_path, monkeypatch, first_result):
+    db = tmp_path / "db"; state = tmp_path / "state"
+    books = tmp_path / "kdp"; folder = books / "adhd-self-help-adults-es"; folder.mkdir(parents=True)
+    (folder / "listing.json").write_text(json.dumps({"status": "uploaded", "asin": "EXP"}))
+    (folder / "cost-report.json").write_text('{"total_usd": 1}')
+    monkeypatch.setattr(daily, "KDP_DIR", books)
+    snap(db, "retry-s1", NOW, 2)
+    daily.run_daily(db, state, now=NOW)
+    daily.run_daily(db, state, now=NOW + timedelta(minutes=1),
+                    executor=(lambda action: first_result) if first_result is not None else None)
+    evidence = {"returncode": 0, "verified_state_change": {
+        "before": {"title": "old"}, "after": {"title": "new"},
+        "before_snapshot_id": 1, "after_snapshot_id": 2,
+    }}
+    result = daily.run_daily(db, state, now=NOW + timedelta(minutes=2), executor=lambda action: evidence)
+    experiment = next(e for e in result["experiments"] if e["slug"] == "adhd-self-help-adults-es")
+    assert experiment["status"] == "cooldown"
+    with sqlite3.connect(db) as con:
+        attempts = con.execute("select attempt,status from agent_actions where experiment_id=? and kind!='internal_transition' order by attempt",
+                               (experiment["id"],)).fetchall()
+    assert attempts[-1] == (2, "executed")

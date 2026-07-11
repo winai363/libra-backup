@@ -19,6 +19,7 @@ LIBRA_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(LIBRA_DIR))
 
 from app import build_dashboard_overview  # noqa: E402
+from profit_agent import classify_action_result  # noqa: E402
 from distribution_report import (  # noqa: E402
     CATEGORY_HEALTH_STATE,
     build_monitor,
@@ -51,6 +52,21 @@ def build_state() -> dict:
 def _append_action_log(row: dict) -> None:
     ACTION_LOG.parent.mkdir(parents=True, exist_ok=True)
     ACTION_LOG.open("a", encoding="utf-8").write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def _helper_evidence(stdout: str) -> dict:
+    evidence = {}
+    for line in stdout.splitlines():
+        try:
+            payload = json.loads(line)
+        except (json.JSONDecodeError, TypeError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        for key in ("confirmation_id", "external_url", "verified_state_change"):
+            if key in payload:
+                evidence[key] = payload[key]
+    return evidence
 
 
 def execute_free_actions(state: dict) -> list[dict]:
@@ -99,13 +115,20 @@ def execute_free_actions(state: dict) -> list[dict]:
                     str(days),
                 ]
                 proc = subprocess.run(cmd, cwd=str(LIBRA_DIR), capture_output=True, text=True, timeout=1800)
-                result = {
-                    "action": action,
-                    "slug": slug,
-                    "status": "executed" if proc.returncode == 0 else "failed",
+                diagnostics = {
                     "returncode": proc.returncode,
                     "stdout_tail": proc.stdout[-1200:],
                     "stderr_tail": proc.stderr[-1200:],
+                }
+                status, evidence = classify_action_result(
+                    {**diagnostics, **_helper_evidence(proc.stdout)}
+                )
+                result = {
+                    "action": action,
+                    "slug": slug,
+                    "status": status,
+                    "evidence": evidence,
+                    **diagnostics,
                 }
             results.append(result)
             _append_action_log({"generated_at": state.get("generated_at"), "decision": decision, "result": result})

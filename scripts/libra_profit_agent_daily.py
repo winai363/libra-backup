@@ -17,6 +17,7 @@ sys.path.insert(0, str(LIBRA_DIR))
 from business_ledger import portfolio_financials  # noqa: E402
 from distribution_report import send_telegram  # noqa: E402
 from profit_agent import (  # noqa: E402
+    ACTIVE_STATUSES,
     APPROVED_EXPERIMENTS,
     check_policy,
     create_initial_experiments,
@@ -41,6 +42,25 @@ def _write_atomic(path: Path, payload: dict) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     os.replace(temporary, path)
+
+
+def _policy_registry(db_path: Path, experiments: list[dict]) -> list[dict]:
+    if not db_path.exists():
+        return experiments
+    with sqlite3.connect(db_path) as connection:
+        connection.row_factory = sqlite3.Row
+        table = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'experiments'"
+        ).fetchone()
+        if not table:
+            return experiments
+        return [dict(row) for row in connection.execute(
+            "SELECT slug, variable, status, earliest_evaluation_at FROM experiments"
+        )]
+
+
+def _needs_complete_attribution(experiment: dict) -> bool:
+    return experiment["status"] in {"ready", "evaluating"}
 
 
 def run_daily(
@@ -94,20 +114,40 @@ def run_daily(
         financials.get("snapshot_count")
         and abs(float(financials.get("unattributed_royalties_usd") or 0.0)) < 0.01
     )
-    policy_open, policy_reason = check_policy(
-        {"kind": "start_experiment", "cost_usd": 0},
-        {"no_spend": True, "active_experiments": 0},
-    )
+    registry = _policy_registry(db_path, experiments)
+    active = [item for item in registry if item["status"] in ACTIVE_STATUSES]
+    cooldown_slugs = {
+        item["slug"] for item in registry if item["status"] == "cooldown"
+    }
     gates = {
-        "policy": "open" if policy_open else "closed",
+        "policy": "open",
         "freshness": "open" if freshness_open else "closed",
         "reconciliation": "open" if reconciliation_open else "closed",
     }
 
-    can_advance = policy_open and freshness_open and reconciliation_open
     advanced = []
+    policy_reasons = []
     for experiment in experiments:
-        changed = propose_transition(experiment, financials, now) if can_advance else experiment
+        action = {
+            "kind": "start_experiment",
+            "slug": experiment["slug"],
+            "variable": experiment["variable"],
+            "cost_usd": 0,
+        }
+        context = {
+            "no_spend": True,
+            "active_experiments": sum(
+                item["slug"] != experiment["slug"] for item in active
+            ),
+            "active_variable": experiment["variable"],
+            "cooldown_slugs": cooldown_slugs,
+        }
+        policy_open, policy_reason = check_policy(action, context)
+        policy_reasons.append(policy_reason)
+        reconciliation_allows = reconciliation_open or not _needs_complete_attribution(experiment)
+        can_advance = policy_open and freshness_open and reconciliation_allows
+        changed = propose_transition(experiment, financials, now) if can_advance else experiment.copy()
+        changed["policy_reason"] = policy_reason
         advanced.append(changed)
         if changed["status"] != experiment["status"] and not dry_run:
             with sqlite3.connect(db_path) as connection:
@@ -121,12 +161,15 @@ def run_daily(
                 {"verified_state_change": True, "observed_at": now.isoformat()},
             )
 
+    if any(reason != "allowed" for reason in policy_reasons):
+        gates["policy"] = "closed"
+
     state = {
         "generated_at": now.isoformat(),
         "mode": "dry_run" if dry_run else "live",
         "financials": financials,
         "gates": gates,
-        "gate_reason": policy_reason,
+        "gate_reason": next((reason for reason in policy_reasons if reason != "allowed"), "allowed"),
         "experiments": advanced,
     }
     if not dry_run:

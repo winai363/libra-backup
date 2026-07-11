@@ -370,6 +370,8 @@ def main():
             ok.append(slug)
     print(f"\nDONE: {len(ok)}/{len(todo)}")
     if ok and not dry:
+        print(json.dumps({"verified_state_change": True}))
+    if ok and not dry:
         start = (start_arg or (date.today() + timedelta(days=1))).isoformat()
         ndays = days_arg or PROMO_DAYS
         tg("🎁 Libra Free Promo ตั้งแล้ว " + str(len(ok)) + " เล่ม "

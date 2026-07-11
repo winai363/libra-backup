@@ -199,8 +199,7 @@ def propose_transition(experiment: dict, financials: dict, now: datetime) -> dic
     return changed
 
 
-def record_action_result(db_path: Path, action: dict, result: dict) -> dict:
-    _init_schema(db_path)
+def classify_action_result(result: dict) -> tuple[str, dict]:
     evidence = {}
     for key in ("confirmation_id", "external_url"):
         value = result.get(key)
@@ -214,6 +213,12 @@ def record_action_result(db_path: Path, action: dict, result: dict) -> dict:
         status = "executed"
     else:
         status = "manual_required"
+    return status, evidence
+
+
+def record_action_result(db_path: Path, action: dict, result: dict) -> dict:
+    _init_schema(db_path)
+    status, evidence = classify_action_result(result)
 
     recorded_at = result.get("observed_at") or datetime.now(timezone.utc).isoformat()
     with sqlite3.connect(db_path) as connection:

@@ -57,11 +57,16 @@ def _title_attribution_complete(db_path: Path, slug: str) -> bool:
         return False
     if not asin:
         return False
-    with sqlite3.connect(db_path) as connection:
-        row = connection.execute(
-            "SELECT 1 FROM kdp_title_attribution WHERE snapshot_id = (SELECT id FROM kdp_snapshots ORDER BY observed_at DESC, id DESC LIMIT 1) AND asin = ?",
-            (asin,),
-        ).fetchone()
+    if not db_path.exists():
+        return False
+    try:
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as connection:
+            row = connection.execute(
+                "SELECT 1 FROM kdp_title_attribution WHERE snapshot_id = (SELECT id FROM kdp_snapshots ORDER BY observed_at DESC, id DESC LIMIT 1) AND asin = ?",
+                (asin,),
+            ).fetchone()
+    except sqlite3.Error:
+        return False
     return bool(row)
 
 
@@ -251,7 +256,9 @@ def run_daily(
         transition_input = {}
         result = None
         changed = experiment.copy()
-        if experiment["status"] == "planned" and can_advance:
+        if dry_run:
+            changed = experiment.copy()
+        elif experiment["status"] == "planned" and can_advance:
             snapshot_id = _latest_snapshot_id(db_path)
             baseline = title_financial_boundary(db_path, asin, snapshot_id) if asin and snapshot_id else {"complete": False}
             changed = propose_transition(experiment, {}, now)

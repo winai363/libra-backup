@@ -127,25 +127,22 @@ def _load_profit_agent_state() -> dict:
     return {key: payload[key] for key in allowed if key in payload}
 
 
-def _ledger_experiments() -> tuple[list[dict], int]:
+def _ledger_experiment_views() -> tuple[list[dict], int, list[dict]]:
     if not PROFIT_LEDGER_FILE.exists():
-        return [], 0
+        return [], 0, []
     try:
         with sqlite3.connect(PROFIT_LEDGER_FILE) as connection:
             connection.row_factory = sqlite3.Row
             rows = connection.execute(
                 """
-                SELECT * FROM experiments
-                WHERE status IN ('planned', 'ready', 'executing', 'cooldown',
-                                 'evaluating', 'manual_required')
-                ORDER BY started_at, id
+                SELECT * FROM experiments ORDER BY started_at, id
                 """
             ).fetchall()
     except sqlite3.Error:
-        return [], 0
-    experiments = []
-    for row in rows[:3]:
-        experiments.append({
+        return [], 0, []
+    history = []
+    for row in rows:
+        history.append({
             "id": row["id"],
             "slug": row["slug"],
             "hypothesis": row["hypothesis"],
@@ -157,7 +154,13 @@ def _ledger_experiments() -> tuple[list[dict], int]:
             "status": row["status"],
             "result": json.loads(row["result_json"]) if row["result_json"] else None,
         })
-    return experiments, len(rows)
+    active = [
+        item for item in history
+        if item["status"] in {
+            "planned", "ready", "executing", "cooldown", "evaluating", "manual_required"
+        }
+    ]
+    return active[:3], len(active), history
 
 
 def _checkpoint_outcomes(
@@ -250,7 +253,7 @@ def build_profit_dashboard() -> dict:
     now = _profit_now()
     ledger = portfolio_financials(PROFIT_LEDGER_FILE, now.strftime("%Y-%m"))
     portfolio = build_portfolio(today=now.date())
-    experiments, active_experiment_count = _ledger_experiments()
+    experiments, active_experiment_count, experiment_history = _ledger_experiment_views()
     state = _load_profit_agent_state()
     latest_observed_at = None
     if PROFIT_LEDGER_FILE.exists():
@@ -286,7 +289,7 @@ def build_profit_dashboard() -> dict:
     operations_ready = bool(gates) and all(value == "open" for value in gates.values())
     persisted_start = state.get("mode_started_at")
     start_candidates = [
-        datetime.fromisoformat(item["started_at"]) for item in experiments
+        datetime.fromisoformat(item["started_at"]) for item in experiment_history
     ]
     if persisted_start:
         start_candidates.append(datetime.fromisoformat(persisted_start))
@@ -310,7 +313,9 @@ def build_profit_dashboard() -> dict:
             "status": "positive_contribution" if ledger["contribution_profit_usd"] > 0 else "not_proven",
             "repeatable_positive_contribution": False,
         },
-        "checkpoints": _checkpoint_outcomes(started_at, now, financials, reconciliation, experiments),
+        "checkpoints": _checkpoint_outcomes(
+            started_at, now, financials, reconciliation, experiment_history
+        ),
         "books": portfolio["books"],
         "attention": portfolio["attention"],
         "book_count": portfolio["book_count"],

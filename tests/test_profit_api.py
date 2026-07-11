@@ -225,3 +225,36 @@ def test_missing_mode_anchor_is_explicit_instead_of_using_request_date(
 
     assert first == second
     assert all(item["date"] is None and item["outcome"] == "not_started" for item in first)
+
+
+def test_terminal_history_drives_day_60_evidence_and_anchor(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    with sqlite3.connect(libra_app.PROFIT_LEDGER_FILE) as connection:
+        connection.execute(
+            "UPDATE experiments SET status = 'won', result_json = ?",
+            (json.dumps({"positive_contribution_windows": 2}),),
+        )
+    state = json.loads(libra_app.PROFIT_AGENT_STATE_FILE.read_text())
+    state.pop("mode_started_at")
+    libra_app.PROFIT_AGENT_STATE_FILE.write_text(json.dumps(state))
+
+    monkeypatch.setattr(
+        libra_app,
+        "_profit_now",
+        lambda: datetime.fromisoformat("2026-08-05T09:15:09+07:00"),
+    )
+    first = client.get("/api/profit/portfolio").json()
+    monkeypatch.setattr(
+        libra_app,
+        "_profit_now",
+        lambda: datetime.fromisoformat("2026-08-10T09:15:09+07:00"),
+    )
+    second = client.get("/api/profit/portfolio").json()
+
+    assert first["experiments"] == []
+    assert first["operations"]["active_experiment_count"] == 0
+    assert first["checkpoints"][1]["outcome"] == "passed"
+    assert first["checkpoints"][1]["date"] == "2026-07-31"
+    assert [item["date"] for item in first["checkpoints"]] == [
+        item["date"] for item in second["checkpoints"]
+    ]

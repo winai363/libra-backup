@@ -261,3 +261,22 @@ def test_terminal_history_drives_day_60_evidence_and_anchor(tmp_path, monkeypatc
     assert [item["date"] for item in first["checkpoints"]] == [
         item["date"] for item in second["checkpoints"]
     ]
+
+
+def test_profit_dashboard_reports_kpi_actual_vs_plan(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+
+    kpi = client.get("/api/profit/portfolio").json()["kpi_plan"]
+
+    names = [metric["name"] for metric in kpi["metrics"]]
+    assert names == ["Verified royalties", "Orders / downloads", "KENP", "Profit A · break-even"]
+    for metric in kpi["metrics"]:
+        assert set(metric) >= {"actual", "plan", "actual_label", "plan_label", "percent", "status"}
+        assert 0 <= metric["percent"] <= 100
+    royalties = kpi["metrics"][0]
+    assert royalties["actual"] == 7.63
+    assert royalties["plan"] == 25.0
+    orders = kpi["metrics"][1]
+    assert orders["actual"] == 252
+    profit_a = kpi["metrics"][3]
+    assert profit_a["status"] in {"on_plan", "behind"}

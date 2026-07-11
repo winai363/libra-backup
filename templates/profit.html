@@ -34,6 +34,14 @@
         </div>
       </section>
 
+      <section class="py-6 border-b border-slate-700">
+        <div class="flex flex-wrap items-baseline justify-between gap-3">
+          <h2 class="font-bold text-white">KPI · Actual vs Plan</h2>
+          <p id="kpi-checkpoint" class="text-xs text-slate-400"></p>
+        </div>
+        <div id="kpi-bars" class="mt-4 space-y-4"></div>
+      </section>
+
       <section class="py-6 border-b border-slate-700 grid md:grid-cols-2 gap-8">
         <div>
           <div class="flex items-center justify-between gap-3"><h2 class="font-bold text-white">การกระทบยอด</h2><span id="freshness-badge" class="px-2 py-1 rounded text-xs font-medium"></span></div>
@@ -108,6 +116,25 @@ function render(data) {
   commercial.textContent = statusLabel(data.commercial.status);
   commercial.className = `mt-1 font-medium ${tone(data.commercial.status === 'positive_contribution')}`;
   document.getElementById('direct-cost').textContent = usd(f.direct_costs_usd);
+
+  const kpi = data.kpi_plan || { metrics: [] };
+  const kpiBar = { on_plan: 'bg-emerald-400', watch: 'bg-amber-400', early: 'bg-amber-400', behind: 'bg-red-400' };
+  const kpiText = { on_plan: 'text-emerald-300', watch: 'text-amber-300', early: 'text-amber-300', behind: 'text-red-300' };
+  document.getElementById('kpi-checkpoint').textContent = kpi.checkpoint ? `เป้ารอบเรียนรู้ · ถึง ${kpi.checkpoint}` : '';
+  document.getElementById('kpi-bars').innerHTML = kpi.metrics.map(m => `
+    <div>
+      <div class="flex items-baseline justify-between gap-3 text-sm">
+        <p class="text-slate-300">${escapeHtml(m.name)}</p>
+        <p class="text-xs">
+          <span class="text-white font-medium">${escapeHtml(m.actual_label)}</span>
+          <span class="text-slate-500">/ ${escapeHtml(m.plan_label)}</span>
+          <span class="ml-2 ${kpiText[m.status] || 'text-slate-300'}">${escapeHtml(statusLabel(m.status))}</span>
+        </p>
+      </div>
+      <div class="mt-1 h-2 rounded bg-slate-800 overflow-hidden">
+        <div class="h-full rounded ${kpiBar[m.status] || 'bg-slate-500'}" style="width:${Math.max(2, Math.min(100, Number(m.percent) || 0))}%"></div>
+      </div>
+    </div>`).join('');
 
   document.getElementById('experiment-count').textContent = `${data.operations.active_experiment_count} / ${data.policy.active_experiment_limit} active`;
   document.getElementById('experiments').innerHTML = data.experiments.length ? data.experiments.map(item => `

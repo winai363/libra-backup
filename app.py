@@ -245,6 +245,45 @@ def _checkpoint_outcomes(
     return checkpoints
 
 
+def _profit_kpi_plan(ledger: dict) -> dict:
+    """Actual vs Plan bars for the /profit page. Plan targets and progress
+    semantics come from distribution_report (single source of the approved
+    learning-cycle plan); actuals come from the verified ledger only."""
+    from distribution_report import DEFAULT_PLAN_TARGETS, STRATEGY_FILE, _metric
+
+    orders = kenp = 0
+    if PROFIT_LEDGER_FILE.exists():
+        try:
+            with sqlite3.connect(PROFIT_LEDGER_FILE) as connection:
+                row = connection.execute(
+                    "SELECT orders_all_types, kenp FROM kdp_snapshots ORDER BY observed_at DESC, id DESC LIMIT 1"
+                ).fetchone()
+            if row:
+                orders, kenp = int(row[0]), int(row[1])
+        except sqlite3.Error:
+            pass
+    try:
+        checkpoint = json.loads(STRATEGY_FILE.read_text(encoding="utf-8")).get("checkpoint", "")
+    except (OSError, json.JSONDecodeError):
+        checkpoint = ""
+    royalties = float(ledger["verified_royalties_usd"])
+    profit_a = float(ledger["contribution_profit_usd"])
+    return {
+        "checkpoint": checkpoint,
+        "metrics": [
+            _metric("Verified royalties", royalties, DEFAULT_PLAN_TARGETS["revenue_usd"],
+                    f"${royalties:.2f}", f"${DEFAULT_PLAN_TARGETS['revenue_usd']:.2f}"),
+            _metric("Orders / downloads", orders, DEFAULT_PLAN_TARGETS["orders_downloads"],
+                    str(orders), str(DEFAULT_PLAN_TARGETS["orders_downloads"])),
+            _metric("KENP", kenp, DEFAULT_PLAN_TARGETS["kenp"],
+                    str(kenp), str(DEFAULT_PLAN_TARGETS["kenp"])),
+            _metric("Profit A · break-even", profit_a, 0.0,
+                    f"${profit_a:.2f}", "$0.00",
+                    "on_plan" if profit_a > 0 else "behind"),
+        ],
+    }
+
+
 def build_profit_dashboard() -> dict:
     from business_ledger import portfolio_financials
     from profit_agent import read_policy_mode
@@ -304,6 +343,7 @@ def build_profit_dashboard() -> dict:
     return {
         "generated_at": now.isoformat(),
         "financials": financials,
+        "kpi_plan": _profit_kpi_plan(ledger),
         "reconciliation": reconciliation,
         "policy": {
             **(read_policy_mode(PROFIT_LEDGER_FILE) or {"paid_spend_allowed": False, "enabled": False}),

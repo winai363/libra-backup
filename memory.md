@@ -365,3 +365,11 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 **ผลจริง:** proposer สร้าง exp 6 (ai-creative-workbook-italian ฟรีโปรโม 2 วัน) → daily รอบถัดมาขยับเป็น ready แล้ว; พรุ่งนี้ 10:15 executor ตั้งโปรโมจริง. Suite **162 passed**. Service healthy.
 
 **Lifecycle เต็มตอนนี้ (ไม่มีมือคนใน loop):** proposer เสนอ (จากข้อมูลจริง+gate) → daily ขยับ → executor ทำบน KDP + verify ผลจริง → cooldown → evaluate → ปิด won/lost/inconclusive → proposer เติมคิวถัดไป → Telegram รายงานทุกจุด. งานที่จงใจเหลือให้คน: เคสหมวดที่ semantic กำกวม (ระบบ skip ให้เอง) + นโยบาย 90 วัน.
+
+# 2026-07-11 (ค่ำ 2) — KPI bar Actual vs Plan บนหน้า /profit
+
+บุ๋ยขอ KPI bar actual vs plan บนแดชบอร์ด /profit. เพิ่ม `_profit_kpi_plan()` ใน app.py + section ใหม่ใน templates/profit.html:
+- **แหล่ง plan เดียว ไม่ซ้ำซ้อน:** import `DEFAULT_PLAN_TARGETS` + `_metric` จาก distribution_report (เป้ารอบเรียนรู้ที่บุ๋ยอนุมัติ 10 ก.ค.: $25 / 120 orders / 500 KENP ถึง checkpoint 31 ก.ค. จาก strategy_timeline.json)
+- **Actuals จาก verified ledger เท่านั้น** (ตามปรัชญาหน้านี้) + แถบที่ 4 = Profit A vs break-even $0
+- 4 แถบ ณ ตอนนี้: Royalties $7.63/$25 (31% early เหลือง), Orders 256/120 (100% on_plan เขียว), KENP 361/500 (72% watch เหลือง), Profit A −$1.27/$0 (behind แดง)
+- เทสต์ใหม่ใน test_profit_api.py; suite **163 passed**; screenshot ยืนยันหน้าจริงสวยครบ

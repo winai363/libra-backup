@@ -72,6 +72,10 @@ def test_prompt_describes_kenp_royalty_without_claiming_paid_sale():
 
     lowered = prompt.lower()
     assert "verified royalty" in lowered
+    assert "reader audience" in lowered
     assert "already sold" not in lowered
     assert "buyers paid" not in lowered
     assert "recorded a sale" not in lowered
+    assert "proven buyers" not in lowered
+    assert "buyers" not in lowered
+    assert "will also pay" not in lowered

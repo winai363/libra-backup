@@ -4,7 +4,7 @@ winner_signals.py — the learning loop's memory of what already sold.
 
 Reads the per-book sales snapshots (kdp/<slug>/feedback-history.json, populated
 by kdp_sales_sync.py) and surfaces the books with real traction. topic_scout.py
-uses this to (a) prompt GPT for ADJACENT topics serving the same proven buyers
+uses this to (a) prompt GPT for ADJACENT topics serving the same reader audience
 and (b) boost the ranking of candidates in a proven niche/language.
 
 Window default = 90 days: sales are sparse, so a proven niche should keep
@@ -129,8 +129,8 @@ def format_for_prompt(winners: list[dict]) -> str:
         lines.append(f'- "{w["title"]}" [{lang}]{niche} — {", ".join(sig)}')
     lines.append(
         "\nEXPLOIT THESE WINS: at least 2 of your 5 candidates MUST be ADJACENT "
-        "topics that serve the SAME proven buyers — same language/marketplace and "
-        "the same buyer persona, covering a RELATED need they will also pay for "
+        "topics for the SAME reader audience — same language/marketplace and "
+        "the same audience profile, covering a RELATED need with potential demand "
         "(e.g. a winning Spanish self-employed tax guide → VAT/IVA guide, "
         "bookkeeping, quarterly-tax, or deductions guide for the same Spanish "
         "autónomos). These must still pass the low-competition filter and must NOT "

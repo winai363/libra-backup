@@ -28,6 +28,11 @@ CREATE TABLE IF NOT EXISTS direct_costs (
 CREATE TABLE IF NOT EXISTS cost_inventory (
   slug TEXT PRIMARY KEY, status TEXT NOT NULL, source_key TEXT, checked_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS cost_report_versions (
+  id INTEGER PRIMARY KEY, logical_key TEXT NOT NULL, slug TEXT NOT NULL,
+  observed_at TEXT NOT NULL, semantic_hash TEXT NOT NULL, cumulative_amount_usd REAL NOT NULL,
+  raw_json TEXT NOT NULL, UNIQUE(logical_key, semantic_hash)
+);
 """
 
 
@@ -132,11 +137,14 @@ def ingest_uploaded_title_costs(path: Path, books_dir: Path, *, checked_at: str 
             with sqlite3.connect(path) as connection:
                 connection.execute("INSERT INTO cost_inventory VALUES (?, 'missing', NULL, ?) ON CONFLICT(slug) DO UPDATE SET status='missing', source_key=NULL, checked_at=excluded.checked_at", (slug, checked_at))
             continue
-        digest = hashlib.sha256(report_path.read_bytes()).hexdigest()
-        source_key = f"cost-report:{slug}:{digest}"
-        record_direct_cost(path, incurred_at=listing.get("uploaded_at") or listing.get("created_at") or checked_at,
-                           slug=slug, category="production", amount_usd=amount, source_key=source_key)
+        normalized = {"total_usd": amount}
+        digest = _hash(normalized)
+        source_key = f"cost-report:{slug}"
         with sqlite3.connect(path) as connection:
+            connection.execute(
+                "INSERT OR IGNORE INTO cost_report_versions(logical_key, slug, observed_at, semantic_hash, cumulative_amount_usd, raw_json) VALUES (?, ?, ?, ?, ?, ?)",
+                (source_key, slug, checked_at, digest, amount, _canonical(report)),
+            )
             connection.execute("INSERT INTO cost_inventory VALUES (?, 'verified', ?, ?) ON CONFLICT(slug) DO UPDATE SET status='verified', source_key=excluded.source_key, checked_at=excluded.checked_at", (slug, source_key, checked_at))
     return {"uploaded_titles": len(uploaded), "verified_titles": len(uploaded) - len(missing), "missing_slugs": missing, "complete": bool(uploaded) and not missing}
 
@@ -144,7 +152,10 @@ def ingest_uploaded_title_costs(path: Path, books_dir: Path, *, checked_at: str 
 def direct_costs_for_slug(path: Path, slug: str) -> float:
     init_ledger(path)
     with sqlite3.connect(path) as connection:
-        total = connection.execute("SELECT COALESCE(SUM(amount_usd), 0) FROM direct_costs WHERE slug = ?", (slug,)).fetchone()[0]
+        manual = connection.execute("SELECT COALESCE(SUM(amount_usd), 0) FROM direct_costs WHERE slug = ? AND source_key NOT LIKE 'cost-report:%'", (slug,)).fetchone()[0]
+        report = connection.execute("SELECT cumulative_amount_usd FROM cost_report_versions WHERE slug=? ORDER BY observed_at DESC, id DESC LIMIT 1", (slug,)).fetchone()
+        legacy = connection.execute("SELECT amount_usd FROM direct_costs WHERE slug=? AND source_key LIKE 'cost-report:%' ORDER BY id DESC LIMIT 1", (slug,)).fetchone()
+        total = float(manual) + (float(report[0]) if report else float(legacy[0]) if legacy else 0)
     return round(float(total), 2)
 
 
@@ -169,7 +180,10 @@ def portfolio_financials(path: Path, month: str, overhead: dict | None = None) -
             "SELECT COALESCE(SUM(royalties_usd), 0) FROM kdp_snapshots WHERE id IN (SELECT id FROM kdp_snapshots s WHERE id = (SELECT id FROM kdp_snapshots WHERE month=s.month ORDER BY observed_at DESC, id DESC LIMIT 1))"
         ).fetchone()[0])
         attributed = float(connection.execute("SELECT COALESCE(SUM(royalties_usd), 0) FROM kdp_title_attribution WHERE snapshot_id = ?", (snapshot[0],)).fetchone()[0]) if snapshot else 0.0
-        costs = float(connection.execute("SELECT COALESCE(SUM(amount_usd), 0) FROM direct_costs").fetchone()[0])
+        manual_costs = float(connection.execute("SELECT COALESCE(SUM(amount_usd), 0) FROM direct_costs WHERE source_key NOT LIKE 'cost-report:%'").fetchone()[0])
+        report_costs = float(connection.execute("SELECT COALESCE(SUM(cumulative_amount_usd), 0) FROM cost_report_versions v WHERE id=(SELECT id FROM cost_report_versions WHERE logical_key=v.logical_key ORDER BY observed_at DESC, id DESC LIMIT 1)").fetchone()[0])
+        legacy_costs = float(connection.execute("SELECT COALESCE(SUM(amount_usd), 0) FROM direct_costs d WHERE source_key LIKE 'cost-report:%' AND NOT EXISTS (SELECT 1 FROM cost_report_versions v WHERE v.slug=d.slug) AND id=(SELECT MAX(id) FROM direct_costs WHERE slug=d.slug AND source_key LIKE 'cost-report:%')").fetchone()[0])
+        costs = manual_costs + report_costs + legacy_costs
         inventory = connection.execute("SELECT COUNT(*), SUM(status = 'verified') FROM cost_inventory").fetchone()
     cost_complete = bool(inventory[0] and inventory[0] == (inventory[1] or 0))
     contribution = round(lifetime_royalties - costs, 2)

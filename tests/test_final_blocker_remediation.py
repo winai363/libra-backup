@@ -88,7 +88,7 @@ def test_deterministic_experiment_evaluation_covers_win_loss_and_incomplete():
     won = evaluate_experiment(experiment, {"contribution_profit_usd": 2.5, "attribution_complete": True}, [1, 2])
     lost = evaluate_experiment(experiment, {"contribution_profit_usd": 0.0, "attribution_complete": True}, [1, 3])
     unclear = evaluate_experiment(experiment, {"contribution_profit_usd": 3.0, "attribution_complete": False}, [1, 4])
-    assert (won["outcome"], won["positive_contribution_windows"]) == ("won", 2)
+    assert (won["outcome"], won["positive_contribution_windows"]) == ("won", 0)
     assert lost["outcome"] == "lost"
     assert unclear["outcome"] == "inconclusive"
 

@@ -175,13 +175,12 @@ def _checkpoint_outcomes(
         (60, "repeatable_contribution", "Positive contribution is proven in two observation windows."),
         (90, "portfolio_objective", "Sustained contribution and fully loaded economics are decided."),
     )
-    positive_windows = max(
-        (
-            int((item.get("result") or {}).get("positive_contribution_windows", 0))
-            for item in experiments
-        ),
-        default=0,
-    )
+    windows_by_slug: dict[str, int] = {}
+    for item in experiments:
+        windows_by_slug[item.get("slug", "")] = windows_by_slug.get(item.get("slug", ""), 0) + int(
+            (item.get("result") or {}).get("positive_contribution_windows", 0)
+        )
+    positive_windows = max(windows_by_slug.values(), default=0)
     checkpoints = []
     for day, key, label in definitions:
         if started_at is None:
@@ -291,7 +290,10 @@ def build_profit_dashboard() -> dict:
         "title_attribution_complete": ledger["title_attribution_complete"],
     }
     gates = state.get("gates", {})
-    operations_ready = bool(gates) and all(value == "open" for value in gates.values())
+    blocking_gate_names = {"policy", "freshness", "overview_ingestion", "cost_completeness"}
+    operations_ready = bool(gates) and all(
+        gates.get(name) == "open" for name in blocking_gate_names
+    )
     persisted_start = state.get("mode_started_at")
     start_candidates = [
         datetime.fromisoformat(item["started_at"]) for item in experiment_history

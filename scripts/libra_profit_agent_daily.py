@@ -20,11 +20,14 @@ from profit_agent import (  # noqa: E402
     ACTIVE_STATUSES,
     APPROVED_EXPERIMENTS,
     check_policy,
+    create_pending_action,
     create_initial_experiments,
     ensure_no_spend_mode,
     evaluate_experiment,
+    latest_experiment_action,
     propose_transition,
     record_action_result,
+    title_financial_boundary,
 )
 
 LEDGER_FILE = LIBRA_DIR / "data" / "libra-business.db"
@@ -103,11 +106,13 @@ def run_daily(
     now: datetime | None = None,
     dry_run: bool = False,
     send: bool = False,
+    executor=None,
 ) -> dict:
     now = now or datetime.now(timezone.utc)
     month = now.strftime("%Y-%m")
 
     if dry_run:
+        policy_mode = None
         if db_path.exists():
             financials = portfolio_financials(db_path, month)
             latest = _latest_observation(db_path)
@@ -170,49 +175,80 @@ def run_daily(
     advanced = []
     policy_reasons = []
     for experiment in experiments:
-        action = {
-            "kind": "start_experiment",
-            "slug": experiment["slug"],
-            "variable": experiment["variable"],
-            "cost_usd": 0,
-        }
+        action = experiment.get("action") or {"kind": "start_experiment", "cost_usd": 0}
+        if experiment["status"] == "planned":
+            action = {"kind": "start_experiment", "slug": experiment["slug"], "variable": experiment["variable"], "cost_usd": 0}
         context = {
-            "no_spend": True,
+            "policy": policy_mode,
+            "no_spend": dry_run,
+            "now": now,
             "active_experiments": sum(
                 item["slug"] != experiment["slug"] for item in active
             ),
             "active_variable": experiment["variable"],
             "cooldown_slugs": cooldown_slugs,
+            "title_in_cooldown": experiment["status"] == "cooldown",
         }
         policy_open, policy_reason = check_policy(action, context)
         policy_reasons.append(policy_reason)
-        experiment_attribution_open = _title_attribution_complete(db_path, experiment["slug"])
+        try:
+            listing = json.loads((KDP_DIR / experiment["slug"] / "listing.json").read_text(encoding="utf-8"))
+            asin = str(listing.get("asin") or experiment.get("asin") or "").strip()
+        except (OSError, json.JSONDecodeError):
+            asin = str(experiment.get("asin") or "").strip()
+        experiment_attribution_open = bool(asin and _title_attribution_complete(db_path, experiment["slug"]))
         title_allows = experiment_attribution_open or not _needs_complete_attribution(experiment)
         can_advance = policy_open and freshness_open and overview_open and title_allows
-        transition_input = financials
+        transition_input = {}
+        result = None
+        changed = experiment.copy()
+        if experiment["status"] == "planned" and can_advance:
+            snapshot_id = _latest_snapshot_id(db_path)
+            baseline = title_financial_boundary(db_path, asin, snapshot_id) if asin and snapshot_id else {"complete": False}
+            changed = propose_transition(experiment, {}, now)
+            changed.update({"asin": asin, "baseline_snapshot_id": snapshot_id, "baseline": baseline})
+        elif experiment["status"] == "ready" and can_advance:
+            pending = create_pending_action(db_path, experiment, now)
+            changed = propose_transition(experiment, {}, now)
+            execution_result = executor(pending) if executor else {"returncode": 0}
+            recorded = record_action_result(db_path, pending, {**(execution_result or {"returncode": 0}), "observed_at": now.isoformat()})
+            if recorded["status"] == "executed":
+                external = {"status": "executed"}
+                state_change = recorded["evidence"].get("verified_state_change")
+                if state_change:
+                    external.update({"before_snapshot_id": state_change["before_snapshot_id"], "after_snapshot_id": state_change["after_snapshot_id"], "before": state_change["before"], "after": state_change["after"]})
+                changed = propose_transition(changed, {"external_action": external}, now)
+                changed["action_executed_at"] = now.isoformat()
+            elif recorded["status"] in {"failed", "manual_required"}:
+                changed["status"] = recorded["status"]
+        elif experiment["status"] == "executing":
+            recorded = latest_experiment_action(db_path, experiment["id"])
+            if recorded and recorded["status"] == "executed":
+                state_change = recorded["evidence"].get("verified_state_change") or {}
+                changed = propose_transition(experiment, {"external_action": {"status": "executed", **state_change}}, now)
+            elif recorded and recorded["status"] in {"failed", "manual_required"}:
+                changed["status"] = recorded["status"]
         if experiment["status"] == "evaluating" and can_advance:
             snapshot_id = _latest_snapshot_id(db_path)
+            current = title_financial_boundary(db_path, experiment["asin"], snapshot_id)
             result = evaluate_experiment(
                 experiment,
-                {"contribution_profit_usd": financials["contribution_profit_usd"],
-                 "attribution_complete": experiment_attribution_open, "cost_complete": financials.get("cost_complete")},
+                current,
                 [value for value in (experiment.get("baseline_snapshot_id"), snapshot_id) if value is not None],
+                observed_at=now,
             )
             transition_input = {"outcome": result["outcome"]}
-        else:
-            result = None
-        changed = propose_transition(experiment, transition_input, now) if can_advance else experiment.copy()
-        if experiment["status"] == "planned" and changed["status"] == "ready":
-            changed["baseline_snapshot_id"] = _latest_snapshot_id(db_path)
-            changed["baseline"] = {"period": "lifetime", "contribution_profit_usd": financials["contribution_profit_usd"]}
+            changed = propose_transition(experiment, transition_input, now)
+        elif experiment["status"] == "cooldown" and can_advance:
+            changed = propose_transition(experiment, {}, now)
         changed["policy_reason"] = policy_reason
         advanced.append(changed)
         if changed["status"] != experiment["status"] and not dry_run:
             with sqlite3.connect(db_path) as connection:
                 connection.execute(
-                    "UPDATE experiments SET status = ?, earliest_evaluation_at = ?, baseline_json = ?, baseline_snapshot_id = ?, result_json = COALESCE(?, result_json) WHERE id = ?",
+                    "UPDATE experiments SET status = ?, earliest_evaluation_at = ?, baseline_json = ?, baseline_snapshot_id = ?, result_json = COALESCE(?, result_json), asin=?, action_executed_at=? WHERE id = ?",
                     (changed["status"], changed.get("earliest_evaluation_at"), json.dumps(changed.get("baseline") or {}, sort_keys=True),
-                     changed.get("baseline_snapshot_id"), json.dumps(result, sort_keys=True) if result else None, changed["id"]),
+                     changed.get("baseline_snapshot_id"), json.dumps(result, sort_keys=True) if result else None, changed.get("asin"), changed.get("action_executed_at"), changed["id"]),
                 )
             record_action_result(
                 db_path,

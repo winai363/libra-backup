@@ -30,7 +30,8 @@ def _client(tmp_path, monkeypatch):
         "generated_at": NOW.isoformat(),
         "mode_started_at": STARTED_AT.isoformat(),
         "mode": "live",
-        "gates": {"financial_data": "open", "reconciliation": "open", "policy": "open"},
+        "gates": {"policy": "open", "freshness": "open", "overview_ingestion": "open",
+                  "title_attribution": "open", "cost_completeness": "closed"},
         "gate_reason": "allowed",
         "experiments": experiments,
         "session_token": "must-not-leak",
@@ -64,7 +65,7 @@ def test_profit_api_separates_business_truth_and_checkpoints(tmp_path, monkeypat
     assert payload["policy"]["paid_spend_allowed"] is False
     assert payload["policy"]["active_experiment_limit"] == 3
     assert len(payload["experiments"]) == 3
-    assert payload["operations"]["status"] == "ready"
+    assert payload["operations"]["status"] == "blocked"
     assert payload["commercial"]["status"] == "not_proven"
     assert [item["day"] for item in payload["checkpoints"]] == [30, 60, 90]
     assert payload["checkpoints"][0]["outcome"] == "passed"

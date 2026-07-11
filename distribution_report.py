@@ -541,6 +541,7 @@ def build_monitor(
     *,
     overview: dict | None = None,
     category_health: dict | None = None,
+    financials: dict | None = None,
 ) -> dict:
     """Build a single-glance monitor from the distribution report.
 
@@ -623,10 +624,32 @@ def build_monitor(
         blocker_count=len(blockers),
     )
     kdp_agent = _build_kdp_agent(actual_vs_plan, blockers, report)
+    financials = financials or {
+        "verified_royalties_usd": float(money.get("mtd_royalties_usd") or 0.0),
+        "contribution_profit_usd": float(money.get("mtd_royalties_usd") or 0.0),
+    }
+    verified_royalties = float(financials.get("verified_royalties_usd") or 0.0)
+    contribution_profit = float(financials.get("contribution_profit_usd") or 0.0)
+    revenue_target = float(DEFAULT_PLAN_TARGETS["revenue_usd"])
+    if verified_royalties >= revenue_target and contribution_profit > 0:
+        commercial_status = "on_track"
+    elif verified_royalties >= revenue_target * 0.6 and contribution_profit > 0:
+        commercial_status = "watch"
+    else:
+        commercial_status = "behind"
 
     return {
         "generated_at": report.get("generated_at", ""),
         "overall": {"status": status, "label": label, "score": score},
+        "operations": {
+            "score": max(0, 100 - min(100, len(blockers) * 12)),
+            "status": "ready" if not blockers else "blocked",
+        },
+        "commercial": {
+            "status": commercial_status,
+            "verified_royalties_usd": verified_royalties,
+            "contribution_profit_usd": contribution_profit,
+        },
         "money": {
             "royalties": float(money.get("mtd_royalties_usd") or 0.0),
             "orders": int(money.get("mtd_orders_all_types") or 0),

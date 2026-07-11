@@ -61,10 +61,22 @@ def execute_free_actions(state: dict) -> list[dict]:
             continue
         action = decision.get("action")
         if action == "free_post":
+            evidence = {
+                key: decision[key]
+                for key in ("confirmation_id", "external_url")
+                if isinstance(decision.get(key), str) and decision[key].strip()
+            }
+            if decision.get("verified_state_change") is True:
+                evidence["verified_state_change"] = True
             result = {
                 "action": action,
-                "status": "sent_digest",
-                "detail": "free post action is handled through Telegram/Pinterest/Reddit reminders because some channels require user/session context",
+                "status": "executed" if evidence else "manual_required",
+                "evidence": evidence,
+                "detail": (
+                    "external post confirmed"
+                    if evidence
+                    else "posting requires user/session context and has no external confirmation"
+                ),
             }
             results.append(result)
             _append_action_log({"generated_at": state.get("generated_at"), "decision": decision, "result": result})

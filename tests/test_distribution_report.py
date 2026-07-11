@@ -234,6 +234,42 @@ def test_build_monitor_summarizes_on_track_distribution_plan():
     assert monitor["kdp_agent"]["free_growth_engine"]["decisions"][0]["execute"] is True
 
 
+def test_build_monitor_separates_operational_and_commercial_verdicts():
+    report = {
+        "generated_at": "2026-07-11T09:50:01",
+        "checkpoint": {"date": "2026-07-31", "days_left": 20},
+        "money": {
+            "last_sync": "2026-07-11T09:15:09",
+            "mtd_orders_all_types": 60,
+            "mtd_kenp": 159,
+            "mtd_royalties_usd": 7.63,
+        },
+        "free_promos": {"total_downloads_in_promo_windows": 100, "active": [], "upcoming": []},
+        "manual_progress": {"pinterest": {"completed_count": 4, "remaining_count": 0}},
+        "hero_books": [{
+            "slug": "hero", "live_status": "LIVE", "select": True,
+            "aplus": "submitted", "free_promo": {"status": "Done"},
+        }],
+        "today_actions": [],
+    }
+    overview = {"counts": {"queued_for_kdp": 0}, "queue_blocker": None}
+    health = {"signature": {"status": "ok", "blocker_count": 0}}
+
+    monitor = dr.build_monitor(
+        report,
+        overview=overview,
+        category_health=health,
+        financials={"verified_royalties_usd": 7.63, "contribution_profit_usd": -1.81},
+    )
+
+    assert monitor["operations"] == {"score": 100, "status": "ready"}
+    assert monitor["commercial"] == {
+        "status": "behind",
+        "verified_royalties_usd": 7.63,
+        "contribution_profit_usd": -1.81,
+    }
+
+
 def test_render_monitor_html_contains_status_and_next_actions():
     monitor = {
         "generated_at": "2026-07-10T09:50:01",

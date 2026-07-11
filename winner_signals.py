@@ -52,8 +52,8 @@ def _sum_recent(history: list[dict], field: str, days: int, today: date) -> floa
 def get_winners(window_days: int = WINDOW_DAYS, today: date | None = None) -> list[dict]:
     """Return books with real traction in the window, richest first.
 
-    A winner = any book whose sales snapshots show units, KENP pages, or royalty
-    > 0 in the window. Each entry carries the niche/language/marketplace that
+    A winner = a book whose snapshots show positive verified royalty in the
+    window. Each entry carries the niche/language/marketplace that
     topic_scout needs to find adjacent opportunities.
     """
     today = today or date.today()
@@ -66,8 +66,15 @@ def get_winners(window_days: int = WINDOW_DAYS, today: date | None = None) -> li
         units = _sum_recent(history, "units_7d", window_days, today)
         kenp = _sum_recent(history, "kenp_7d", window_days, today)
         revenue = round(_sum_recent(history, "revenue_usd", window_days, today), 2)
-        if units <= 0 and kenp <= 0 and revenue <= 0:
+        if revenue <= 0:
             continue
+        cost_report = _load_json(hf.parent / "cost-report.json", {})
+        if "total_usd" in cost_report:
+            try:
+                if revenue - float(cost_report["total_usd"]) <= 0:
+                    continue
+            except (TypeError, ValueError):
+                pass
         listing = _load_json(hf.parent / "listing.json", {})
         winners.append({
             "slug": slug,
@@ -106,7 +113,7 @@ def format_for_prompt(winners: list[dict]) -> str:
     for w in winners[:6]:
         sig = []
         if w["units"]:
-            sig.append(f"{w['units']} sale(s)")
+            sig.append(f"{w['units']} orders/downloads")
         if w["kenp"]:
             sig.append(f"{w['kenp']} KENP pages")
         if w["revenue_usd"]:

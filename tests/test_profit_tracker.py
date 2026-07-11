@@ -2,6 +2,7 @@ import json
 from datetime import date
 
 import profit_tracker
+from business_ledger import record_kdp_snapshot
 
 
 def write_json(path, data):
@@ -28,38 +29,54 @@ def test_portfolio_flags_books_without_sales_data(tmp_path, monkeypatch):
     assert portfolio["books"][0]["action"] == "needs_data"
 
 
-def test_portfolio_identifies_winner_and_estimates_revenue(tmp_path, monkeypatch):
+def test_free_units_never_create_revenue_or_winner(tmp_path, monkeypatch):
     monkeypatch.setattr(profit_tracker, "KDP_DIR", tmp_path)
     write_json(
-        tmp_path / "winner-book" / "listing.json",
+        tmp_path / "free-book" / "listing.json",
         {
-            "title": "Winner Book",
+            "title": "Free Book",
             "status": "uploaded",
-            "kdp_book_id": "A123",
-            "uploaded_at": "2026-06-01",
-            "ebook_price": "2.99",
+            "uploaded_at": "2026-07-01",
         },
     )
     write_json(
-        tmp_path / "winner-book" / "feedback-history.json",
+        tmp_path / "free-book" / "feedback-history.json",
         [
             {
-                "date": "2026-06-06",
-                "units_7d": 5,
-                "kenp_7d": 1000,
-                "impressions_7d": 500,
-                "bsr": 120000,
-                "reviews_count": 1,
-                "avg_rating": 5,
+                "date": "2026-07-10",
+                "units_7d": 17,
+                "kenp_7d": 0,
+                "revenue_usd": 0.0,
             }
         ],
     )
 
-    portfolio = profit_tracker.build_portfolio(today=date(2026, 6, 7))
-    book = portfolio["books"][0]
+    book = profit_tracker.build_portfolio(today=date(2026, 7, 11))["books"][0]
 
-    assert book["action"] == "winner"
-    assert portfolio["summary"]["books_with_data"] == 1
-    assert portfolio["summary"]["units_30d"] == 5
-    assert portfolio["summary"]["kenp_30d"] == 1000
-    assert portfolio["summary"]["estimated_revenue_30d_usd"] == 14.96
+    assert book["totals_30d"]["verified_revenue_usd"] == 0.0
+    assert book["action"] != "winner"
+
+
+def test_portfolio_uses_ledger_for_verified_profit_and_reconciliation(tmp_path, monkeypatch):
+    kdp_dir = tmp_path / "kdp"
+    ledger = tmp_path / "ledger.db"
+    monkeypatch.setattr(profit_tracker, "KDP_DIR", kdp_dir)
+    monkeypatch.setattr(profit_tracker, "LEDGER_FILE", ledger)
+    record_kdp_snapshot(ledger, {
+        "observed_at": "2026-07-11T09:15:09+07:00",
+        "month": "2026-07",
+        "overview": {"royalties_usd": 7.63, "orders_all_types": 252, "kenp": 361},
+        "titles": [{"asin": "A", "royalties_usd": 6.84, "orders": 60, "kenp": 173}],
+    })
+
+    portfolio = profit_tracker.build_portfolio(today=date(2026, 7, 11))
+
+    assert portfolio["verified_royalties_mtd_usd"] == 7.63
+    assert portfolio["contribution_profit_usd"] == 7.63
+    assert portfolio["fully_loaded_net_profit_usd"] is None
+    assert portfolio["overhead_complete"] is False
+    assert portfolio["reconciliation"] == {
+        "attributed_royalties_usd": 6.84,
+        "unattributed_royalties_usd": 0.79,
+        "snapshot_count": 1,
+    }

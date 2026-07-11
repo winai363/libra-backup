@@ -13,13 +13,14 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
+from business_ledger import portfolio_financials
+
 
 LIBRA_DIR = Path(__file__).parent
 KDP_DIR = LIBRA_DIR.parent / "kdp"
+LEDGER_FILE = LIBRA_DIR / "data" / "libra-business.db"
 
-KENP_RATE_USD = 0.0045
 DEFAULT_EBOOK_PRICE_USD = 2.99
-DEFAULT_EBOOK_ROYALTY_RATE = 0.70
 COST_PER_BOOK_USD = 0.68   # fallback estimate for books without cost-report.json
 THB_RATE = 35.5            # USD → THB exchange rate (update if needed)
 
@@ -96,18 +97,16 @@ def _sum_recent(history: list[dict], field: str, days: int, today: date) -> floa
     return total
 
 
-def _estimated_revenue(history: list[dict], days: int, today: date, listing: dict, book_dir: Path | None = None) -> float:
-    direct = _sum_recent(history, "revenue_usd", days, today)
-    if direct:
-        return round(direct, 2)
-    units = _sum_recent(history, "units_7d", days, today)
-    kenp = _sum_recent(history, "kenp_7d", days, today)
-    ebook_revenue = units * _price_usd(listing, book_dir) * DEFAULT_EBOOK_ROYALTY_RATE
-    kenp_revenue = kenp * KENP_RATE_USD
-    return round(ebook_revenue + kenp_revenue, 2)
+def _verified_revenue(history: list[dict], days: int, today: date) -> float:
+    return round(_sum_recent(history, "revenue_usd", days, today), 2)
 
 
-def _action_for_book(days_live: int | None, latest: dict, totals_30d: dict) -> tuple[str, str]:
+def _action_for_book(
+    days_live: int | None,
+    latest: dict,
+    totals_30d: dict,
+    attributable_cost_usd: float | None = None,
+) -> tuple[str, str]:
     if not latest:
         if days_live is None or days_live < 7:
             return "warming_up", "ยังใหม่หรือยังไม่มีข้อมูล KDP พอ ให้รอดู 7 วันแรก"
@@ -115,12 +114,15 @@ def _action_for_book(days_live: int | None, latest: dict, totals_30d: dict) -> t
 
     units = totals_30d["units"]
     kenp = totals_30d["kenp"]
-    revenue = totals_30d["revenue_usd"]
+    revenue = totals_30d["verified_revenue_usd"]
     impressions = totals_30d["impressions"]
     bsr = int(latest.get("bsr", 0) or 0)
     rating = float(latest.get("avg_rating", 0) or 0)
 
-    if revenue >= 10 or units >= 5 or kenp >= 1000:
+    contribution_is_positive = (
+        attributable_cost_usd is None or revenue - attributable_cost_usd > 0
+    )
+    if revenue > 0 and contribution_is_positive:
         return "winner", "มี traction แล้ว ควรทำเล่มต่อยอดใน niche/keyword ใกล้เคียง"
     if units > 0 or kenp > 0 or (0 < bsr <= 200_000):
         return "momentum", "เริ่มมีสัญญาณ ควรรอดูต่อและพิจารณาปรับ cover/keyword แบบเบา"
@@ -156,20 +158,28 @@ def build_book_profit(slug: str, today: date | None = None) -> dict:
         "units": int(_sum_recent(history, "units_7d", 7, today)),
         "kenp": int(_sum_recent(history, "kenp_7d", 7, today)),
         "impressions": int(_sum_recent(history, "impressions_7d", 7, today)),
-        "revenue_usd": _estimated_revenue(history, 7, today, listing, book_dir),
+        "verified_revenue_usd": _verified_revenue(history, 7, today),
     }
     totals_30d = {
         "units": int(_sum_recent(history, "units_7d", 30, today)),
         "kenp": int(_sum_recent(history, "kenp_7d", 30, today)),
         "impressions": int(_sum_recent(history, "impressions_7d", 30, today)),
-        "revenue_usd": _estimated_revenue(history, 30, today, listing, book_dir),
+        "verified_revenue_usd": _verified_revenue(history, 30, today),
     }
-    action, reason = _action_for_book(days_live, latest, totals_30d)
 
     price_usd = _price_usd(listing, book_dir)
     cost_report = _load_json(book_dir / "cost-report.json", {})
     cost_usd = round(float(cost_report["total_usd"]) if cost_report and "total_usd" in cost_report else COST_PER_BOOK_USD, 4)
     cost_is_real = bool(cost_report and "total_usd" in cost_report)
+    action, reason = _action_for_book(
+        days_live,
+        latest,
+        totals_30d,
+        cost_usd if cost_is_real else None,
+    )
+    # Compatibility aliases carry the same verified value and are never modeled.
+    totals_7d["revenue_usd"] = totals_7d["verified_revenue_usd"]
+    totals_30d["revenue_usd"] = totals_30d["verified_revenue_usd"]
     return {
         "slug": slug,
         "title": listing.get("title", slug),
@@ -188,9 +198,9 @@ def build_book_profit(slug: str, today: date | None = None) -> dict:
         "latest_snapshot": latest,
         "snapshots": len(history),
         "totals_7d": totals_7d,
-        "totals_7d_thb": {k: round(v * THB_RATE, 2) if k == "revenue_usd" else v for k, v in totals_7d.items()},
+        "totals_7d_thb": {k: round(v * THB_RATE, 2) if "revenue_usd" in k else v for k, v in totals_7d.items()},
         "totals_30d": totals_30d,
-        "totals_30d_thb": {k: round(v * THB_RATE, 2) if k == "revenue_usd" else v for k, v in totals_30d.items()},
+        "totals_30d_thb": {k: round(v * THB_RATE, 2) if "revenue_usd" in k else v for k, v in totals_30d.items()},
         "action": action,
         "reason": reason,
         "market_score": market.get("overall_score") or market.get("score"),
@@ -201,6 +211,7 @@ def build_book_profit(slug: str, today: date | None = None) -> dict:
 
 def build_portfolio(today: date | None = None) -> dict:
     today = today or date.today()
+    financials = portfolio_financials(LEDGER_FILE, today.strftime("%Y-%m"))
     books = []
     for listing_file in sorted(KDP_DIR.glob("*/listing.json")):
         slug = listing_file.parent.name
@@ -211,8 +222,8 @@ def build_portfolio(today: date | None = None) -> dict:
         if book["status"] == "uploaded":
             books.append(book)
 
-    total_7d = round(sum(b["totals_7d"]["revenue_usd"] for b in books), 2)
-    total_30d = round(sum(b["totals_30d"]["revenue_usd"] for b in books), 2)
+    total_7d = round(sum(b["totals_7d"]["verified_revenue_usd"] for b in books), 2)
+    total_30d = round(sum(b["totals_30d"]["verified_revenue_usd"] for b in books), 2)
     total_cost_usd = round(sum(b["cost_usd"] for b in books), 2)
     total_cost_thb = round(total_cost_usd * THB_RATE, 0)
     actions: dict[str, int] = {}
@@ -222,7 +233,7 @@ def build_portfolio(today: date | None = None) -> dict:
     ranked = sorted(
         books,
         key=lambda b: (
-            b["totals_30d"]["revenue_usd"],
+            b["totals_30d"]["verified_revenue_usd"],
             b["totals_30d"]["units"],
             b["totals_30d"]["kenp"],
         ),
@@ -235,9 +246,22 @@ def build_portfolio(today: date | None = None) -> dict:
 
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "verified_royalties_mtd_usd": financials["verified_royalties_usd"],
+        "contribution_profit_usd": financials["contribution_profit_usd"],
+        "fully_loaded_net_profit_usd": financials["fully_loaded_net_profit_usd"],
+        "overhead_complete": financials["overhead_complete"],
+        "reconciliation": {
+            "attributed_royalties_usd": financials["attributed_royalties_usd"],
+            "unattributed_royalties_usd": financials["unattributed_royalties_usd"],
+            "snapshot_count": financials["snapshot_count"],
+        },
         "book_count": len(books),
         "thb_rate": THB_RATE,
         "summary": {
+            "verified_revenue_7d_usd": total_7d,
+            "verified_revenue_7d_thb": round(total_7d * THB_RATE, 0),
+            "verified_revenue_30d_usd": total_30d,
+            "verified_revenue_30d_thb": round(total_30d * THB_RATE, 0),
             "estimated_revenue_7d_usd": total_7d,
             "estimated_revenue_7d_thb": round(total_7d * THB_RATE, 0),
             "estimated_revenue_30d_usd": total_30d,
@@ -260,8 +284,8 @@ def print_portfolio(portfolio: dict) -> None:
     print("=== Libra Profit Portfolio ===")
     print(f"Books: {portfolio['book_count']} | With data: {summary['books_with_data']}")
     print(
-        f"Estimated revenue 7d: ${summary['estimated_revenue_7d_usd']:.2f} | "
-        f"30d: ${summary['estimated_revenue_30d_usd']:.2f}"
+        f"Verified revenue 7d: ${summary['verified_revenue_7d_usd']:.2f} | "
+        f"30d: ${summary['verified_revenue_30d_usd']:.2f}"
     )
     print(f"Units 30d: {summary['units_30d']} | KENP 30d: {summary['kenp_30d']}")
     print("\nNeeds attention:")

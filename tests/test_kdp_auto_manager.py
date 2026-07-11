@@ -31,7 +31,7 @@ def test_free_post_with_external_evidence_is_executed(monkeypatch):
     assert manager.execute_free_actions(state)[0]["status"] == "executed"
 
 
-def test_free_promo_zero_exit_without_external_evidence_is_manual_required(monkeypatch):
+def test_legacy_free_promo_is_disabled(monkeypatch):
     monkeypatch.setattr(manager, "_append_action_log", lambda row: None)
     monkeypatch.setattr(
         manager.subprocess,
@@ -44,11 +44,11 @@ def test_free_promo_zero_exit_without_external_evidence_is_manual_required(monke
 
     result = manager.execute_free_actions(state)[0]
 
-    assert result["status"] == "manual_required"
+    assert result["status"] == "disabled"
     assert result["evidence"] == {}
 
 
-def test_free_promo_accepts_exact_verified_evidence_from_helper(monkeypatch):
+def test_legacy_free_promo_does_not_accept_synthetic_evidence(monkeypatch):
     monkeypatch.setattr(manager, "_append_action_log", lambda row: None)
     monkeypatch.setattr(
         manager.subprocess,
@@ -63,5 +63,5 @@ def test_free_promo_accepts_exact_verified_evidence_from_helper(monkeypatch):
 
     result = manager.execute_free_actions(state)[0]
 
-    assert result["status"] == "executed"
-    assert result["evidence"] == {"verified_state_change": True}
+    assert result["status"] == "disabled"
+    assert result["evidence"] == {}

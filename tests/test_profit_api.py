@@ -56,6 +56,8 @@ def test_profit_api_separates_business_truth_and_checkpoints(tmp_path, monkeypat
         "contribution_profit_usd": 7.63,
         "fully_loaded_net_profit_usd": None,
         "overhead_complete": False,
+        "cost_complete": False,
+        "cost_period": "lifetime",
     }
     assert payload["reconciliation"]["unattributed_royalties_usd"] == 0.0
     assert payload["reconciliation"]["data_age_hours"] == 0.0
@@ -63,7 +65,7 @@ def test_profit_api_separates_business_truth_and_checkpoints(tmp_path, monkeypat
     assert payload["policy"]["active_experiment_limit"] == 3
     assert len(payload["experiments"]) == 3
     assert payload["operations"]["status"] == "ready"
-    assert payload["commercial"]["status"] == "positive_contribution"
+    assert payload["commercial"]["status"] == "not_proven"
     assert [item["day"] for item in payload["checkpoints"]] == [30, 60, 90]
     assert payload["checkpoints"][0]["outcome"] == "passed"
     assert payload["checkpoints"][1]["outcome"] == "pending"
@@ -111,7 +113,7 @@ def test_due_checkpoints_require_repeatable_contribution_evidence():
     ]
 
 
-def test_day_30_requires_fresh_reconciliation_within_one_cent():
+def test_day_30_requires_fresh_overview_ingestion_not_complete_title_attribution():
     financials = {
         "contribution_profit_usd": 7.63,
         "overhead_complete": False,
@@ -136,7 +138,7 @@ def test_day_30_requires_fresh_reconciliation_within_one_cent():
         [],
     )
 
-    assert gap[0]["outcome"] == "missed"
+    assert gap[0]["outcome"] == "passed"
     assert stale[0]["outcome"] == "missed"
     assert within_tolerance[0]["outcome"] == "passed"
 

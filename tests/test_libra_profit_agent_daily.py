@@ -57,7 +57,8 @@ def test_fresh_reconciled_ledger_advances_and_audits_experiments(tmp_path):
 
     state = run_daily(db, state_path, now=NOW)
 
-    assert state["gates"] == {"policy": "open", "freshness": "open", "reconciliation": "open"}
+    assert state["gates"]["overview_ingestion"] == "open"
+    assert state["gates"]["title_attribution"] == "open"
     assert all(item["status"] == "ready" for item in state["experiments"])
     assert state_path.exists()
     assert state["mode_started_at"] == NOW.isoformat()
@@ -90,7 +91,8 @@ def test_attribution_gap_allows_observation_but_blocks_commercial_mutation(tmp_p
     _snapshot(gap_db, attributed=6.0)
     first = run_daily(gap_db, tmp_path / "gap.json", now=NOW)
 
-    assert first["gates"]["reconciliation"] == "closed"
+    assert first["gates"]["overview_ingestion"] == "open"
+    assert first["gates"]["title_attribution"] == "partial"
     assert all(item["status"] == "ready" for item in first["experiments"])
     assert (tmp_path / "gap.json").exists()
 

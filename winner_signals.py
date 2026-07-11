@@ -20,7 +20,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from business_ledger import direct_costs_for_slug
+from business_ledger import ingest_uploaded_title_costs, title_contribution
 
 KDP_DIR = Path(__file__).parent.parent / "kdp"
 LEDGER_FILE = Path(__file__).parent / "data" / "libra-business.db"
@@ -60,6 +60,7 @@ def get_winners(window_days: int = WINDOW_DAYS, today: date | None = None) -> li
     topic_scout needs to find adjacent opportunities.
     """
     today = today or date.today()
+    ingest_uploaded_title_costs(LEDGER_FILE, KDP_DIR, checked_at=today.isoformat())
     winners = []
     for hf in sorted(KDP_DIR.glob("*/feedback-history.json")):
         slug = hf.parent.name
@@ -71,15 +72,9 @@ def get_winners(window_days: int = WINDOW_DAYS, today: date | None = None) -> li
         revenue = round(_sum_recent(history, "revenue_usd", window_days, today), 2)
         if revenue <= 0:
             continue
-        ledger_cost_usd = direct_costs_for_slug(LEDGER_FILE, slug)
-        cost_report = _load_json(hf.parent / "cost-report.json", {})
-        attributable_cost_usd = ledger_cost_usd
-        if attributable_cost_usd <= 0 and "total_usd" in cost_report:
-            try:
-                attributable_cost_usd = float(cost_report["total_usd"])
-            except (TypeError, ValueError):
-                pass
-        if attributable_cost_usd > 0 and revenue - attributable_cost_usd <= 0:
+        lifetime_revenue = round(_sum_recent(history, "revenue_usd", 36500, today), 2)
+        contribution = title_contribution(LEDGER_FILE, slug, lifetime_revenue)
+        if not contribution["positive_contribution_proven"]:
             continue
         listing = _load_json(hf.parent / "listing.json", {})
         winners.append({

@@ -101,34 +101,12 @@ def execute_free_actions(state: dict) -> list[dict]:
             if not slug:
                 result = {"action": action, "status": "skipped", "detail": "missing slug"}
             else:
-                start = date.today() + timedelta(days=int(decision.get("start_offset_days") or 1))
-                days = int(decision.get("days") or 2)
-                cmd = [
-                    "/usr/bin/python3",
-                    "scripts/free_promo_auto.py",
-                    "--force",
-                    "--only",
-                    slug,
-                    "--start",
-                    start.isoformat(),
-                    "--days",
-                    str(days),
-                ]
-                proc = subprocess.run(cmd, cwd=str(LIBRA_DIR), capture_output=True, text=True, timeout=1800)
-                diagnostics = {
-                    "returncode": proc.returncode,
-                    "stdout_tail": proc.stdout[-1200:],
-                    "stderr_tail": proc.stderr[-1200:],
-                }
-                status, evidence = classify_action_result(
-                    {**diagnostics, **_helper_evidence(proc.stdout)}
-                )
                 result = {
                     "action": action,
                     "slug": slug,
-                    "status": status,
-                    "evidence": evidence,
-                    **diagnostics,
+                    "status": "disabled",
+                    "evidence": {},
+                    "detail": "legacy mutation path disabled; use the audited profit-agent executor",
                 }
             results.append(result)
             _append_action_log({"generated_at": state.get("generated_at"), "decision": decision, "result": result})

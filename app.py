@@ -202,7 +202,7 @@ def _checkpoint_outcomes(
                 ledger_verified = bool(
                     reconciliation["snapshot_count"] > 0
                     and reconciliation.get("fresh") is True
-                    and abs(float(reconciliation["unattributed_royalties_usd"])) <= 0.01
+                    and reconciliation.get("overview_ingestion_complete", True)
                 )
                 outcome = "passed" if ledger_verified else "missed"
                 detail = (
@@ -248,6 +248,7 @@ def _checkpoint_outcomes(
 
 def build_profit_dashboard() -> dict:
     from business_ledger import portfolio_financials
+    from profit_agent import read_policy_mode
     from profit_tracker import build_portfolio
 
     now = _profit_now()
@@ -276,6 +277,8 @@ def build_profit_dashboard() -> dict:
         "contribution_profit_usd": ledger["contribution_profit_usd"],
         "fully_loaded_net_profit_usd": ledger["fully_loaded_net_profit_usd"],
         "overhead_complete": ledger["overhead_complete"],
+        "cost_complete": ledger["cost_complete"],
+        "cost_period": ledger["cost_period"],
     }
     reconciliation = {
         "attributed_royalties_usd": ledger["attributed_royalties_usd"],
@@ -284,6 +287,8 @@ def build_profit_dashboard() -> dict:
         "latest_observed_at": latest_observed_at,
         "data_age_hours": data_age_hours,
         "fresh": data_age_hours is not None and data_age_hours <= 48,
+        "overview_ingestion_complete": ledger["overview_ingestion_complete"],
+        "title_attribution_complete": ledger["title_attribution_complete"],
     }
     gates = state.get("gates", {})
     operations_ready = bool(gates) and all(value == "open" for value in gates.values())
@@ -299,7 +304,7 @@ def build_profit_dashboard() -> dict:
         "financials": financials,
         "reconciliation": reconciliation,
         "policy": {
-            "paid_spend_allowed": False,
+            **(read_policy_mode(PROFIT_LEDGER_FILE) or {"paid_spend_allowed": False, "enabled": False}),
             "active_experiment_limit": 3,
             "active_experiment_limit_violated": active_experiment_count > 3,
         },
@@ -310,7 +315,7 @@ def build_profit_dashboard() -> dict:
             "active_experiment_count": active_experiment_count,
         },
         "commercial": {
-            "status": "positive_contribution" if ledger["contribution_profit_usd"] > 0 else "not_proven",
+            "status": "positive_contribution" if ledger["positive_contribution_proven"] else "not_proven",
             "repeatable_positive_contribution": False,
         },
         "checkpoints": _checkpoint_outcomes(

@@ -14,19 +14,22 @@ from pathlib import Path
 LIBRA_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(LIBRA_DIR))
 
-from business_ledger import portfolio_financials  # noqa: E402
+from business_ledger import ingest_uploaded_title_costs, portfolio_financials  # noqa: E402
 from distribution_report import send_telegram  # noqa: E402
 from profit_agent import (  # noqa: E402
     ACTIVE_STATUSES,
     APPROVED_EXPERIMENTS,
     check_policy,
     create_initial_experiments,
+    ensure_no_spend_mode,
+    evaluate_experiment,
     propose_transition,
     record_action_result,
 )
 
 LEDGER_FILE = LIBRA_DIR / "data" / "libra-business.db"
 STATE_FILE = LIBRA_DIR / "data" / "profit-agent-state.json"
+KDP_DIR = LIBRA_DIR.parent / "kdp"
 
 
 def _latest_observation(db_path: Path) -> datetime | None:
@@ -35,6 +38,28 @@ def _latest_observation(db_path: Path) -> datetime | None:
             "SELECT observed_at FROM kdp_snapshots ORDER BY observed_at DESC LIMIT 1"
         ).fetchone()
     return datetime.fromisoformat(row[0]) if row else None
+
+
+def _latest_snapshot_id(db_path: Path) -> int | None:
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute("SELECT id FROM kdp_snapshots ORDER BY observed_at DESC, id DESC LIMIT 1").fetchone()
+    return row[0] if row else None
+
+
+def _title_attribution_complete(db_path: Path, slug: str) -> bool:
+    try:
+        listing = json.loads((KDP_DIR / slug / "listing.json").read_text(encoding="utf-8"))
+        asin = str(listing.get("asin") or "").strip()
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not asin:
+        return False
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute(
+            "SELECT 1 FROM kdp_title_attribution WHERE snapshot_id = (SELECT id FROM kdp_snapshots ORDER BY observed_at DESC, id DESC LIMIT 1) AND asin = ?",
+            (asin,),
+        ).fetchone()
+    return bool(row)
 
 
 def _write_atomic(path: Path, payload: dict) -> None:
@@ -111,9 +136,11 @@ def run_daily(
             for item in APPROVED_EXPERIMENTS
         ]
     else:
+        ingest_uploaded_title_costs(db_path, KDP_DIR, checked_at=now.isoformat())
         financials = portfolio_financials(db_path, month)
         latest = _latest_observation(db_path)
         experiments = create_initial_experiments(db_path, now)
+        policy_mode = ensure_no_spend_mode(db_path, now)
 
     mode_started_at = _persisted_mode_start(state_path)
     if mode_started_at is None:
@@ -125,10 +152,8 @@ def run_daily(
     freshness_open = bool(
         latest and (now.astimezone(timezone.utc) - latest.astimezone(timezone.utc)).total_seconds() <= 86400
     )
-    reconciliation_open = bool(
-        financials.get("snapshot_count")
-        and abs(float(financials.get("unattributed_royalties_usd") or 0.0)) < 0.01
-    )
+    overview_open = bool(financials.get("overview_ingestion_complete"))
+    attribution_open = bool(financials.get("title_attribution_complete"))
     registry = _policy_registry(db_path, experiments)
     active = [item for item in registry if item["status"] in ACTIVE_STATUSES]
     cooldown_slugs = {
@@ -137,7 +162,9 @@ def run_daily(
     gates = {
         "policy": "open",
         "freshness": "open" if freshness_open else "closed",
-        "reconciliation": "open" if reconciliation_open else "closed",
+        "overview_ingestion": "open" if overview_open else "closed",
+        "title_attribution": "open" if attribution_open else "partial",
+        "cost_completeness": "open" if financials.get("cost_complete") else "closed",
     }
 
     advanced = []
@@ -159,21 +186,39 @@ def run_daily(
         }
         policy_open, policy_reason = check_policy(action, context)
         policy_reasons.append(policy_reason)
-        reconciliation_allows = reconciliation_open or not _needs_complete_attribution(experiment)
-        can_advance = policy_open and freshness_open and reconciliation_allows
-        changed = propose_transition(experiment, financials, now) if can_advance else experiment.copy()
+        experiment_attribution_open = _title_attribution_complete(db_path, experiment["slug"])
+        title_allows = experiment_attribution_open or not _needs_complete_attribution(experiment)
+        can_advance = policy_open and freshness_open and overview_open and title_allows
+        transition_input = financials
+        if experiment["status"] == "evaluating" and can_advance:
+            snapshot_id = _latest_snapshot_id(db_path)
+            result = evaluate_experiment(
+                experiment,
+                {"contribution_profit_usd": financials["contribution_profit_usd"],
+                 "attribution_complete": experiment_attribution_open, "cost_complete": financials.get("cost_complete")},
+                [value for value in (experiment.get("baseline_snapshot_id"), snapshot_id) if value is not None],
+            )
+            transition_input = {"outcome": result["outcome"]}
+        else:
+            result = None
+        changed = propose_transition(experiment, transition_input, now) if can_advance else experiment.copy()
+        if experiment["status"] == "planned" and changed["status"] == "ready":
+            changed["baseline_snapshot_id"] = _latest_snapshot_id(db_path)
+            changed["baseline"] = {"period": "lifetime", "contribution_profit_usd": financials["contribution_profit_usd"]}
         changed["policy_reason"] = policy_reason
         advanced.append(changed)
         if changed["status"] != experiment["status"] and not dry_run:
             with sqlite3.connect(db_path) as connection:
                 connection.execute(
-                    "UPDATE experiments SET status = ?, earliest_evaluation_at = ? WHERE id = ?",
-                    (changed["status"], changed.get("earliest_evaluation_at"), changed["id"]),
+                    "UPDATE experiments SET status = ?, earliest_evaluation_at = ?, baseline_json = ?, baseline_snapshot_id = ?, result_json = COALESCE(?, result_json) WHERE id = ?",
+                    (changed["status"], changed.get("earliest_evaluation_at"), json.dumps(changed.get("baseline") or {}, sort_keys=True),
+                     changed.get("baseline_snapshot_id"), json.dumps(result, sort_keys=True) if result else None, changed["id"]),
                 )
             record_action_result(
                 db_path,
-                {"kind": "start_experiment", "slug": changed["slug"]},
-                {"verified_state_change": True, "observed_at": now.isoformat()},
+                {"kind": "internal_transition", "slug": changed["slug"], "experiment_id": changed["id"],
+                 "action_key": f"experiment:{changed['id']}:{experiment['status']}:{changed['status']}"},
+                {"observed_at": now.isoformat(), "internal_transition": {"before": experiment["status"], "after": changed["status"]}},
             )
 
     if any(reason != "allowed" for reason in policy_reasons):
@@ -183,6 +228,7 @@ def run_daily(
         "generated_at": now.isoformat(),
         "mode_started_at": mode_started_at,
         "mode": "dry_run" if dry_run else "live",
+        "policy": None if dry_run else policy_mode,
         "financials": financials,
         "gates": gates,
         "gate_reason": next((reason for reason in policy_reasons if reason != "allowed"), "allowed"),

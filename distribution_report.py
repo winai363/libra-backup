@@ -473,7 +473,7 @@ def _build_kdp_agent(actual_vs_plan: dict, blockers: list[str], report: dict | N
     if blockers:
         next_actions.append("แก้ blocker ก่อนให้ agent เสนอ growth action")
     else:
-        next_actions.append("อย่าเพิ่งซื้อ paid promo จนกว่าจะถึง checkpoint หรือมี proof หลัง promo windows")
+        next_actions.append("ห้ามซื้อ paid promo ตลอดโหมด organic 90 วัน")
     cmo = actual_vs_plan.get("roles", {}).get("CMO", {})
     if cmo.get("status") == "behind":
         next_actions.append("เร่ง Pinterest ที่เหลือให้ครบ 4/4 ก่อนรอบแจกฟรี 15-26 ก.ค.")
@@ -503,7 +503,7 @@ def _build_kdp_agent(actual_vs_plan: dict, blockers: list[str], report: dict | N
         {
             "name": "Paid promo gate",
             "status": "closed",
-            "rule": "เปิดพิจารณาเฉพาะหลังเห็น proof จาก promo windows หรือถึง checkpoint 2026-07-31",
+            "rule": "ห้าม paid promotion ตลอดโหมด organic 90 วันที่บันทึกใน policy ledger",
         },
         {
             "name": "Amazon Ads gate",
@@ -530,7 +530,7 @@ def _build_kdp_agent(actual_vs_plan: dict, blockers: list[str], report: dict | N
         "guardrails": [
             "KDP royalties are the money source of truth",
             "orders/downloads include free activity and cannot justify spend alone",
-            "no paid promo before checkpoint unless real proof appears",
+            "no paid promo during the persisted 90-day organic mode",
             "do not send files on LovelyBooks; point readers to Amazon free promo",
         ],
     }
@@ -688,7 +688,7 @@ def build_monitor(
         "decision": {
             "recommendation": (
                 "แก้ blocker ก่อนตัดสินงบ" if blockers
-                else "รอ checkpoint ก่อนซื้อ paid promo"
+                else "ห้าม paid promo ตลอดโหมด organic 90 วัน"
             )
         },
         "actual_vs_plan": actual_vs_plan,
@@ -964,7 +964,7 @@ def render_monitor_html(monitor: dict) -> str:
     <div class="card decision">
       <h2>คำแนะนำตอนนี้</h2>
       <p>{e(monitor['decision']['recommendation'])}</p>
-      <p class="muted">ถ้ายังไม่มี proof จากโหลด/รีวิว/KU/paid sale ให้รอข้อมูลถึง checkpoint ก่อนเพิ่มงบ</p>
+      <p class="muted">โหมด organic 90 วันไม่อนุญาตให้เพิ่มงบ ไม่ว่าผลระหว่างทางเป็นอย่างไร</p>
     </div>
   </section>
 

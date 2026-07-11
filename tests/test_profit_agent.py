@@ -125,22 +125,20 @@ def test_explicit_title_cooldown_flag_is_blocked():
 
 
 @pytest.mark.parametrize("evaluation_kind,wait", [("metadata", 72), ("category", 72)])
-def test_executing_change_enters_72_hour_cooldown(evaluation_kind, wait):
+def test_executing_change_without_external_evidence_stays_executing(evaluation_kind, wait):
     experiment = {"status": "executing", "evaluation_kind": evaluation_kind}
 
     changed = propose_transition(experiment, {}, NOW)
 
-    assert changed["status"] == "cooldown"
-    assert changed["earliest_evaluation_at"] == (NOW + timedelta(hours=wait)).isoformat()
+    assert changed["status"] == "executing"
 
 
-def test_commercial_change_enters_14_day_cooldown():
+def test_commercial_change_without_external_evidence_stays_executing():
     experiment = {"status": "executing", "evaluation_kind": "commercial"}
 
     changed = propose_transition(experiment, {}, NOW)
 
-    assert changed["status"] == "cooldown"
-    assert changed["earliest_evaluation_at"] == (NOW + timedelta(days=14)).isoformat()
+    assert changed["status"] == "executing"
 
 
 def test_cooldown_does_not_evaluate_before_deadline():
@@ -175,7 +173,7 @@ def test_invalid_transition_request_is_rejected():
     [
         {"confirmation_id": "post-1"},
         {"external_url": "https://example.com/post/1"},
-        {"verified_state_change": True},
+        {"verified_state_change": {"before": {"title": "old"}, "after": {"title": "new"}, "before_snapshot_id": 1, "after_snapshot_id": 2}},
     ],
 )
 def test_required_external_evidence_marks_action_executed(tmp_path: Path, evidence):
@@ -197,6 +195,7 @@ def test_required_external_evidence_marks_action_executed(tmp_path: Path, eviden
         {"verified_state_change": "true"},
         {"verified_state_change": 1},
         {"verified_state_change": {"before": "draft", "after": "live"}},
+        {"verified_state_change": True},
         {"confirmation_id": ""},
         {"external_url": ""},
     ],

@@ -13,7 +13,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-from business_ledger import direct_costs_for_slug, portfolio_financials
+from business_ledger import ingest_uploaded_title_costs, portfolio_financials, title_contribution
 
 
 LIBRA_DIR = Path(__file__).parent
@@ -119,9 +119,7 @@ def _action_for_book(
     bsr = int(latest.get("bsr", 0) or 0)
     rating = float(latest.get("avg_rating", 0) or 0)
 
-    contribution_is_positive = (
-        attributable_cost_usd is None or revenue - attributable_cost_usd > 0
-    )
+    contribution_is_positive = attributable_cost_usd is not None and revenue - attributable_cost_usd > 0
     if revenue > 0 and contribution_is_positive:
         return "winner", "มี traction แล้ว ควรทำเล่มต่อยอดใน niche/keyword ใกล้เคียง"
     if units > 0 or kenp > 0 or (0 < bsr <= 200_000):
@@ -168,14 +166,10 @@ def build_book_profit(slug: str, today: date | None = None) -> dict:
     }
 
     price_usd = _price_usd(listing, book_dir)
-    cost_report = _load_json(book_dir / "cost-report.json", {})
-    ledger_cost_usd = direct_costs_for_slug(LEDGER_FILE, slug)
-    if ledger_cost_usd > 0:
-        cost_usd = ledger_cost_usd
-        cost_is_real = True
-    else:
-        cost_usd = round(float(cost_report["total_usd"]) if cost_report and "total_usd" in cost_report else COST_PER_BOOK_USD, 4)
-        cost_is_real = bool(cost_report and "total_usd" in cost_report)
+    lifetime_revenue = _verified_revenue(history, 36500, today)
+    contribution = title_contribution(LEDGER_FILE, slug, lifetime_revenue)
+    cost_usd = contribution["direct_costs_usd"]
+    cost_is_real = contribution["cost_complete"]
     action, reason = _action_for_book(
         days_live,
         latest,
@@ -200,6 +194,7 @@ def build_book_profit(slug: str, today: date | None = None) -> dict:
         "cost_usd": cost_usd,
         "cost_thb": round(cost_usd * THB_RATE, 0),
         "cost_is_real": cost_is_real,
+        "contribution": contribution,
         "latest_snapshot": latest,
         "snapshots": len(history),
         "totals_7d": totals_7d,
@@ -216,6 +211,7 @@ def build_book_profit(slug: str, today: date | None = None) -> dict:
 
 def build_portfolio(today: date | None = None) -> dict:
     today = today or date.today()
+    ingest_uploaded_title_costs(LEDGER_FILE, KDP_DIR, checked_at=today.isoformat())
     financials = portfolio_financials(LEDGER_FILE, today.strftime("%Y-%m"))
     books = []
     for listing_file in sorted(KDP_DIR.glob("*/listing.json")):

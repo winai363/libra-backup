@@ -215,7 +215,7 @@ def test_build_monitor_summarizes_on_track_distribution_plan():
     assert monitor["setup"]["hero_aplus"] == "5/5"
     assert monitor["manual"]["pinterest"]["label"] == "2/4 done"
     assert monitor["blockers"]["count"] == 0
-    assert monitor["decision"]["recommendation"] == "รอ checkpoint ก่อนซื้อ paid promo"
+    assert monitor["decision"]["recommendation"] == "ห้าม paid promo ตลอดโหมด organic 90 วัน"
     assert monitor["actual_vs_plan"]["metrics"][0]["name"] == "Revenue"
     assert monitor["actual_vs_plan"]["metrics"][0]["actual"] == 6.77
     assert monitor["actual_vs_plan"]["metrics"][0]["plan"] == 25.0
@@ -224,7 +224,7 @@ def test_build_monitor_summarizes_on_track_distribution_plan():
     assert monitor["actual_vs_plan"]["roles"]["COO"]["status"] == "on_plan"
     assert monitor["actual_vs_plan"]["roles"]["CMO"]["status"] == "behind"
     assert monitor["kdp_agent"]["mode"] == "auto_advisor"
-    assert "อย่าเพิ่งซื้อ paid promo" in monitor["kdp_agent"]["next_actions"][0]
+    assert "ห้ามซื้อ paid promo" in monitor["kdp_agent"]["next_actions"][0]
     assert monitor["kdp_agent"]["action_queue"][0]["owner"] == "CMO"
     assert monitor["kdp_agent"]["action_queue"][0]["status"] == "due_now"
     assert monitor["kdp_agent"]["decision_gates"][0]["name"] == "Paid promo gate"

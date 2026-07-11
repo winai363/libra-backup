@@ -171,15 +171,17 @@ def propose_transition(experiment: dict, financials: dict, now: datetime) -> dic
         elif status == "executing":
             target = "cooldown"
         elif status == "cooldown":
-            earliest = experiment.get("earliest_evaluation_at")
-            if earliest is None or now < datetime.fromisoformat(earliest):
-                return experiment.copy()
             target = "evaluating"
         elif status == "evaluating":
             target = financials.get("outcome")
             if target is None:
                 return experiment.copy()
         else:
+            return experiment.copy()
+
+    if status == "cooldown" and target == "evaluating":
+        earliest = experiment.get("earliest_evaluation_at")
+        if earliest is None or now < datetime.fromisoformat(earliest):
             return experiment.copy()
 
     if target not in TRANSITIONS.get(status, set()):
@@ -199,14 +201,13 @@ def propose_transition(experiment: dict, financials: dict, now: datetime) -> dic
 
 def record_action_result(db_path: Path, action: dict, result: dict) -> dict:
     _init_schema(db_path)
-    evidence_keys = (
-        "confirmation_id",
-        "confirmation_identifier",
-        "confirmation_url",
-        "url",
-        "verified_state_change",
-    )
-    evidence = {key: result[key] for key in evidence_keys if result.get(key)}
+    evidence = {}
+    for key in ("confirmation_id", "external_url"):
+        value = result.get(key)
+        if isinstance(value, str) and value.strip():
+            evidence[key] = value
+    if result.get("verified_state_change") is True:
+        evidence["verified_state_change"] = True
     if result.get("returncode", 0) != 0:
         status = "failed"
     elif evidence:

@@ -151,36 +151,64 @@ def test_cooldown_does_not_evaluate_before_deadline():
     assert propose_transition(experiment, {}, NOW) == experiment
 
 
+@pytest.mark.parametrize(
+    "evaluation_kind,wait",
+    [("metadata", timedelta(hours=72)), ("commercial", timedelta(days=14))],
+)
+def test_explicit_evaluating_target_cannot_bypass_cooldown(evaluation_kind, wait):
+    experiment = {
+        "status": "cooldown",
+        "evaluation_kind": evaluation_kind,
+        "earliest_evaluation_at": (NOW + wait).isoformat(),
+    }
+
+    assert propose_transition(experiment, {"target_status": "evaluating"}, NOW) == experiment
+
+
 def test_invalid_transition_request_is_rejected():
     with pytest.raises(ValueError, match="invalid experiment transition"):
         propose_transition({"status": "planned"}, {"target_status": "won"}, NOW)
 
 
-def test_confirmation_evidence_marks_external_action_executed(tmp_path: Path):
-    result = record_action_result(
-        tmp_path / "ledger.db",
-        {"kind": "free_post", "slug": "adhd-self-help-adults-es"},
-        {"returncode": 0, "confirmation_url": "https://example.com/post/1"},
-    )
-    assert result["status"] == "executed"
-    assert result["evidence"]["confirmation_url"] == "https://example.com/post/1"
-
-
 @pytest.mark.parametrize(
     "evidence",
     [
-        {"confirmation_identifier": "post-1"},
-        {"url": "https://example.com/post/1"},
-        {"verified_state_change": {"before": "draft", "after": "live"}},
+        {"confirmation_id": "post-1"},
+        {"external_url": "https://example.com/post/1"},
+        {"verified_state_change": True},
     ],
 )
-def test_supported_external_evidence_marks_action_executed(tmp_path: Path, evidence):
+def test_required_external_evidence_marks_action_executed(tmp_path: Path, evidence):
     result = record_action_result(
         tmp_path / "ledger.db",
         {"kind": "free_post", "slug": "adhd-self-help-adults-es"},
         {"returncode": 0, **evidence},
     )
     assert result["status"] == "executed"
+    assert result["evidence"] == evidence
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        {"confirmation_identifier": "post-1"},
+        {"confirmation_url": "https://example.com/post/1"},
+        {"url": "https://example.com/post/1"},
+        {"verified_state_change": "true"},
+        {"verified_state_change": 1},
+        {"verified_state_change": {"before": "draft", "after": "live"}},
+        {"confirmation_id": ""},
+        {"external_url": ""},
+    ],
+)
+def test_unsupported_or_empty_evidence_requires_manual_action(tmp_path: Path, evidence):
+    result = record_action_result(
+        tmp_path / "ledger.db",
+        {"kind": "free_post", "slug": "adhd-self-help-adults-es"},
+        {"returncode": 0, **evidence},
+    )
+    assert result["status"] == "manual_required"
+    assert result["evidence"] == {}
 
 
 def test_failed_action_is_recorded_as_failed(tmp_path: Path):

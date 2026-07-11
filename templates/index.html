@@ -273,7 +273,7 @@ function renderOverview(data) {
   const cards = [
     ['Uploaded to KDP', c.uploaded, `${c.tracked_asins} เล่มมี ASIN tracking`, 'text-sky-300'],
     ['KDP Queue', c.queued_for_kdp, `${c.ready} เล่มพร้อมส่ง`, 'text-amber-300'],
-    ['Sales 30d', sales.units_30d, `฿${Number(sales.revenue_30d_thb || 0).toLocaleString('th-TH')} · $${Number(sales.revenue_30d_usd || 0).toFixed(2)}`, 'text-emerald-300'],
+    ['Verified royalties MTD', `$${Number(sales.verified_royalties_mtd_usd || 0).toFixed(2)}`, `฿${Number(sales.verified_royalties_mtd_thb || 0).toLocaleString('th-TH')}`, 'text-emerald-300'],
     ['QA Failed', c.quality_failed, 'ระบบบล็อกไม่ให้ส่ง KDP', c.quality_failed ? 'text-red-300' : 'text-emerald-300'],
   ];
   document.getElementById('overview-cards').innerHTML = cards.map(([label, value, note, color]) => `

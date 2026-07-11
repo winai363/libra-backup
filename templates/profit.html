@@ -1,200 +1,137 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="th">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Libra Profit</title>
+<title>Libra Profit Agent</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   body { background: #0f172a; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
+  :focus-visible { outline: 2px solid #f59e0b; outline-offset: 3px; }
 </style>
 </head>
 <body class="min-h-screen">
-  <div class="max-w-6xl mx-auto p-4 md:p-6">
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+  <main class="max-w-6xl mx-auto p-4 md:p-6">
+    <header class="flex flex-wrap items-end justify-between gap-4 pb-6 border-b border-slate-700">
       <div>
-        <h1 class="text-2xl font-bold text-amber-400">Libra Profit Dashboard</h1>
-        <p class="text-slate-400 text-sm">หนังสือที่ส่งขึ้น KDP แล้ว (Live / In Review) · ต้นทุนและรายได้เป็น USD และบาทไทย</p>
+        <p class="text-xs font-semibold uppercase text-amber-400">90-day organic mode</p>
+        <h1 class="mt-1 text-2xl font-bold text-white">Libra Profit Agent</h1>
+        <p class="mt-1 text-sm text-slate-400">รายได้จาก KDP ที่ยืนยันแล้วเท่านั้น · ไม่ใช้ยอดประมาณเป็น KPI</p>
       </div>
-      <div class="flex items-center gap-3">
-        <span id="thb-rate" class="text-xs text-slate-500"></span>
-        <a href="/libra/" class="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 text-sm hover:bg-slate-700">Back to Books</a>
-      </div>
-    </div>
+      <a href="/libra/" aria-label="กลับไปหน้าหนังสือ" title="กลับไปหน้าหนังสือ"
+         class="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 text-sm hover:bg-slate-700">← หนังสือ</a>
+    </header>
 
-    <div id="loading" class="text-slate-400">Loading...</div>
-    <div id="content" class="hidden space-y-6">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-3" id="summary"></div>
-
-      <!-- Cost vs Revenue strip -->
-      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-        <div>
-          <p class="text-xs text-slate-400">ต้นทุนรวมทั้งพอร์ต</p>
-          <p class="text-xl font-bold text-red-400" id="total-cost-thb">-</p>
-          <p class="text-xs text-slate-500" id="total-cost-usd">-</p>
+    <div id="loading" class="py-10 text-slate-400">กำลังโหลดข้อมูล...</div>
+    <div id="error" class="hidden py-10 text-red-300"></div>
+    <div id="content" class="hidden">
+      <section class="py-6 border-b border-slate-700">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-px bg-slate-700 border border-slate-700 rounded-lg overflow-hidden">
+          <div class="bg-slate-900 p-4"><p class="text-xs text-slate-400">Verified royalties</p><p id="royalties" class="mt-1 text-2xl font-bold text-white">-</p></div>
+          <div class="bg-slate-900 p-4"><p class="text-xs text-slate-400">Profit A · Contribution</p><p id="profit-a" class="mt-1 text-2xl font-bold">-</p></div>
+          <div class="bg-slate-900 p-4"><p class="text-xs text-slate-400">Profit B · Fully loaded</p><p id="profit-b" class="mt-1 text-2xl font-bold text-white">-</p><p id="profit-b-note" class="text-xs text-amber-300"></p></div>
+          <div class="bg-slate-900 p-4"><p class="text-xs text-slate-400">Paid spend</p><p id="paid-spend" class="mt-1 text-2xl font-bold text-emerald-300">ปิด</p><p class="text-xs text-slate-500">ตลอดช่วงทดลอง 90 วัน</p></div>
         </div>
-        <div>
-          <p class="text-xs text-slate-400">รายได้ 30 วัน (ประมาณ)</p>
-          <p class="text-xl font-bold text-emerald-400" id="total-rev-thb">-</p>
-          <p class="text-xs text-slate-500" id="total-rev-usd">-</p>
-        </div>
-        <div>
-          <p class="text-xs text-slate-400">รายได้ 30 วัน - ต้นทุนรวม</p>
-          <p class="text-xl font-bold" id="profit-thb">-</p>
-          <p class="text-xs text-slate-500" id="profit-note">-</p>
-        </div>
-      </div>
-
-      <section class="bg-slate-800 border border-slate-700 rounded-xl p-4">
-        <h2 class="font-bold text-white mb-3">Needs Attention</h2>
-        <div id="attention" class="space-y-2"></div>
       </section>
 
-      <section class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-        <div class="p-4 border-b border-slate-700">
-          <h2 class="font-bold text-white">Books Uploaded to KDP</h2>
-          <p class="text-xs text-slate-400 mt-1">รายได้ประมาณจาก snapshot ที่บันทึกไว้ · ต้นทุน = ต้นทุนจริงจาก API (เล่มใหม่) หรือประมาณ ฿24 (เล่มเก่า)</p>
+      <section class="py-6 border-b border-slate-700 grid md:grid-cols-2 gap-8">
+        <div>
+          <div class="flex items-center justify-between gap-3"><h2 class="font-bold text-white">การกระทบยอด</h2><span id="freshness-badge" class="px-2 py-1 rounded text-xs font-medium"></span></div>
+          <dl class="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div><dt class="text-slate-500">ระบุถึงรายเล่ม</dt><dd id="attributed" class="mt-1 text-white">-</dd></div>
+            <div><dt class="text-slate-500">ยังไม่ระบุรายเล่ม</dt><dd id="gap" class="mt-1 text-white">-</dd></div>
+            <div><dt class="text-slate-500">Snapshot</dt><dd id="snapshots" class="mt-1 text-white">-</dd></div>
+            <div><dt class="text-slate-500">อายุข้อมูล</dt><dd id="data-age" class="mt-1 text-white">-</dd></div>
+          </dl>
         </div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead class="bg-slate-900/60 text-slate-400">
-              <tr>
-                <th class="text-left p-3">Book</th>
-                <th class="text-right p-3">ราคา</th>
-                <th class="text-right p-3">ต้นทุน</th>
-                <th class="text-right p-3">รายได้ 30d</th>
-                <th class="text-right p-3">Units</th>
-                <th class="text-right p-3">KENP</th>
-                <th class="text-left p-3">Action</th>
-              </tr>
-            </thead>
-            <tbody id="books" class="divide-y divide-slate-700"></tbody>
-          </table>
+        <div>
+          <h2 class="font-bold text-white">สถานะการตัดสินใจ</h2>
+          <dl class="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div><dt class="text-slate-500">Operations</dt><dd id="operations" class="mt-1 font-medium">-</dd></div>
+            <div><dt class="text-slate-500">Commercial</dt><dd id="commercial" class="mt-1 font-medium">-</dd></div>
+            <div><dt class="text-slate-500">ต้นทุนตรง</dt><dd id="direct-cost" class="mt-1 text-white">-</dd></div>
+            <div><dt class="text-slate-500">รอบกำไรซ้ำ</dt><dd class="mt-1 text-white">ยังไม่ยืนยัน</dd></div>
+          </dl>
         </div>
       </section>
+
+      <section class="py-6 border-b border-slate-700">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div><h2 class="font-bold text-white">การทดลองที่ควบคุม</h2><p class="text-xs text-slate-400 mt-1">เปลี่ยนครั้งละหนึ่งตัวแปร · ต้นทุนสูงสุด $0</p></div>
+          <p id="experiment-count" class="text-sm text-slate-300"></p>
+        </div>
+        <div id="experiments" class="mt-4 divide-y divide-slate-700 border-y border-slate-700"></div>
+      </section>
+
+      <section class="py-6 border-b border-slate-700">
+        <h2 class="font-bold text-white">Checkpoint 30 / 60 / 90 วัน</h2>
+        <div id="checkpoints" class="mt-4 grid md:grid-cols-3 gap-6"></div>
+      </section>
+
+      <section class="py-6">
+        <h2 class="font-bold text-white">หนังสือที่ต้องตรวจ</h2>
+        <div id="attention" class="mt-4 divide-y divide-slate-700 border-y border-slate-700"></div>
+      </section>
     </div>
-  </div>
+  </main>
 
 <script>
 function escapeHtml(value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;').replaceAll('<', '&lt;')
+  return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
 }
-
-function usd(value) { return '$' + Number(value || 0).toFixed(2); }
-function thb(value) { return '฿' + Number(value || 0).toLocaleString('th-TH', {maximumFractionDigits: 0}); }
-
-function badge(action) {
-  const colors = {
-    winner: 'bg-emerald-500/20 text-emerald-300',
-    momentum: 'bg-blue-500/20 text-blue-300',
-    watch: 'bg-slate-600 text-slate-200',
-    warming_up: 'bg-amber-500/20 text-amber-300',
-    needs_data: 'bg-purple-500/20 text-purple-300',
-    optimize_metadata: 'bg-orange-500/20 text-orange-300',
-    low_visibility: 'bg-orange-500/20 text-orange-300',
-    fix_quality: 'bg-red-500/20 text-red-300',
-    review_or_kill: 'bg-red-500/20 text-red-300',
-  };
-  return `<span class="inline-flex px-2 py-1 rounded-full text-xs font-medium ${colors[action] || colors.watch}">${escapeHtml(action)}</span>`;
-}
-
-async function load() {
-  const res = await fetch('/libra/api/profit/portfolio', { credentials: 'include' });
-  if (res.status === 401) { window.location.href = '/libra/'; return; }
-  const data = await res.json();
-  document.getElementById('loading').classList.add('hidden');
-  document.getElementById('content').classList.remove('hidden');
-  render(data);
-}
+function usd(value) { return value === null || value === undefined ? '—' : '$' + Number(value).toFixed(2); }
+function tone(positive) { return positive ? 'text-emerald-300' : 'text-red-300'; }
+function statusLabel(value) { return String(value || 'unknown').replaceAll('_', ' '); }
 
 function render(data) {
-  const s = data.summary;
-  const rate = data.thb_rate || 35.5;
-  document.getElementById('thb-rate').textContent = `อัตรา $1 = ฿${rate}`;
+  const f = data.financials;
+  const r = data.reconciliation;
+  document.getElementById('royalties').textContent = usd(f.verified_royalties_usd);
+  const profitA = document.getElementById('profit-a');
+  profitA.textContent = usd(f.contribution_profit_usd);
+  profitA.className = `mt-1 text-2xl font-bold ${tone(f.contribution_profit_usd > 0)}`;
+  document.getElementById('profit-b').textContent = f.overhead_complete ? usd(f.fully_loaded_net_profit_usd) : 'ยังไม่ครบ';
+  document.getElementById('profit-b-note').textContent = f.overhead_complete ? '' : 'รอค่า server, AI และ overhead อื่น';
+  document.getElementById('paid-spend').textContent = data.policy.paid_spend_allowed ? 'เปิด' : 'ปิด';
+  document.getElementById('attributed').textContent = usd(r.attributed_royalties_usd);
+  document.getElementById('gap').textContent = usd(r.unattributed_royalties_usd);
+  document.getElementById('snapshots').textContent = String(r.snapshot_count);
+  document.getElementById('data-age').textContent = r.data_age_hours === null ? 'ไม่มีข้อมูล' : `${r.data_age_hours} ชั่วโมง`;
+  const fresh = document.getElementById('freshness-badge');
+  fresh.textContent = r.fresh ? 'ข้อมูลใหม่' : 'ข้อมูลเก่า';
+  fresh.className = `px-2 py-1 rounded text-xs font-medium ${r.fresh ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`;
+  const operations = document.getElementById('operations');
+  operations.textContent = statusLabel(data.operations.status);
+  operations.className = `mt-1 font-medium ${tone(data.operations.status === 'ready')}`;
+  const commercial = document.getElementById('commercial');
+  commercial.textContent = statusLabel(data.commercial.status);
+  commercial.className = `mt-1 font-medium ${tone(data.commercial.status === 'positive_contribution')}`;
+  document.getElementById('direct-cost').textContent = usd(f.direct_costs_usd);
 
-  // Summary cards
-  const cards = [
-    ['Uploaded Books', data.book_count],
-    ['With Data', s.books_with_data],
-    ['7d Revenue', `${thb(s.estimated_revenue_7d_thb)}\n${usd(s.estimated_revenue_7d_usd)}`],
-    ['30d Revenue', `${thb(s.estimated_revenue_30d_thb)}\n${usd(s.estimated_revenue_30d_usd)}`],
-  ];
-  document.getElementById('summary').innerHTML = cards.map(([label, value]) => {
-    const lines = String(value).split('\n');
-    return `<div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
-      <p class="text-xs text-slate-400">${label}</p>
-      <p class="text-xl font-bold text-white mt-1">${escapeHtml(lines[0])}</p>
-      ${lines[1] ? `<p class="text-xs text-slate-500">${escapeHtml(lines[1])}</p>` : ''}
-    </div>`;
-  }).join('');
+  document.getElementById('experiment-count').textContent = `${data.operations.active_experiment_count} / ${data.policy.active_experiment_limit} active`;
+  document.getElementById('experiments').innerHTML = data.experiments.length ? data.experiments.map(item => `
+    <div class="py-4 grid md:grid-cols-[1fr_auto] gap-3">
+      <div><p class="font-medium text-white">${escapeHtml(item.slug)}</p><p class="mt-1 text-sm text-slate-400">${escapeHtml(item.hypothesis)}</p></div>
+      <div class="md:text-right"><p class="text-sm text-amber-300">${escapeHtml(item.variable)} · ${escapeHtml(statusLabel(item.status))}</p><p class="mt-1 text-xs text-slate-500">ประเมิน: ${escapeHtml(item.earliest_evaluation_at || 'ยังไม่กำหนด')}</p></div>
+    </div>`).join('') : '<p class="py-4 text-sm text-slate-400">ยังไม่มีการทดลอง</p>';
 
-  // Cost vs revenue strip
-  const totalCostThb = s.total_cost_thb || 0;
-  const totalRevThb = s.estimated_revenue_30d_thb || 0;
-  const profitThb = totalRevThb - totalCostThb;
-  document.getElementById('total-cost-thb').textContent = thb(totalCostThb);
-  document.getElementById('total-cost-usd').textContent = usd(s.total_cost_usd) + ' (~฿24/เล่ม)';
-  document.getElementById('total-rev-thb').textContent = thb(totalRevThb);
-  document.getElementById('total-rev-usd').textContent = usd(s.estimated_revenue_30d_usd) + ' (ประมาณจาก snapshot)';
-  const profitEl = document.getElementById('profit-thb');
-  profitEl.textContent = thb(profitThb);
-  profitEl.className = 'text-xl font-bold ' + (profitThb >= 0 ? 'text-emerald-400' : 'text-red-400');
-  document.getElementById('profit-note').textContent = profitThb >= 0
-    ? 'คืนทุนแล้ว 🎉' : `ต้องการรายได้เพิ่มอีก ${thb(Math.abs(profitThb))}`;
+  const checkpointTone = {passed: 'text-emerald-300', achieved: 'text-emerald-300', missed: 'text-red-300', pending: 'text-amber-300'};
+  document.getElementById('checkpoints').innerHTML = data.checkpoints.map(item => `
+    <div class="border-l-2 border-slate-600 pl-4">
+      <div class="flex items-baseline justify-between gap-3"><h3 class="text-xl font-bold text-white">Day ${item.day}</h3><span class="text-xs ${checkpointTone[item.outcome] || 'text-slate-300'}">${escapeHtml(item.outcome)}</span></div>
+      <p class="mt-1 text-xs text-slate-500">${escapeHtml(item.date)}</p><p class="mt-3 text-sm text-slate-300">${escapeHtml(item.detail)}</p>
+    </div>`).join('');
 
-  // Attention section
-  const attention = data.attention || [];
-  document.getElementById('attention').innerHTML = attention.length
-    ? attention.map(book => `
-      <div class="bg-slate-900/50 rounded-lg p-3">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <p class="font-medium text-white">${escapeHtml(book.title)}</p>
-          ${badge(book.action)}
-        </div>
-        <p class="text-slate-400 text-xs mt-1">${escapeHtml(book.reason)}</p>
-      </div>`).join('')
-    : '<p class="text-slate-400 text-sm">No urgent action right now.</p>';
-
-  // Books table
-  document.getElementById('books').innerHTML = (data.books || []).map(book => {
-    const rev30thb = (book.totals_30d_thb || {}).revenue_usd || 0;
-    const rev30usd = book.totals_30d.revenue_usd || 0;
-    const costThb = book.cost_thb || 0;
-    const costUsd = book.cost_usd || 0;
-    const priceThb = book.price_thb || 0;
-    const priceUsd = book.price_usd || 0;
-    return `<tr class="hover:bg-slate-700/30">
-      <td class="p-3 min-w-[260px]">
-        <p class="font-medium text-white">${escapeHtml(book.title)}</p>
-        <p class="text-xs text-slate-500">${escapeHtml(book.language)} · ${book.days_live ?? '?'} วัน</p>
-      </td>
-      <td class="p-3 text-right">
-        <p class="text-white">${thb(priceThb)}</p>
-        <p class="text-xs text-slate-500">${usd(priceUsd)}</p>
-      </td>
-      <td class="p-3 text-right">
-        <p class="text-red-300">${thb(costThb)}</p>
-        <p class="text-xs text-slate-500">${usd(costUsd)} ${book.cost_is_real ? '<span class="text-emerald-600">●</span>' : '<span class="text-slate-600" title="ประมาณการ">~</span>'}</p>
-      </td>
-      <td class="p-3 text-right">
-        <p class="${rev30thb > 0 ? 'text-emerald-300' : 'text-slate-400'}">${thb(rev30thb)}</p>
-        <p class="text-xs text-slate-500">${usd(rev30usd)}</p>
-      </td>
-      <td class="p-3 text-right">${book.totals_30d.units}</td>
-      <td class="p-3 text-right">${book.totals_30d.kenp}</td>
-      <td class="p-3 min-w-[240px]">
-        ${badge(book.action)}
-        <p class="text-xs text-slate-400 mt-1">${escapeHtml(book.reason)}</p>
-      </td>
-    </tr>`;
-  }).join('');
+  document.getElementById('attention').innerHTML = data.attention.length ? data.attention.map(book => `
+    <div class="py-3 flex flex-wrap justify-between gap-3"><div><p class="text-sm font-medium text-white">${escapeHtml(book.title)}</p><p class="text-xs text-slate-400 mt-1">${escapeHtml(book.reason)}</p></div><span class="text-xs text-amber-300">${escapeHtml(statusLabel(book.action))}</span></div>`).join('')
+    : '<p class="py-4 text-sm text-slate-400">ไม่มีรายการเร่งด่วน</p>';
 }
 
-load().catch(err => {
-  document.getElementById('loading').textContent = 'Error: ' + err.message;
-});
+fetch('/libra/api/profit/portfolio', { credentials: 'include' })
+  .then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); })
+  .then(data => { document.getElementById('loading').classList.add('hidden'); document.getElementById('content').classList.remove('hidden'); render(data); })
+  .catch(error => { document.getElementById('loading').classList.add('hidden'); const box = document.getElementById('error'); box.textContent = `โหลดข้อมูลไม่สำเร็จ: ${error.message}`; box.classList.remove('hidden'); });
 </script>
 </body>
 </html>

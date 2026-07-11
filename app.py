@@ -6,7 +6,8 @@ import logging
 import secrets
 import time
 import re
-from datetime import datetime
+import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
@@ -28,6 +29,8 @@ if _env_path.exists():
 app = FastAPI(title="Libra")
 
 KDP_DIR = Path(ENV.get("KDP_DIR", "/root/kdp"))
+PROFIT_LEDGER_FILE = Path(__file__).parent / "data" / "libra-business.db"
+PROFIT_AGENT_STATE_FILE = Path(__file__).parent / "data" / "profit-agent-state.json"
 USERNAME = ENV.get("USERNAME", "")
 PASSWORD = ENV.get("PASSWORD", "")
 TOKEN = ENV.get("SESSION_TOKEN", "")
@@ -109,6 +112,186 @@ def get_books():
     return books
 
 
+def _profit_now() -> datetime:
+    return datetime.now().astimezone()
+
+
+def _load_profit_agent_state() -> dict:
+    try:
+        payload = json.loads(PROFIT_AGENT_STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    allowed = ("generated_at", "mode", "gates", "gate_reason", "experiments")
+    return {key: payload[key] for key in allowed if key in payload}
+
+
+def _ledger_experiments() -> list[dict]:
+    if not PROFIT_LEDGER_FILE.exists():
+        return []
+    try:
+        with sqlite3.connect(PROFIT_LEDGER_FILE) as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                "SELECT * FROM experiments ORDER BY started_at, id"
+            ).fetchall()
+    except sqlite3.Error:
+        return []
+    experiments = []
+    for row in rows[:3]:
+        experiments.append({
+            "id": row["id"],
+            "slug": row["slug"],
+            "hypothesis": row["hypothesis"],
+            "variable": row["variable"],
+            "evaluation_kind": row["evaluation_kind"],
+            "started_at": row["started_at"],
+            "earliest_evaluation_at": row["earliest_evaluation_at"],
+            "max_direct_cost_usd": row["max_direct_cost_usd"],
+            "status": row["status"],
+            "result": json.loads(row["result_json"]) if row["result_json"] else None,
+        })
+    return experiments
+
+
+def _checkpoint_outcomes(
+    started_at: datetime,
+    now: datetime,
+    financials: dict,
+    reconciliation: dict,
+    experiments: list[dict],
+) -> list[dict]:
+    definitions = (
+        (30, "ledger_truth", "Ledger reconciles and free activity cannot create revenue."),
+        (60, "repeatable_contribution", "Positive contribution is proven in two observation windows."),
+        (90, "portfolio_objective", "Sustained contribution and fully loaded economics are decided."),
+    )
+    positive_windows = max(
+        (
+            int((item.get("result") or {}).get("positive_contribution_windows", 0))
+            for item in experiments
+        ),
+        default=0,
+    )
+    checkpoints = []
+    for day, key, label in definitions:
+        due_at = started_at + timedelta(days=day)
+        outcome = "pending"
+        detail = "Checkpoint has not been reached."
+        if now >= due_at:
+            if day == 30:
+                ledger_verified = reconciliation["snapshot_count"] > 0
+                outcome = "passed" if ledger_verified else "missed"
+                detail = (
+                    "KDP overview is recorded as source truth; modeled revenue is excluded."
+                    if ledger_verified else "No verified KDP overview snapshot is available."
+                )
+            elif day == 60:
+                outcome = "passed" if positive_windows >= 2 else "missed"
+                detail = (
+                    "Positive contribution is recorded in at least two observation windows."
+                    if positive_windows >= 2 else "No title has two positive contribution windows."
+                )
+            else:
+                profit = financials["contribution_profit_usd"]
+                achieved = profit > 0 and positive_windows >= 2
+                outcome = "achieved" if achieved else "missed"
+                detail = (
+                    "Contribution objective achieved; overhead inputs still required for Profit B."
+                    if achieved and not financials["overhead_complete"]
+                    else "Contribution objective achieved."
+                    if achieved else "Positive sustained contribution was not proven."
+                )
+        checkpoint = {
+            "day": day,
+            "key": key,
+            "date": due_at.date().isoformat(),
+            "outcome": outcome,
+            "detail": detail,
+        }
+        if day == 90:
+            checkpoint["missing_plan_inputs"] = [
+                key for key, missing in (
+                    ("conversion_rate", True),
+                    ("royalty_per_paid_order", True),
+                    ("production_capacity", True),
+                    ("complete_overhead", not financials["overhead_complete"]),
+                ) if missing
+            ]
+        checkpoints.append(checkpoint)
+    return checkpoints
+
+
+def build_profit_dashboard() -> dict:
+    from business_ledger import portfolio_financials
+    from profit_tracker import build_portfolio
+
+    now = _profit_now()
+    ledger = portfolio_financials(PROFIT_LEDGER_FILE, now.strftime("%Y-%m"))
+    portfolio = build_portfolio(today=now.date())
+    experiments = _ledger_experiments()
+    state = _load_profit_agent_state()
+    latest_observed_at = None
+    if PROFIT_LEDGER_FILE.exists():
+        try:
+            with sqlite3.connect(PROFIT_LEDGER_FILE) as connection:
+                row = connection.execute(
+                    "SELECT observed_at FROM kdp_snapshots ORDER BY observed_at DESC LIMIT 1"
+                ).fetchone()
+            latest_observed_at = row[0] if row else None
+        except sqlite3.Error:
+            pass
+    observed = datetime.fromisoformat(latest_observed_at) if latest_observed_at else None
+    data_age_hours = None
+    if observed:
+        data_age_hours = round(max(0, (now - observed).total_seconds()) / 3600, 1)
+
+    financials = {
+        "verified_royalties_usd": ledger["verified_royalties_usd"],
+        "direct_costs_usd": ledger["direct_costs_usd"],
+        "contribution_profit_usd": ledger["contribution_profit_usd"],
+        "fully_loaded_net_profit_usd": ledger["fully_loaded_net_profit_usd"],
+        "overhead_complete": ledger["overhead_complete"],
+    }
+    reconciliation = {
+        "attributed_royalties_usd": ledger["attributed_royalties_usd"],
+        "unattributed_royalties_usd": ledger["unattributed_royalties_usd"],
+        "snapshot_count": ledger["snapshot_count"],
+        "latest_observed_at": latest_observed_at,
+        "data_age_hours": data_age_hours,
+        "fresh": data_age_hours is not None and data_age_hours <= 48,
+    }
+    gates = state.get("gates", {})
+    operations_ready = bool(gates) and all(value == "open" for value in gates.values())
+    started_at = min(
+        (datetime.fromisoformat(item["started_at"]) for item in experiments),
+        default=now,
+    )
+    return {
+        "generated_at": now.isoformat(),
+        "financials": financials,
+        "reconciliation": reconciliation,
+        "policy": {"paid_spend_allowed": False, "active_experiment_limit": 3},
+        "experiments": experiments,
+        "operations": {
+            "status": "ready" if operations_ready else "blocked",
+            "gates": gates,
+            "active_experiment_count": sum(
+                item["status"] in {"planned", "ready", "executing", "cooldown", "evaluating", "manual_required"}
+                for item in experiments
+            ),
+        },
+        "commercial": {
+            "status": "positive_contribution" if ledger["contribution_profit_usd"] > 0 else "not_proven",
+            "repeatable_positive_contribution": False,
+        },
+        "checkpoints": _checkpoint_outcomes(started_at, now, financials, reconciliation, experiments),
+        "books": portfolio["books"],
+        "attention": portfolio["attention"],
+        "book_count": portfolio["book_count"],
+        "thb_rate": portfolio["thb_rate"],
+    }
+
+
 def build_dashboard_overview() -> dict:
     """Summarize the current autonomous publishing loop for the main dashboard."""
     books = get_books()
@@ -129,14 +312,12 @@ def build_dashboard_overview() -> dict:
     winners = get_winners()
     sales_state_file = KDP_DIR / "sales-sync-state.json"
     sales_state = {}
-    mtd_royalties = 0.0
     mtd_orders_all_types = 0
     mtd_kenp = 0
     if sales_state_file.exists():
         try:
             sales_state = json.loads(sales_state_file.read_text())
             for row in sales_state.get("titles", {}).values():
-                mtd_royalties += float(row.get("royalties") or 0.0)
                 mtd_orders_all_types += int(row.get("orders") or 0)
                 mtd_kenp += int(row.get("kenp") or row.get("pagesRead") or 0)
         except (OSError, json.JSONDecodeError):
@@ -188,12 +369,13 @@ def build_dashboard_overview() -> dict:
         "queue_blocker": queue_blocker,
         "sales": {
             "units_30d": portfolio["summary"]["units_30d"],
-            "revenue_30d_usd": portfolio["summary"]["estimated_revenue_30d_usd"],
-            "revenue_30d_thb": portfolio["summary"]["estimated_revenue_30d_thb"],
-            "real_mtd_royalties_usd": round(mtd_royalties, 2),
+            "verified_royalties_mtd_usd": portfolio["verified_royalties_mtd_usd"],
+            "verified_royalties_mtd_thb": round(
+                portfolio["verified_royalties_mtd_usd"] * portfolio["thb_rate"], 0
+            ),
             "mtd_orders_all_types": mtd_orders_all_types,
             "mtd_kenp": mtd_kenp,
-            "money_warning": "revenue_30d_usd is an estimate; real_mtd_royalties_usd is KDP money source of truth",
+            "money_warning": "verified KDP overview royalties are the money source of truth",
             "books_with_data": portfolio["summary"]["books_with_data"],
             "last_sync": sales_state.get("updated_at", ""),
         },
@@ -777,10 +959,16 @@ async def distribution_monitor_page(request: Request):
 
 @app.get("/api/profit/portfolio")
 async def profit_portfolio(request: Request):
-    """Return portfolio-level traction and estimated revenue analytics."""
+    """Return verified financial, experiment, and checkpoint business truth."""
     check_read(request)
-    from profit_tracker import build_portfolio
-    return build_portfolio()
+    return build_profit_dashboard()
+
+
+@app.get("/api/profit/agent")
+async def profit_agent_state(request: Request):
+    """Return a sanitized view of the latest profit-agent state."""
+    check_read(request)
+    return _load_profit_agent_state()
 
 
 @app.post("/api/profit/{slug}/snapshot")

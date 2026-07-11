@@ -30,6 +30,11 @@ TRANSITIONS = {
     "evaluating": {"won", "lost", "inconclusive"},
 }
 
+# ⚠️ Seed values only — the database is the source of truth (cycle_key guards
+# against re-seeding). Experiments 1 (adhd title change) and 3 (category
+# "Watercolor Painting") were closed as inconclusive on 2026-07-11: the title
+# does not match the live cover/interior, and the category does not exist in
+# the KDP tree. Never re-execute these proposed values; redesign first.
 APPROVED_EXPERIMENTS = (
     {
         "slug": "adhd-self-help-adults-es",
@@ -260,7 +265,8 @@ def title_financial_boundary(db_path: Path, asin: str, snapshot_id: int, *, slug
         legacy = connection.execute("SELECT amount_usd FROM direct_costs WHERE slug=? AND incurred_at<=? AND source_key LIKE 'cost-report:%' ORDER BY id DESC LIMIT 1", (slug, observed_at)).fetchone() if slug and not report else None
         cost = float(manual) + (float(report[0]) if report else float(legacy[0]) if legacy else 0)
         inventory = connection.execute("SELECT status FROM cost_inventory WHERE slug=?", (slug,)).fetchone() if slug else None
-        cost_complete = bool(inventory and inventory[0] == "verified") or cost > 0
+        inventory_status = inventory[0] if inventory else None
+        cost_complete = inventory_status == "verified" or (inventory_status != "estimated" and cost > 0)
     return {"snapshot_id": snapshot_id, "observed_at": observed_at, "asin": asin,
             "royalties_usd": round(royalties, 2), "direct_costs_usd": round(cost, 2),
             "contribution_profit_usd": round(royalties-cost, 2),

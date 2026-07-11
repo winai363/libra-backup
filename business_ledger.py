@@ -117,6 +117,7 @@ def ingest_uploaded_title_costs(path: Path, books_dir: Path, *, checked_at: str 
     init_ledger(path)
     uploaded = []
     missing = []
+    estimated = []
     for listing_path in sorted(books_dir.glob("*/listing.json")):
         try:
             listing = json.loads(listing_path.read_text(encoding="utf-8"))
@@ -126,27 +127,39 @@ def ingest_uploaded_title_costs(path: Path, books_dir: Path, *, checked_at: str 
             continue
         slug = listing_path.parent.name
         uploaded.append(slug)
-        report_path = listing_path.parent / "cost-report.json"
-        try:
-            report = json.loads(report_path.read_text(encoding="utf-8"))
-            amount = float(report["total_usd"])
-            if amount < 0:
-                raise ValueError
-        except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        report = None
+        source_kind = None
+        # cost-report.json = actual generation-time cost (verified);
+        # cost-estimate.json = explicit estimate for legacy titles with no
+        # generation log — counted as a cost but never treated as verified.
+        for filename, kind in (("cost-report.json", "cost-report"), ("cost-estimate.json", "cost-estimate")):
+            try:
+                candidate = json.loads((listing_path.parent / filename).read_text(encoding="utf-8"))
+                amount = float(candidate["total_usd"])
+                if amount < 0:
+                    raise ValueError
+            except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+                continue
+            report, source_kind = candidate, kind
+            break
+        if report is None:
             missing.append(slug)
             with sqlite3.connect(path) as connection:
                 connection.execute("INSERT INTO cost_inventory VALUES (?, 'missing', NULL, ?) ON CONFLICT(slug) DO UPDATE SET status='missing', source_key=NULL, checked_at=excluded.checked_at", (slug, checked_at))
             continue
+        if source_kind == "cost-estimate":
+            estimated.append(slug)
+        status = "verified" if source_kind == "cost-report" else "estimated"
         normalized = {"total_usd": amount}
         digest = _hash(normalized)
-        source_key = f"cost-report:{slug}"
+        source_key = f"{source_kind}:{slug}"
         with sqlite3.connect(path) as connection:
             connection.execute(
                 "INSERT OR IGNORE INTO cost_report_versions(logical_key, slug, observed_at, semantic_hash, cumulative_amount_usd, raw_json) VALUES (?, ?, ?, ?, ?, ?)",
                 (source_key, slug, checked_at, digest, amount, _canonical(report)),
             )
-            connection.execute("INSERT INTO cost_inventory VALUES (?, 'verified', ?, ?) ON CONFLICT(slug) DO UPDATE SET status='verified', source_key=excluded.source_key, checked_at=excluded.checked_at", (slug, source_key, checked_at))
-    return {"uploaded_titles": len(uploaded), "verified_titles": len(uploaded) - len(missing), "missing_slugs": missing, "complete": bool(uploaded) and not missing}
+            connection.execute("INSERT INTO cost_inventory VALUES (?, ?, ?, ?) ON CONFLICT(slug) DO UPDATE SET status=excluded.status, source_key=excluded.source_key, checked_at=excluded.checked_at", (slug, status, source_key, checked_at))
+    return {"uploaded_titles": len(uploaded), "verified_titles": len(uploaded) - len(missing) - len(estimated), "missing_slugs": missing, "estimated_slugs": estimated, "complete": bool(uploaded) and not missing and not estimated}
 
 
 def direct_costs_for_slug(path: Path, slug: str) -> float:
@@ -164,7 +177,8 @@ def title_contribution(path: Path, slug: str, royalty_usd: float) -> dict:
     cost = direct_costs_for_slug(path, slug)
     with sqlite3.connect(path) as connection:
         row = connection.execute("SELECT status FROM cost_inventory WHERE slug = ?", (slug,)).fetchone()
-    complete = bool((row and row[0] == "verified") or cost > 0)
+    status = row[0] if row else None
+    complete = status == "verified" or (status != "estimated" and cost > 0)
     return {"period": "lifetime", "royalties_usd": round(float(royalty_usd), 2), "direct_costs_usd": cost,
             "contribution_profit_usd": round(float(royalty_usd) - cost, 2), "cost_complete": complete,
             "positive_contribution_proven": complete and float(royalty_usd) - cost > 0}
@@ -181,7 +195,9 @@ def portfolio_financials(path: Path, month: str, overhead: dict | None = None) -
         ).fetchone()[0])
         attributed = float(connection.execute("SELECT COALESCE(SUM(royalties_usd), 0) FROM kdp_title_attribution WHERE snapshot_id = ?", (snapshot[0],)).fetchone()[0]) if snapshot else 0.0
         manual_costs = float(connection.execute("SELECT COALESCE(SUM(amount_usd), 0) FROM direct_costs WHERE source_key NOT LIKE 'cost-report:%'").fetchone()[0])
-        report_costs = float(connection.execute("SELECT COALESCE(SUM(cumulative_amount_usd), 0) FROM cost_report_versions v WHERE id=(SELECT id FROM cost_report_versions WHERE logical_key=v.logical_key ORDER BY observed_at DESC, id DESC LIMIT 1)").fetchone()[0])
+        # An estimate is superseded once a verified cost-report exists for the
+        # same slug — never count both.
+        report_costs = float(connection.execute("SELECT COALESCE(SUM(cumulative_amount_usd), 0) FROM cost_report_versions v WHERE id=(SELECT id FROM cost_report_versions WHERE logical_key=v.logical_key ORDER BY observed_at DESC, id DESC LIMIT 1) AND NOT (v.logical_key LIKE 'cost-estimate:%' AND EXISTS (SELECT 1 FROM cost_report_versions r WHERE r.slug=v.slug AND r.logical_key LIKE 'cost-report:%'))").fetchone()[0])
         legacy_costs = float(connection.execute("SELECT COALESCE(SUM(amount_usd), 0) FROM direct_costs d WHERE source_key LIKE 'cost-report:%' AND NOT EXISTS (SELECT 1 FROM cost_report_versions v WHERE v.slug=d.slug) AND id=(SELECT MAX(id) FROM direct_costs WHERE slug=d.slug AND source_key LIKE 'cost-report:%')").fetchone()[0])
         costs = manual_costs + report_costs + legacy_costs
         inventory = connection.execute("SELECT COUNT(*), SUM(status = 'verified') FROM cost_inventory").fetchone()

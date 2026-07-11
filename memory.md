@@ -303,3 +303,24 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - Verification: final review approved; main full suite `142 passed`; production dry-run read-only regression covered; `libra.service` active; profit API/page HTTP 200; session files 600.
 - Follow-up 11:48: scheduled remaining 2 KDP Select free-promo days for `ai-augmented-productivity-toolkit` on 2026-07-12..13. Audited action attempt 2 as executed; experiment 2 now cooldown until 2026-07-25. ADHD title-change and watercolor invalid-category actions remain manual_required and must be redesigned, not blindly submitted.
 - Handoff bug/data cleanup: `book-one` and `free-book` missing cost_inventory rows are test contamination caused by first two `tests/test_profit_tracker.py` tests not monkeypatching `LEDGER_FILE`; fix tests then delete rows. Three real legacy uploaded titles still lack cost reports: `ai-productivity-workflows-professionals`, `anxiety-workbook-young-women-de`, `cozy-historical-romantasy-german`.
+
+# 2026-07-11 (บ่าย) — Claude รับช่วง: เคลียร์งานค้าง handoff ครบ 4 ข้อ
+
+**1. Test contamination fixed:** เทสต์ 2 ตัวแรกใน `tests/test_profit_tracker.py` patch แค่ `KDP_DIR` ไม่ patch `LEDGER_FILE` → รันเทสต์ทีไรเขียน `book-one`/`free-book` ลง production ledger. เพิ่ม monkeypatch แล้ว + ลบ 2 แถวปลอมออกจาก `cost_inventory` แล้วรันเทสต์ซ้ำยืนยันไม่งอกกลับ. ตารางอื่น (direct_costs, cost_report_versions, snapshots) ตรวจแล้วไม่มี contamination.
+
+**2. ระบบ cost estimate (สถานะใหม่ `estimated`):** 3 เล่ม legacy (`ai-productivity-workflows-professionals`, `anxiety-workbook-young-women-de`, `cozy-historical-romantasy-german`) ไม่มี cost-report.json จริงและกู้ไม่ได้ (สร้างก่อนมีระบบ log ต้นทุน) →
+- สร้าง `cost-estimate.json` ในโฟลเดอร์เล่ม ($0.50/เล่ม = ceiling เหนือ max จริง $0.4523 จาก 51 เล่มที่มี log, mean $0.1752)
+- `ingest_uploaded_title_costs` รองรับ fallback: cost-report=verified, cost-estimate=`estimated` (นับเป็นต้นทุนใน contribution แต่**ไม่มีวัน**เป็น verified / ไม่ทำให้ cost_complete หรือ positive_contribution_proven เป็นจริง)
+- กัน double-count: ถ้าเล่มได้ cost-report จริงทีหลัง estimate จะถูก supersede อัตโนมัติ (ทั้ง ingest status และ portfolio_financials)
+- แก้ `title_contribution` + `profit_agent.title_financial_boundary` ให้ estimated ≠ cost_complete
+- **ตัวเลขจริงหลัง ingest:** 42 เล่ม = 39 verified + 3 estimated + 0 missing; costs $7.40→$8.90; contribution +$0.23→**−$1.27** (ตัวเลขซื่อสัตย์ขึ้น — เดิม underreport เพราะ 3 เล่มนับต้นทุน $0)
+
+**3. ปิด 2 experiments ที่ไม่ปลอดภัย (audit trail ครบ):**
+- Exp 1 (adhd-self-help-adults-es เปลี่ยน title) → `inconclusive` ไม่เปิดใหม่: title ใหม่ไม่ตรงปก/เนื้อหา + เป็นเล่มทำเงินอันดับ 1 ห้ามเสี่ยงช่วง 90 วัน
+- Exp 3 (acuarela หมวด "Watercolor Painting") → `inconclusive`: หมวดไม่มีจริงใน KDP tree (audit 27มิ.ย. 2,419 leaves)
+- **Exp 4 ใหม่ (cycle 2 acuarela):** category_update → `Crafts, Hobbies & Home > Crafts & Hobbies > Painting` (leaf จริง, แทนหมวดที่ fit น้อยสุด "Instruction & Reference > Color") — daily run แรกเดินเป็น `ready` แล้ว รอ executor/manual execution พร้อม before/after evidence
+- ทั้งสองปิดผ่าน UPDATE + `record_action_result` internal_transition (ตาม pattern run_daily) + เพิ่ม comment เตือนที่ `APPROVED_EXPERIMENTS` กันคนหยิบค่า unsafe ไป seed ใหม่
+
+**4. Verify:** full suite **144 passed** (142 เดิม + 2 เทสต์ใหม่เรื่อง estimate), daily agent live run ปกติ, restart libra.service แล้ว /profit ตอบ 200. Gate `cost_completeness` ตอนนี้ **closed** (เพราะ 3 เล่ม estimated) — ถูกต้องตามหลัก อย่าพยายาม "แก้" gate นี้ด้วยการ mark verified; ทางเดียวที่เปิดได้คือมี cost report จริง.
+
+**เหลือให้มนุษย์/รอบหน้า:** Exp 4 category change ต้อง execute บน KDP UI + บันทึก evidence ผ่าน `scripts/libra_profit_agent_daily.py --complete-action <key> --evidence-json ...`; Free promo 12-13 ก.ค. รอวัดผล; Exp 2 evaluate หลัง 25 ก.ค.

@@ -12,6 +12,7 @@ def write_json(path, data):
 
 def test_portfolio_flags_books_without_sales_data(tmp_path, monkeypatch):
     monkeypatch.setattr(profit_tracker, "KDP_DIR", tmp_path)
+    monkeypatch.setattr(profit_tracker, "LEDGER_FILE", tmp_path / "ledger.db")
     write_json(
         tmp_path / "book-one" / "listing.json",
         {
@@ -31,6 +32,7 @@ def test_portfolio_flags_books_without_sales_data(tmp_path, monkeypatch):
 
 def test_free_units_never_create_revenue_or_winner(tmp_path, monkeypatch):
     monkeypatch.setattr(profit_tracker, "KDP_DIR", tmp_path)
+    monkeypatch.setattr(profit_tracker, "LEDGER_FILE", tmp_path / "ledger.db")
     write_json(
         tmp_path / "free-book" / "listing.json",
         {

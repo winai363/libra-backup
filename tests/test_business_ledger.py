@@ -90,3 +90,65 @@ def test_direct_costs_for_slug_only_sums_attributed_book_costs(tmp_path: Path):
         )
 
     assert direct_costs_for_slug(db, "book-a") == 2.0
+
+
+def test_cost_estimate_counts_as_cost_but_never_verified(tmp_path):
+    import json
+
+    from business_ledger import ingest_uploaded_title_costs, title_contribution
+
+    books = tmp_path / "kdp"
+    folder = books / "legacy-book"
+    folder.mkdir(parents=True)
+    (folder / "listing.json").write_text(json.dumps({"status": "uploaded"}))
+    (folder / "cost-estimate.json").write_text(json.dumps({"total_usd": 0.5, "estimated": True}))
+    db = tmp_path / "ledger.db"
+
+    result = ingest_uploaded_title_costs(db, books, checked_at="2026-07-11T12:00:00+07:00")
+
+    assert result["verified_titles"] == 0
+    assert result["estimated_slugs"] == ["legacy-book"]
+    assert result["missing_slugs"] == []
+    assert result["complete"] is False
+
+    contribution = title_contribution(db, "legacy-book", 2.0)
+    assert contribution["direct_costs_usd"] == 0.5
+    assert contribution["contribution_profit_usd"] == 1.5
+    assert contribution["cost_complete"] is False
+    assert contribution["positive_contribution_proven"] is False
+
+    financials = portfolio_financials(db, "2026-07")
+    assert financials["direct_costs_usd"] == 0.5
+    assert financials["cost_complete"] is False
+    assert financials["positive_contribution_proven"] is False
+
+
+def test_cost_report_wins_over_estimate_and_upgrades_status(tmp_path):
+    import json
+    import sqlite3
+
+    from business_ledger import ingest_uploaded_title_costs
+
+    books = tmp_path / "kdp"
+    folder = books / "legacy-book"
+    folder.mkdir(parents=True)
+    (folder / "listing.json").write_text(json.dumps({"status": "uploaded"}))
+    (folder / "cost-estimate.json").write_text(json.dumps({"total_usd": 0.5}))
+    db = tmp_path / "ledger.db"
+    ingest_uploaded_title_costs(db, books, checked_at="2026-07-11T12:00:00+07:00")
+
+    (folder / "cost-report.json").write_text(json.dumps({"total_usd": 0.3}))
+    result = ingest_uploaded_title_costs(db, books, checked_at="2026-07-11T13:00:00+07:00")
+
+    assert result["verified_titles"] == 1
+    assert result["estimated_slugs"] == []
+    assert result["complete"] is True
+    with sqlite3.connect(db) as connection:
+        status, source_key = connection.execute(
+            "SELECT status, source_key FROM cost_inventory WHERE slug='legacy-book'"
+        ).fetchone()
+    assert status == "verified"
+    assert source_key == "cost-report:legacy-book"
+    financials = portfolio_financials(db, "2026-07")
+    assert financials["direct_costs_usd"] == 0.3  # estimate superseded, not double-counted
+    assert financials["cost_complete"] is True

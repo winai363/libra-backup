@@ -29,11 +29,14 @@ import unicodedata
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from business_ledger import record_kdp_snapshot
+
 LIBRA_DIR = Path(__file__).parent
 KDP_DIR = LIBRA_DIR.parent / "kdp"
 SESSION_FILE = LIBRA_DIR / "kdp_session.json"
 STATE_FILE = KDP_DIR / "sales-sync-state.json"
 LOG_FILE = LIBRA_DIR / "logs" / "sales-sync.log"
+LEDGER_FILE = LIBRA_DIR / "data" / "libra-business.db"
 
 BASE = "https://kdpreports.amazon.com"
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -110,6 +113,50 @@ def _load_json(path: Path, default):
     except (OSError, json.JSONDecodeError):
         pass
     return default
+
+
+def merge_title_baselines(previous: dict, current_rows: list[dict]) -> dict:
+    """Replace current ASINs without dropping rows omitted by KDP's top list."""
+    merged = {asin: values.copy() for asin, values in previous.items()}
+    for row in current_rows:
+        asin = row.get("asin", "")
+        if asin:
+            merged[asin] = {
+                "orders": int(row.get("orders", 0) or 0),
+                "pagesRead": int(row.get("pagesRead", 0) or 0),
+                "royalties": float(row.get("royalties", 0.0) or 0.0),
+            }
+    return merged
+
+
+def ledger_snapshot_from_kdp(data: dict, observed_at: str) -> dict:
+    """Convert a KDP dashboard response to the business-ledger contract."""
+    overview = data["overview"]
+    return {
+        "observed_at": observed_at,
+        "month": observed_at[:7],
+        "overview": {
+            "royalties_usd": _to_usd(
+                float(overview.get("totalRoyalties", 0.0) or 0.0),
+                overview.get("currency", ""),
+            ),
+            "orders_all_types": int(overview.get("digitalOrders", 0) or 0),
+            "kenp": int(overview.get("kenpRead", 0) or 0),
+        },
+        "titles": [
+            {
+                "asin": row.get("asin", ""),
+                "orders": int(row.get("orders", 0) or 0),
+                "kenp": int(row.get("pagesRead", 0) or 0),
+                "royalties_usd": _to_usd(
+                    float(row.get("royalties", 0.0) or 0.0),
+                    row.get("currency", ""),
+                ),
+            }
+            for row in data["titles"]
+            if row.get("asin")
+        ],
+    }
 
 
 # Stopwords (multi-language) dropped before token-overlap matching so generic
@@ -249,13 +296,20 @@ def sync(dry_run: bool = False) -> None:
     _log(f"Overview THIS_MONTH: digitalOrders={ov.get('digitalOrders')} "
          f"kenpRead={ov.get('kenpRead')} royalties={ov.get('totalRoyalties')} {ov.get('currency')}")
 
+    observed_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    ledger_snapshot = ledger_snapshot_from_kdp(data, observed_at)
+    if dry_run:
+        _log(f"[dry-run] reconciliation input: {ledger_snapshot}")
+    else:
+        record_kdp_snapshot(LEDGER_FILE, ledger_snapshot)
+
     state = _load_json(STATE_FILE, {})
     if state.get("month") != month:
         state = {"month": month, "titles": {}}  # cumulative resets each calendar month
     baseline = state["titles"]
 
     idx = build_indexes()
-    new_baseline = {}
+    new_baseline = merge_title_baselines(baseline, data["titles"])
     recorded = 0
     events = []
 
@@ -264,8 +318,6 @@ def sync(dry_run: bool = False) -> None:
         cur_orders = int(t.get("orders", 0) or 0)
         cur_pages = int(t.get("pagesRead", 0) or 0)
         cur_roy = float(t.get("royalties", 0.0) or 0.0)
-        new_baseline[asin] = {"orders": cur_orders, "pagesRead": cur_pages, "royalties": cur_roy}
-
         prev = baseline.get(asin, {"orders": 0, "pagesRead": 0, "royalties": 0.0})
         d_orders = max(0, cur_orders - int(prev.get("orders", 0)))
         d_pages = max(0, cur_pages - int(prev.get("pagesRead", 0)))

@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi.testclient import TestClient
 
@@ -277,8 +277,10 @@ def test_profit_dashboard_reports_kpi_actual_vs_plan_periods(tmp_path, monkeypat
             assert set(metric) >= {"actual", "plan", "actual_label", "plan_label", "percent", "status"}
             assert 0 <= metric["percent"] <= 100
     # 90-day plan totals scale down: month = total/3, daily = total/90.
+    # The first snapshot is the mode's entry meter-reading: KDP "This Month"
+    # is calendar-cumulative, so pre-mode revenue must not count as progress.
     mode = periods["mode"]["metrics"]
-    assert mode[0]["actual"] == 7.63 and mode[0]["plan"] == 75.0
+    assert mode[0]["actual"] == 0.0 and mode[0]["plan"] == 75.0
     assert mode[1]["plan"] == 360
     month = periods["month"]["metrics"]
     assert month[0]["actual"] == 7.63 and month[0]["plan"] == 25.0
@@ -287,6 +289,23 @@ def test_profit_dashboard_reports_kpi_actual_vs_plan_periods(tmp_path, monkeypat
     daily = periods["daily"]["metrics"]
     assert daily[0]["actual"] == 7.63
     assert daily[0]["plan"] < 1.0  # 90-day target averaged per day
+
+
+def test_mode_kpi_counts_only_revenue_earned_inside_the_window(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    record_kdp_snapshot(tmp_path / "libra-business.db", {
+        "observed_at": (NOW + timedelta(days=3)).isoformat(),
+        "month": "2026-07",
+        "overview": {"royalties_usd": 10.0, "orders_all_types": 291, "kenp": 405},
+        "titles": [{"asin": "A", "royalties_usd": 8.49, "orders": 54, "kenp": 26}],
+    })
+
+    kpi = client.get("/api/profit/portfolio").json()["kpi_plan"]
+
+    mode = {p["key"]: p for p in kpi["periods"]}["mode"]["metrics"]
+    assert mode[0]["actual"] == 2.37   # 10.00 MTD − 7.63 pre-mode baseline
+    assert mode[1]["actual"] == 39     # 291 − 252
+    assert mode[2]["actual"] == 44     # 405 − 361
 
 
 def test_daily_kpi_uses_day_over_day_snapshot_delta(tmp_path, monkeypatch):

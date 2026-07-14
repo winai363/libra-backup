@@ -382,3 +382,77 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - รายวัน: Profit A วัน = รายได้วัน − ต้นทุน manual ที่เกิดวันนั้น (ไม่นับ ingest cost report เก่า) ; วันแรกไม่มี snapshot ก่อนหน้า → delta = ยอดสะสม (label บอกชัด)
 - ⚠️ checkpoint 31 ก.ค. ในฐานะ "วันตัดสิน ADHD ads" ยังอยู่ (cron checkpoint_20260731.py แยกเรื่องกัน ไม่ได้แตะ)
 - Suite **164 passed**; QA screenshot ครบ 3 มุมมอง; toggle กดจริงบนหน้า
+
+# 2026-07-11 (เย็น 4) — 🔴 acuarela ถูก KDP reject "disappointing customer experience" + gate กันซ้ำ
+
+**เกิดอะไร:** เล่ม acuarela-para-principiantes (ASIN B0H6TCJ7CQ, LIVE, ขายจริง 20 orders/$0.68) — auto-executor exp5/cycle3 **republish เพื่อเปลี่ยนหมวด** วันนี้ 12:33 → ทุก republish = ส่งกลับเข้า Amazon content review → 16:37 Amazon reject "won't be accepting... might result in a disappointing customer experience."
+
+**Root cause 2 ชั้น:**
+1. **Trigger:** executor เอาเล่ม LIVE ที่ทำเงินอยู่ไป republish เพื่องานสวยงาม (หมวด) — เปิดช่องให้ review 2026 (เข้มขึ้น) reject ทิ้งทั้งเล่ม
+2. **Content:** paperback 55 หน้า **0 รูปในเนื้อ** (epub มีแค่ปก) — หนังสือสอนวาดสีน้ำ (visual skill) ที่ไม่มีภาพสาธิตเลย = ตรงนิยาม disappointing ของ Amazon. สแกนแล้ว **40/40 เล่ม LIVE เป็น text-only ≤1 รูป** — นิช visual (สีน้ำ/vocab เด็ก/คู่มือสมาร์ทโฟน) เสี่ยง reject สูงถ้าโดน re-review
+
+**แก้กันซ้ำ (โค้ด):** `scripts/kdp_action_executor.py` validate_action — category_update บนเล่ม `live_status==LIVE` = **refused** (category experiment รันเฉพาะเล่ม DRAFT). proposer ใช้ gate ตัวเดียวกัน (บรรทัด 241) → กันทั้งเสนอ+execute. +2 tests. Suite **166 passed**. ไม่ต้อง restart (cron อ่านไฟล์สด).
+
+**รอบุ๋ยตัดสิน:** (a) ปล่อยเล่ม acuarela ตาย/unpublish — แนะนำ (ROI $0.68 ไม่คุ้ม rebuild) (b) reply "error" — ไม่ช่วยจริง (c) ทำภาพสอน step-by-step ใหม่แล้ว resubmit — เฉพาะถ้าบุ๋ยอยากได้ niche สีน้ำ. กฎใหม่: นิช visual ต้องมีภาพก่อน publish
+
+# 2026-07-11 (ค่ำ 5) — รีวิวรอบสอง acuarela rejection: ยืนยันข้อเท็จจริง + อุดรู gate
+
+ตรวจซ้ำตามคำสั่งบุ๋ย: (1) **ยืนยัน** email = ebook republish จริง — paperback 4 เล่มที่เคยส่งไม่มี acuarela; timeline 12:33 republish → 16:37 reject สอดคล้อง (2) **หน้า Amazon B0H6TCJ7CQ = HTTP 404** — เล่มหลุดจากร้านจริง (3) 🔴 **block ครั้งที่ 2 ของบัญชี** — ครั้งแรกคือ high-protein-meal-plan-french (BLOCKED, นิช diet) → account health = ข้อพิจารณาหลัก ห้าม appeal มั่ว/resubmit เดิมๆ (4) **อุดรู gate**: เกณฑ์ LIVE อย่างเดียวมีรู 3 เล่ม (asin มีแต่ live_status None/UNKNOWN/BLOCKED) → เปลี่ยนเป็น **refuse ถ้ามี asin** (เคย publish = ห้าม auto-republish) เทสต์ครอบ 3 เคส. Suite 166 passed.
+
+**นัยยะที่แจ้งบุ๋ยแล้ว:** เลน category experiment ของ 90-day agent = ปิดโดยปริยาย (ทุกเล่มมี ASIN, generation หยุด) เหลือเลน free_promo; งานค้างที่ต้อง republish (subtitle 12 เล่ม, cover regen 39 เล่ม) = ควรพับ/ทำเฉพาะจำเป็น เพราะทุก republish คือทอยลูกเต๋า review (ปก 3ก.ค. เคยผ่าน แต่วันนี้พิสูจน์ว่าไม่การันตี)
+
+# 2026-07-11 (ค่ำ 6) — Execute คำตัดสินบุ๋ย (acuarela ปล่อยตาย) + เดินหน้าเป้า 90 วัน
+
+**บุ๋ยอนุมัติ: ปล่อย acuarela ตาย ห้าม appeal/resubmit, พับงาน republish, ปกป้องบัญชี.** ทำแล้ว:
+1. ปิด exp 5 (acuarela cycle:3, cooldown) ใน DB = inconclusive + reason block/404 (closed_by claude-acuarela-block-cleanup) — กัน evaluate 14 ก.ค. บนเล่มตาย
+2. listing.json acuarela → live_status=BLOCKED + key `blocked` บันทึกเหตุ+คำตัดสิน (roster 08:45 พรุ่งนี้จะ verify ซ้ำ)
+3. เช็คแล้ว Reddit schedule + Pinterest pins ไม่มี acuarela — ไม่มีระบบไหนโปรโมทลิงก์ตาย
+4. **จอง Free Promo easy-taxes (Declaración de la Renta) 29 ก.ค.-2 ส.ค. สำเร็จ** — ปฏิทิน stacked promo ที่บุ๋ยอนุมัติ 5 ก.ค. ครบ 4/4 เล่มฮีโร่แล้ว (15-19 workbook-es, 22-26 focus-es, 25-26 German, 29-2 taxes). ใช้ `free_promo_auto.py --only --force --start --days` (dry-run ก่อน, screenshot "Success! Your promotion was added" ยืนยัน). ⚠️ memory เก่าที่ว่า free_promo_auto รันทันทีเมื่อ import = outdated — ตอนนี้มี main guard + args แล้ว
+5. สร้าง **`/root/libra/CLAUDE.md`** กฎถาวร: ห้าม republish เล่มมี ASIN, บัญชีมี 2 blocks, เลนปลอดภัย 4 เลน, นิช visual ต้องมีภาพ
+
+**เสนอบุ๋ย (รอตัดสิน): เพิ่มเลน price experiment** แทนเลน category ที่ปิด — ปลอดภัย (หน้า pricing ไม่ trigger review), ใช้ set_price.py ที่มี safety gate อยู่แล้ว, gate: band $2.99-9.99 + 70% plan + ห้ามช่วงโปรโม + ≤1 mutation/รอบ
+
+# 2026-07-11 (ดึก) — เลน Price Experiment (บุ๋ยอนุมัติ "เอา") — แทนเลน category ที่ปิด
+
+**สร้างเลนทดลองราคาครบวงจร (ปลอดภัย — หน้า pricing ไม่ trigger content review):**
+- **Executor** (`kdp_action_executor.py`): kind ใหม่ `price_update` — validate_price_action: band $2.99-9.99 เท่านั้น, LIVE เท่านั้น, no-op refuse, โปรโมคลุมวันนี้ refuse (royalty lock 35%); `_execute_price` delegate ไป `set_price.py` (มี 35%-abort gate + publish confirmation ในตัว) + verify listing.price เปลี่ยนจริง
+- **Cooldown**: evaluation_kind "price" = 14 วันแบบ commercial (แก้ 3 จุด: profit_agent + daily ×2)
+- **Proposer**: `price_candidate` — LIVE + maxKENP≥50 จาก feedback-history + royalties≤$1 + ราคา>2.99 → เสนอ $2.99; ราคาอ่านจาก listing.price → fallback recommended_price_usd (ไฟล์เดียวกับที่ kdp_upload ใช้ตั้งตอนแรก); **ห้ามคร่อมโปรโม 14 วัน** (one variable per window); + gather ข้าม live_status=BLOCKED ทุก kind (กันเสนองานให้เล่มตาย)
+- ลำดับคิว: category(ตาย) > free_promo (review engine ก.ค.) > price
+- **ผลจริง**: เล่มแรกที่เข้าเกณฑ์ = adhd-workbook-german-adults (KENP 51, $6.99) แต่ถูกเลื่อนถูกต้องเพราะโปรโมฮีโร่ 25-26 ก.ค. อยู่ในหน้าต่างวัดผล → จะโผล่ในคิวอัตโนมัติ ~27 ก.ค.
+- เทสต์เก่า test_unknown_kinds_stay_manual เคยใช้ price_update เป็นตัวอย่าง unsupported → เปลี่ยนเป็น cover_update
+- Suite **169 passed**; executor smoke: acuarela actions เก่าโดน ASIN gate refuse ครบ, exp6 (โปรโมอิตาลี) ready สำหรับ 10:15 พรุ่งนี้; CLAUDE.md อัปเดตเลนใหม่แล้ว
+
+## 12 ก.ค. 2026 — Signal-sufficiency gate (distribution-starved) ใน proposer
+บุ๋ยถามว่าข้อมูล KDP รายวัน (sync 09:15 อ่าน This-Month cumulative ผ่าน Playwright session, ไม่ใช่ API ทางการ) พอให้ agent บริหารทันไหม. สรุปร่วมกัน: **ความถี่ข้อมูลไม่ใช่ปัญหา** (หน้าต่างตัดสินใจ = 14 วัน/สัปดาห์ อยู่แล้ว) — ปัญหาจริงคือ **volume น้อยจนเป็น noise** ($7.71 royalty จริง/เดือน, 3/44 เล่มมี order ขยับ) → คอขวด = distribution ไม่ใช่ราคา.
+**ฝัง logic นี้ลง `scripts/experiment_proposer.py`:**
+- `_title_traffic(history)` = max(mtd_orders) + max(mtd_kenp)/PAGES_PER_BORROW(300) = eyeballs proxy (นับ free download/borrow ด้วย เพราะเป็น "traffic" ที่ต้องมีพอถึงจะวัด conversion ได้)
+- `price_candidate` เพิ่ม gate: traffic < `MIN_TRAFFIC_FOR_PRICE_TEST=10` → return None (distribution-starved = visibility problem ไม่ใช่ price → ไม่เปลือง slot จูน noise). **free_promo ยังผ่าน** (มันคือคันโยก traffic)
+- `distribution_starved_titles()` + Telegram รายวัน "N เล่ม distribution-starved" + คีย์ `distribution_starved`/`_slugs` ใน run_proposer output
+- ผลจริง: 3 เล่ม traffic จริง (acuarela 20.5, adhd-es 23.1, ai-toolkit 17.0) ผ่าน; **36 เล่ม LIVE ถูกตีธง starved**
+- scope = proposer เท่านั้น (เลนอัตโนมัติที่อาจ spawn noise experiment); APPROVED_EXPERIMENTS seeds (adhd/ai-toolkit) มี traffic ผ่านอยู่แล้ว ไม่แตะ
+- เทสต์: อัปเดต test_price_candidate (read_history ต้องมี mtd_orders) + เพิ่มเคส "starved" (KENP≥50 แต่ traffic ต่ำ → None). **47 passed** (proposer+profit_agent_daily+profit_agent)
+- ค่า floor 10 = heuristic noise-floor ปรับได้ (คอมเมนต์ไว้แล้ว)
+
+## 14 ก.ค. 2026 — Audit สมองกลบริหาร (profit agent) โดย Claude: พบ deadlock เลน free_promo
+- **🔴 exp 6+7 (free_promo อิตาลี 2 เล่ม) ค้าง `ready` ตั้งแต่ 11/13 ก.ค. ไม่เคยถูก execute** (agent_actions ไม่มีแถว execution เลย, log 12-14 ก.ค. ยืนยัน 3 รอบ)
+- **Root cause:** `libra_profit_agent_daily.py:255-258` — status `ready` ต้องผ่าน `_title_attribution_complete` = ASIN ต้องมีแถวใน `kdp_title_attribution` ของ snapshot ล่าสุด. แต่ KDP overview รายงาน per-title เฉพาะเล่มที่มียอดขยับ → เล่มยอดศูนย์ (เป้าหมายของเลน free_promo พอดี) ไม่มีวันมีแถว → **deadlock ถาวรโดยโครงสร้าง**. ยังไม่แก้ (แตะ gate ต้องบุ๋ยอนุมัติ)
+- **ผลรวม 3 เลนของ agent ตอนนี้:** category = ปิด (ASIN gate หลัง acuarela), free_promo = deadlock ข้างบน, price = ไม่มีเล่มผ่าน traffic≥10 ที่อยู่นอกหน้าต่างโปรโม → agent รันทุกวัน+ส่ง Telegram แต่ **ไม่มี mutation ใดเกิดขึ้นได้เลย**
+- **ข้อมูลสำคัญจาก 17 free promo ที่จบแล้ว (ก.ค.):** รวม 35 downloads; 13/17 เล่ม = 0 downloads. เล่มที่ได้: acuarela 19, remote-workers 9, ai-productivity-es 5, adhd-es 2. → **naked free promo (ไม่มีตัวขยาย traffic ภายนอก) ≈ ตาย** และเปลืองโควตา 5 วันฟรี/เทอม
+- **KPI 90 วันบน /profit นับเกิน:** มุมมอง "90 วัน" ใช้ snapshot This-Month cumulative ($10.00) ซึ่งรวมเงิน 1-10 ก.ค. ($7.63 ก่อนเริ่มรอบ 11 ก.ค.) — ควรหัก baseline เดือนแรก
+- ตัวเลขจริง 14 ก.ค.: MTD royalties $10.00 / orders(ทุกชนิด) 291 / KENP 405; contribution +$1.10 (costs $8.90, 3 เล่ม estimated → cost gate closed ถูกต้อง); starved 36/40 เล่ม
+- ปฏิทินฮีโร่จองครบจริง: workbook-es 15-19, focus-es 22-26, german 25-26 (คู่ LovelyBooks), taxes 29 ก.ค.-2 ส.ค.
+
+## 14 ก.ค. 2026 (ดึก) — บุ๋ยอนุมัติ "ทำตามคำแนะนำได้เลย" → แก้ครบ 3 จุด + เจอโปรโมผี exp6
+
+**1. แก้ deadlock attribution gate (ครบวงจร):**
+- `kdp_sales_sync.py`: ledger snapshot บันทึกรายเล่มจาก **merged monthly baseline** แทน widget top-N รายวัน (`merged_title_rows`; merge เก็บ currency ด้วย) — เล่มที่เคยโผล่แล้วหลุด widget (เช่น acuarela $0.68) ไม่หายจากบัญชีอีก → unattributed remainder ลดจาก $1.51 เหลือ ~$0.86
+- `profit_agent.py` `title_financial_boundary`: เล่มไม่มีแถวรายเดือน = ศูนย์ **เมื่อ remainder ของ snapshot เดือนนั้น ≤ `ATTRIBUTION_ABSENT_ZERO_BOUND_USD` ($2.00)**; เพิ่มฟิลด์ `attribution_bound_usd` บันทึกความไม่แน่นอน (เหตุผลตัวเลข: widget=topEarningTitles top-N เท่านั้น; KENP หางยาวนอก widget ≈ $1.5 ปัจจุบัน)
+- `libra_profit_agent_daily.py` `_title_attribution_complete`: กติกาเดียวกัน + branch ready→execute จะ **refresh baseline flags** ที่ snapshot เดิม (baseline เก่าแช่ complete=False จะทำ evaluation inconclusive ตลอดกาล)
+**2. กติกา pairing:** `validate_action` refuse free_promo ที่ไม่มีคู่ใน `data/promo_pairings.json`/`reddit_promo_schedule.json`; `_execute_free_promo` เติมคิวเตือน Reddit อัตโนมัติหลัง schedule สำเร็จ (เลือกวันแรกในหน้าต่างที่ยังว่าง). proposer ใช้ validate ตัวเดียวกัน → ไม่มี naked promo เข้าคิวได้อีก
+**3. KPI /profit:** `_profit_kpi_plan` มุมมอง "ทั้งรอบ" หัก snapshot แรกสุด (entry meter-reading $7.63/256o/361p) → ตอนนี้แสดง **$2.37** จริงของรอบ. restart libra.service แล้ว
+**4. รันจริงพิสูจน์:** exp6 หลุดจาก ready → executor เปิด KDP จริง → **abort เพราะ title ไม่ตรง** → สอบต่อพบ (a) listing.json title เก่าผิดจากเล่มจริง (b) **เล่มนี้เคยแจกฟรี 4-6 ก.ค. แบบไม่มีบันทึกใน listing** (โปรโมผี = หลักฐาน naked-promo เพิ่มอีกตัว) → backfill listing (title จริง + free_promo Complete 4-6 ก.ค.) + **ปิด exp6 = inconclusive** (audited: hypothesis void, กันแจกซ้ำเปลืองโควตา 2/5 วันที่เหลือ)
+- exp7 (postpartum-anxiety-it) ตรวจหน้า KDP แล้ว **สะอาด ไม่เคยโปรโม + title ตรง** → คงไว้, จะ execute พรุ่งนี้ 10:15 (budget 1 mutation/รอบ) → โปรโม 16-17 + คิว Reddit 17 ก.ค. อัตโนมัติ
+- เทสต์: แก้ 4 ตัวที่ encode พฤติกรรมเก่า + เพิ่ม 9 ตัวใหม่ (deadlock regression, pairing refuse/accept, merged rows, boundary bound, KPI window) → **178 passed**
+- Registry หลังปิด exp6: active 2 (exp2 cooldown ประเมิน ~25 ก.ค., exp7) — slot ว่าง 1 จะไม่ถูกเติมจนกว่ามีเล่ม paired (by design)
+- ⚠️ บทเรียน: **listing.json เชื่อไม่ได้เรื่องประวัติโปรโม** — เช็ค promotion-manager จริงก่อนเสมอ (เขียนลง CLAUDE.md แล้ว)

@@ -130,8 +130,27 @@ def merge_title_baselines(previous: dict, current_rows: list[dict]) -> dict:
                 "orders": int(row.get("orders", 0) or 0),
                 "pagesRead": int(row.get("pagesRead", 0) or 0),
                 "royalties": float(row.get("royalties", 0.0) or 0.0),
+                "currency": row.get("currency", ""),
             }
     return merged
+
+
+def merged_title_rows(merged: dict, current_rows: list[dict], overview_currency: str) -> list[dict]:
+    """Month-cumulative title rows for the ledger snapshot: today's widget rows
+    plus last-seen rows for titles KDP's top-N widget no longer lists (their MTD
+    totals still count in the overview, so dropping them would fake a gap).
+    Rows merged before currency was tracked fall back to the overview currency."""
+    rows = {row["asin"]: dict(row) for row in current_rows if row.get("asin")}
+    for asin, values in merged.items():
+        if asin not in rows:
+            rows[asin] = {
+                "asin": asin,
+                "orders": values.get("orders", 0),
+                "pagesRead": values.get("pagesRead", 0),
+                "royalties": values.get("royalties", 0.0),
+                "currency": values.get("currency") or overview_currency,
+            }
+    return [rows[asin] for asin in sorted(rows)]
 
 
 def ledger_snapshot_from_kdp(
@@ -312,15 +331,6 @@ def sync(dry_run: bool = False) -> None:
     emit(f"Overview THIS_MONTH: digitalOrders={ov.get('digitalOrders')} "
          f"kenpRead={ov.get('kenpRead')} royalties={ov.get('totalRoyalties')} {ov.get('currency')}")
 
-    observed_at = datetime.now().astimezone().isoformat(timespec="seconds")
-    ledger_snapshot = ledger_snapshot_from_kdp(
-        data, observed_at, persist_log=not dry_run
-    )
-    if dry_run:
-        emit(f"[dry-run] reconciliation input: {ledger_snapshot}")
-    else:
-        record_kdp_snapshot(LEDGER_FILE, ledger_snapshot)
-
     state = _load_json(STATE_FILE, {})
     if state.get("month") != month:
         state = {"month": month, "titles": {}}  # cumulative resets each calendar month
@@ -328,6 +338,17 @@ def sync(dry_run: bool = False) -> None:
 
     idx = build_indexes()
     new_baseline = merge_title_baselines(baseline, data["titles"])
+
+    observed_at = datetime.now().astimezone().isoformat(timespec="seconds")
+    ledger_snapshot = ledger_snapshot_from_kdp(
+        {**data, "titles": merged_title_rows(
+            new_baseline, data["titles"], data["overview"].get("currency", ""))},
+        observed_at, persist_log=not dry_run,
+    )
+    if dry_run:
+        emit(f"[dry-run] reconciliation input: {ledger_snapshot}")
+    else:
+        record_kdp_snapshot(LEDGER_FILE, ledger_snapshot)
     recorded = 0
     events = []
 

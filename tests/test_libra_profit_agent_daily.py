@@ -87,8 +87,10 @@ def test_stale_financials_hold_experiments(tmp_path):
 
 
 def test_attribution_gap_allows_observation_but_blocks_commercial_mutation(tmp_path):
+    # Unattributed remainder above ATTRIBUTION_ABSENT_ZERO_BOUND_USD: an absent
+    # title could be hiding real money, so ready experiments must hold.
     gap_db = tmp_path / "gap.db"
-    _snapshot(gap_db, attributed=6.0)
+    _snapshot(gap_db, attributed=4.0)
     first = run_daily(gap_db, tmp_path / "gap.json", now=NOW)
 
     assert first["gates"]["overview_ingestion"] == "open"
@@ -99,6 +101,22 @@ def test_attribution_gap_allows_observation_but_blocks_commercial_mutation(tmp_p
     second = run_daily(gap_db, tmp_path / "gap.json", now=NOW + timedelta(minutes=1))
 
     assert all(item["status"] == "ready" for item in second["experiments"])
+
+
+def test_bounded_attribution_gap_does_not_deadlock_absent_titles(tmp_path):
+    # Regression (found 2026-07-14): KDP's top-N widget only lists titles with
+    # earning activity, so zero-sale titles NEVER get an attribution row. The
+    # old presence-only gate held their experiments "ready" forever. With the
+    # remainder within the zero bound, absence counts as attributed-zero and
+    # the experiment must advance out of "ready" on the next run.
+    db = tmp_path / "ledger.db"
+    _snapshot(db, attributed=6.9)  # remainder 0.73 <= 2.00 bound
+    first = run_daily(db, tmp_path / "state.json", now=NOW)
+    assert all(item["status"] == "ready" for item in first["experiments"])
+
+    second = run_daily(db, tmp_path / "state.json", now=NOW + timedelta(minutes=1))
+
+    assert all(item["status"] != "ready" for item in second["experiments"])
 
 
 def test_persisted_active_capacity_blocks_each_new_transition(tmp_path):

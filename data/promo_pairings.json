@@ -1,0 +1,19 @@
+{
+  "_readme": "Free promo ต้องมีคู่ช่องทางขยาย traffic เสมอ (วัดจริง ก.ค. 2026: โปรโมเดี่ยวๆ 13/17 เล่ม = 0 downloads) — validate_action ใน kdp_action_executor.py จะ refuse free_promo ของ slug ที่ไม่มี entry ที่นี่และไม่มีคิวโพสต์ใน reddit_promo_schedule.json. เมื่อ promo ถูก schedule จริง executor จะสร้างคิวเตือนโพสต์ Reddit ให้อัตโนมัติ",
+  "pairings": {
+    "ai-creative-workbook-italian": [
+      {
+        "channel": "reddit",
+        "note": "r/FreeEBOOKS post via reddit_promo_post.py reminder (บุ๋ยโพสต์เอง ~1 นาที)",
+        "added_at": "2026-07-14"
+      }
+    ],
+    "postpartum-anxiety-workbook-italian": [
+      {
+        "channel": "reddit",
+        "note": "r/FreeEBOOKS post via reddit_promo_post.py reminder (บุ๋ยโพสต์เอง ~1 นาที)",
+        "added_at": "2026-07-14"
+      }
+    ]
+  }
+}

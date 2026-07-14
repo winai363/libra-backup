@@ -217,3 +217,49 @@ def test_failed_action_is_recorded_as_failed(tmp_path: Path):
         {"returncode": 1, "stderr": "network error"},
     )
     assert result["status"] == "failed"
+
+
+def test_title_boundary_treats_bounded_absence_as_attributed_zero(tmp_path: Path):
+    # KDP's per-title table is the top-N earners widget: a zero-sale title has
+    # no row by construction. While the snapshot's unattributed remainder is
+    # within ATTRIBUTION_ABSENT_ZERO_BOUND_USD, absence = zero (complete, with
+    # the bound recorded); above it the boundary must stay incomplete.
+    from business_ledger import record_kdp_snapshot
+    from profit_agent import ATTRIBUTION_ABSENT_ZERO_BOUND_USD, title_financial_boundary
+
+    db = tmp_path / "ledger.db"
+    bounded = record_kdp_snapshot(db, {
+        "observed_at": NOW.isoformat(),
+        "month": "2026-07",
+        "overview": {"royalties_usd": 7.63, "orders_all_types": 4, "kenp": 20},
+        "titles": [{"asin": "TOP", "royalties_usd": 6.9, "orders": 4, "kenp": 20}],
+    })
+
+    absent = title_financial_boundary(db, "ZERO-SALE", bounded, slug="zero-sale-book")
+
+    assert absent["royalties_usd"] == 0.0
+    assert absent["attribution_complete"] is True
+    assert absent["attribution_bound_usd"] == 0.73
+    assert 0.73 <= ATTRIBUTION_ABSENT_ZERO_BOUND_USD
+
+    present = title_financial_boundary(db, "TOP", bounded, slug="top-book")
+    assert present["royalties_usd"] == 6.9
+    assert present["attribution_complete"] is True
+
+
+def test_title_boundary_refuses_zero_attribution_above_the_bound(tmp_path: Path):
+    from business_ledger import record_kdp_snapshot
+    from profit_agent import title_financial_boundary
+
+    db = tmp_path / "ledger.db"
+    gappy = record_kdp_snapshot(db, {
+        "observed_at": NOW.isoformat(),
+        "month": "2026-07",
+        "overview": {"royalties_usd": 7.63, "orders_all_types": 4, "kenp": 20},
+        "titles": [{"asin": "TOP", "royalties_usd": 4.0, "orders": 4, "kenp": 20}],
+    })
+
+    absent = title_financial_boundary(db, "ZERO-SALE", gappy, slug="zero-sale-book")
+
+    assert absent["attribution_complete"] is False
+    assert absent["complete"] is False

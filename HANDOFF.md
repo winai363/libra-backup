@@ -1,16 +1,16 @@
 ## Last Handoff — libra
 
-**เมื่อ:** 2026-07-11 14:22
+**เมื่อ:** 2026-07-12 10:49
 **ทำโดย:** claude
-**Task:** Add KPI bar actual-vs-plan to /profit dashboard
+**Task:** ฝัง signal-sufficiency gate ใน profit agent: กันจูน price/promo บนเล่ม traffic=noise, ตีธง distribution-starved
 
 ### สิ่งที่ทำ
-KPI actual-vs-plan bars live on /libra/profit: Royalties $7.63/$25 (early), Orders 256/120 (on plan), KENP 361/500 (watch), Profit A -$1.27/$0 (behind); targets from approved learning-cycle plan (single source with distribution monitor), actuals from verified ledger only. Suite 163 passed, page QA'd with screenshot, backup pushed.
+ฝัง signal-sufficiency (distribution-starved) gate ใน experiment_proposer: price_candidate ข้ามเล่ม traffic<10, surface 36 starved titles รายวัน; 47 tests passed
 
 ### Git state ตอน finish
 - Branch: `main`
-- Last commit: `13aba9e Add KPI actual-vs-plan bars to the profit dashboard`
-- Uncommitted files: 0
+- Last commit: `1be225f Align KPI plan to the 90-day mode and add daily/month/mode filters`
+- Uncommitted files: 9
 
 ### ขั้นต่อไป
 _อ่านจาก summary ด้านบน — ถ้าไม่มีระบุ แสดงว่างานนี้เสร็จสมบูรณ์แล้ว_

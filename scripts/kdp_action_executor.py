@@ -41,8 +41,11 @@ LEDGER_FILE = LIBRA_DIR / "data" / "libra-business.db"
 TREE_FILE = LIBRA_DIR / "data" / "kdp_category_tree.json"
 SESSION_FILE = LIBRA_DIR / "kdp_session.json"
 SHOTS_DIR = LIBRA_DIR / "logs" / "action-shots"
+PAIRINGS_FILE = LIBRA_DIR / "data" / "promo_pairings.json"
+REDDIT_SCHEDULE_FILE = LIBRA_DIR / "data" / "reddit_promo_schedule.json"
 MAX_MUTATIONS_PER_RUN = 1
 ERROR_MARKER = "error(s) to continue"  # KDP validation banner (substring match)
+PRICE_BAND = (2.99, 9.99)  # KDP 70%-royalty USD band — never price outside it
 
 
 def _tokens(text: str) -> set:
@@ -97,6 +100,51 @@ def validate_category_action(action: dict, listing: dict, leaves: set) -> tuple[
     return True, "ok", targets[:3]
 
 
+def validate_price_action(action: dict, listing: dict) -> tuple[bool, str, dict]:
+    """Price changes go through KDP's pricing page only (scripts/set_price.py) —
+    content untouched, so no content re-review. Still gated hard: 70% band only,
+    LIVE books only, no-op changes refused, and never while a free promo covers
+    today (KDP locks the royalty binding to 35% during an active promo; set_price
+    has its own on-page 35% abort as the second line of defense)."""
+    try:
+        price = round(float(action.get("proposed_value")), 2)
+    except (TypeError, ValueError):
+        return False, f"price is not a number: {action.get('proposed_value')!r}", {}
+    if not PRICE_BAND[0] <= price <= PRICE_BAND[1]:
+        return False, f"price {price} outside 70%-royalty band {PRICE_BAND}", {}
+    if str(listing.get("live_status") or "").upper() != "LIVE":
+        return False, "price experiments run on LIVE books only", {}
+    current = listing.get("price")
+    try:
+        if current is not None and abs(float(current) - price) < 0.01:
+            return False, f"price is already {price:.2f}", {}
+    except (TypeError, ValueError):
+        pass
+    promo = listing.get("free_promo") or {}
+    start, end = promo.get("start"), promo.get("end")
+    if start and end and start <= date.today().isoformat() <= end:
+        return False, "free promo covers today — royalty binding is locked during a promo", {}
+    return True, "ok", {"price": f"{price:.2f}"}
+
+
+def has_distribution_pairing(slug: str) -> bool:
+    """A free promo only moves books that get an external push while free —
+    measured July 2026: 13 of 17 promos with no paired channel got 0 downloads,
+    and KDP Select allows just 5 free days per title per 90-day term. A pairing
+    is a declared entry in promo_pairings.json or a scheduled Reddit post."""
+    try:
+        pairings = json.loads(PAIRINGS_FILE.read_text(encoding="utf-8")).get("pairings", {})
+        if pairings.get(slug):
+            return True
+    except (OSError, json.JSONDecodeError):
+        pass
+    try:
+        posts = json.loads(REDDIT_SCHEDULE_FILE.read_text(encoding="utf-8")).get("posts", [])
+        return any(post.get("slug") == slug for post in posts)
+    except (OSError, json.JSONDecodeError):
+        return False
+
+
 def validate_action(action: dict, listing: dict | None, leaves: set) -> tuple[bool, str, dict]:
     kind = action.get("kind")
     if float(action.get("cost_usd") or 0) != 0:
@@ -106,6 +154,16 @@ def validate_action(action: dict, listing: dict | None, leaves: set) -> tuple[bo
     if kind == "metadata_update" and action.get("field") == "title":
         return False, "title changes are permanently refused (cover/interior mismatch risk)", {}
     if kind == "category_update":
+        # A category change forces a KDP republish, which re-submits the book to
+        # Amazon content review. For a published book that costs us the whole
+        # listing if the (2026, stricter) review now rejects it — exactly how
+        # acuarela was lost on 2026-07-11 (earning book -> republished for a
+        # category tweak -> "disappointing customer experience" rejection, page
+        # 404). Gate on ASIN, not live_status: live_status can be stale/missing
+        # (None/UNKNOWN/BLOCKED) while the book has still been through publish.
+        # Category experiments run on true drafts (no ASIN) only.
+        if listing.get("asin") or str(listing.get("live_status") or "").upper() == "LIVE":
+            return False, "refused: republishing a published book re-triggers Amazon review (rejection risk)", {}
         ok, reason, targets = validate_category_action(action, listing, leaves)
         return ok, reason, {"targets": targets}
     if kind == "free_promo":
@@ -113,7 +171,13 @@ def validate_action(action: dict, listing: dict | None, leaves: set) -> tuple[bo
         days = int(match.group(1)) if match else 1
         if not 1 <= days <= 5:
             return False, f"free promo days out of KDP Select range: {days}", {}
+        if not has_distribution_pairing(action.get("slug") or ""):
+            return False, ("refused: free promo requires a paired distribution channel "
+                           "(promo_pairings.json or a scheduled Reddit post) — unpaired promos "
+                           "measured 0 downloads and burn the 5-free-days/term quota"), {}
         return True, "ok", {"days": days}
+    if kind == "price_update":
+        return validate_price_action(action, listing)
     return False, f"unsupported action kind for auto-execution: {kind}", {}
 
 
@@ -283,6 +347,39 @@ async def _execute_category(action: dict, listing: dict, targets: list) -> dict:
     }
 
 
+def _ensure_reddit_schedule_entry(slug: str, listing: dict, promo: dict) -> None:
+    """Wire the paired distribution channel: give the promo window a Reddit
+    reminder entry (reddit_promo_post.py cron 20:00 hands บุ๋ย a copy-paste
+    r/FreeEBOOKS post). Never raises — a reminder problem must not fail an
+    already-verified promo."""
+    try:
+        config = json.loads(REDDIT_SCHEDULE_FILE.read_text(encoding="utf-8"))
+        posts = config.setdefault("posts", [])
+        start, end = str(promo.get("start", ""))[:10], str(promo.get("end", ""))[:10]
+        if not start or any(p.get("slug") == slug and start <= str(p.get("date", "")) <= (end or start) for p in posts):
+            return
+        taken = {p.get("date") for p in posts}
+        post_date = start
+        cursor = date.fromisoformat(start)
+        while cursor.isoformat() <= (end or start):
+            if cursor.isoformat() not in taken:
+                post_date = cursor.isoformat()
+                break
+            cursor += timedelta(days=1)
+        price = listing.get("price")
+        was = f" (was ${float(price):.2f})" if price else ""
+        posts.append({
+            "date": post_date,
+            "slug": slug,
+            "title": f"[Kindle] FREE{was} — {listing.get('title', slug)}",
+            "body": (f"Free {start} to {end or start}.\n\n"
+                     f"Link: https://www.amazon.com/dp/{listing.get('asin', '')}"),
+        })
+        REDDIT_SCHEDULE_FILE.write_text(json.dumps(config, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
 async def _execute_free_promo(action: dict, listing: dict, days: int) -> dict:
     from free_promo_auto import schedule_one
 
@@ -296,6 +393,7 @@ async def _execute_free_promo(action: dict, listing: dict, days: int) -> dict:
     if not ok:
         return {"returncode": 1, "error": "schedule_one could not verify a Scheduled promo"}
     after = json.loads((KDP_DIR / slug / "listing.json").read_text(encoding="utf-8")).get("free_promo") or {}
+    _ensure_reddit_schedule_entry(slug, listing, after)
     snapshot_id = latest_snapshot_id()
     return {
         "returncode": 0,
@@ -304,6 +402,32 @@ async def _execute_free_promo(action: dict, listing: dict, days: int) -> dict:
         "verified_state_change": {
             "before": before_promo,
             "after": after,
+            "before_snapshot_id": snapshot_id,
+            "after_snapshot_id": snapshot_id,
+        },
+    }
+
+
+async def _execute_price(action: dict, listing: dict, price: str) -> dict:
+    from set_price import set_price
+
+    slug = action["slug"]
+    before_price = listing.get("price")
+    ok = await set_price(slug, price, False)
+    if not ok:
+        return {"returncode": 1,
+                "error": "set_price did not verify a published price change (35%-lock abort or no confirmation — see /tmp/set_price_*.png)"}
+    after = json.loads((KDP_DIR / slug / "listing.json").read_text(encoding="utf-8"))
+    if abs(float(after.get("price") or 0) - float(price)) >= 0.01:
+        return {"returncode": 1, "error": "listing price not updated after publish confirmation"}
+    snapshot_id = latest_snapshot_id()
+    return {
+        "returncode": 0,
+        "confirmation_id": f"kdp-price-update:{slug}:{price}:{after.get('price_updated_at')}",
+        "external_url": f"https://kdp.amazon.com/en_US/title-setup/kindle/{after.get('kdp_book_id')}/pricing",
+        "verified_state_change": {
+            "before": {"price": before_price},
+            "after": {"price": float(price), "price_updated_at": after.get("price_updated_at")},
             "before_snapshot_id": snapshot_id,
             "after_snapshot_id": snapshot_id,
         },
@@ -338,7 +462,9 @@ def build_executor(*, notify: bool = True):
         try:
             if action["kind"] == "category_update":
                 result = asyncio.run(_execute_category(action, listing, extra["targets"]))
-            else:  # free_promo (validate_action allows only these two through)
+            elif action["kind"] == "price_update":
+                result = asyncio.run(_execute_price(action, listing, extra["price"]))
+            else:  # free_promo (validate_action allows only these three through)
                 result = asyncio.run(_execute_free_promo(action, listing, extra["days"]))
         except Exception as exc:  # browser/session crash → failed, retryable
             result = {"returncode": 1, "error": f"{type(exc).__name__}: {str(exc)[:200]}"}

@@ -258,6 +258,7 @@ def _profit_kpi_plan(ledger: dict) -> dict:
     latest = previous = None
     manual_costs_today = 0.0
     window_rows = []
+    window_baseline = None
     if PROFIT_LEDGER_FILE.exists():
         try:
             with sqlite3.connect(PROFIT_LEDGER_FILE) as connection:
@@ -287,6 +288,14 @@ def _profit_kpi_plan(ledger: dict) -> dict:
                     "WHERE id = (SELECT id FROM kdp_snapshots WHERE month = s.month "
                     "ORDER BY observed_at DESC, id DESC LIMIT 1)"
                 ).fetchall()
+                # The starting month's first snapshot is the entry meter-reading:
+                # KDP "This Month" is calendar-cumulative, so it already contains
+                # revenue earned BEFORE the mode began. Subtract it or the window
+                # bar overstates progress by that pre-mode amount.
+                window_baseline = connection.execute(
+                    "SELECT royalties_usd, orders_all_types, kenp FROM kdp_snapshots "
+                    "ORDER BY observed_at ASC, id ASC LIMIT 1"
+                ).fetchone()
         except sqlite3.Error:
             pass
 
@@ -327,6 +336,10 @@ def _profit_kpi_plan(ledger: dict) -> dict:
     mode_royalties = round(sum(float(r[0]) for r in window_rows), 2)
     mode_orders = sum(int(r[1]) for r in window_rows)
     mode_kenp = sum(int(r[2]) for r in window_rows)
+    if window_baseline is not None:
+        mode_royalties = round(mode_royalties - float(window_baseline[0]), 2)
+        mode_orders -= int(window_baseline[1])
+        mode_kenp -= int(window_baseline[2])
 
     return {
         "checkpoint": window_end,

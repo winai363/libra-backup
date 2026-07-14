@@ -19,6 +19,7 @@ from distribution_report import send_telegram  # noqa: E402
 from profit_agent import (  # noqa: E402
     ACTIVE_STATUSES,
     APPROVED_EXPERIMENTS,
+    ATTRIBUTION_ABSENT_ZERO_BOUND_USD,
     check_policy,
     create_pending_action,
     create_initial_experiments,
@@ -51,6 +52,11 @@ def _latest_snapshot_id(db_path: Path) -> int | None:
 
 
 def _title_attribution_complete(db_path: Path, slug: str) -> bool:
+    """KDP only lists titles with top-N earning activity per snapshot, so an
+    absent ASIN means "at most the snapshot's unattributed remainder", not
+    "unknown". Absence counts as attributed-zero while that remainder stays
+    within ATTRIBUTION_ABSENT_ZERO_BOUND_USD — otherwise zero-sale titles
+    (exactly the books the free-promo lane exists for) can never advance."""
     try:
         listing = json.loads((KDP_DIR / slug / "listing.json").read_text(encoding="utf-8"))
         asin = str(listing.get("asin") or "").strip()
@@ -62,13 +68,25 @@ def _title_attribution_complete(db_path: Path, slug: str) -> bool:
         return False
     try:
         with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as connection:
-            row = connection.execute(
-                "SELECT 1 FROM kdp_title_attribution WHERE snapshot_id = (SELECT id FROM kdp_snapshots ORDER BY observed_at DESC, id DESC LIMIT 1) AND asin = ?",
-                (asin,),
+            snapshot = connection.execute(
+                "SELECT id, royalties_usd FROM kdp_snapshots ORDER BY observed_at DESC, id DESC LIMIT 1"
             ).fetchone()
+            if not snapshot:
+                return False
+            row = connection.execute(
+                "SELECT 1 FROM kdp_title_attribution WHERE snapshot_id = ? AND asin = ?",
+                (snapshot[0], asin),
+            ).fetchone()
+            if row:
+                return True
+            attributed = connection.execute(
+                "SELECT COALESCE(SUM(royalties_usd), 0) FROM kdp_title_attribution WHERE snapshot_id = ?",
+                (snapshot[0],),
+            ).fetchone()[0]
     except sqlite3.Error:
         return False
-    return bool(row)
+    unattributed = max(0.0, float(snapshot[1]) - float(attributed))
+    return unattributed <= ATTRIBUTION_ABSENT_ZERO_BOUND_USD
 
 
 def _write_atomic(path: Path, payload: dict) -> None:
@@ -143,7 +161,7 @@ def complete_manual_action(
         {**evidence, "observed_at": now.isoformat()},
     )
     if recorded["status"] == "executed":
-        delay = timedelta(days=14) if experiment["evaluation_kind"] == "commercial" else timedelta(hours=72)
+        delay = timedelta(days=14) if experiment["evaluation_kind"] in ("commercial", "price") else timedelta(hours=72)
         with sqlite3.connect(db_path) as connection:
             connection.execute(
                 "UPDATE experiments SET status='cooldown', earliest_evaluation_at=?, action_executed_at=? WHERE id=?",
@@ -269,6 +287,13 @@ def run_daily(
         elif experiment["status"] == "ready" and can_advance:
             pending = create_pending_action(db_path, experiment, now)
             changed = propose_transition(experiment, {}, now)
+            if asin and experiment.get("baseline_snapshot_id"):
+                # Same frozen snapshot, recomputed flags: a baseline stored under
+                # the old absence=incomplete rule would poison the evaluation
+                # ("inconclusive" forever) even though its numbers are unchanged.
+                changed["baseline"] = title_financial_boundary(
+                    db_path, asin, experiment["baseline_snapshot_id"], slug=experiment["slug"]
+                )
             execution_result = executor(pending) if executor else {"returncode": 0}
             recorded = record_action_result(db_path, pending, {**(execution_result or {"returncode": 0}), "observed_at": now.isoformat()})
             if recorded["status"] == "executed":
@@ -301,7 +326,7 @@ def run_daily(
                     {**(execution_result or {"returncode": 0}), "observed_at": now.isoformat()},
                 )
                 if recorded["status"] == "executed":
-                    delay = timedelta(days=14) if experiment.get("evaluation_kind") == "commercial" else timedelta(hours=72)
+                    delay = timedelta(days=14) if experiment.get("evaluation_kind") in ("commercial", "price") else timedelta(hours=72)
                     changed.update({
                         "status": "cooldown",
                         "earliest_evaluation_at": (now + delay).isoformat(),

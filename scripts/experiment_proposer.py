@@ -13,6 +13,8 @@ Sources (zero-cost only, one variable per experiment):
   (stop-word leaf like "General"). Proposed value = resolver snap of the bad
   path, checked drivable.
 - free_promo: KDP-Select-enrolled title that has never run a free promo.
+- price_update: LIVE title with real KU reading (KENP) but ~no royalties —
+  test the bottom of the 70% band ($2.99). Pricing page only, no re-review.
 
 Caps: at most MAX_NEW_PER_RUN new experiment per run and MAX_ACTIVE active
 experiments overall. A value already tried for the same slug+kind (any prior
@@ -25,7 +27,7 @@ import argparse
 import json
 import re
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 LIBRA_DIR = Path(__file__).resolve().parent.parent
@@ -148,6 +150,114 @@ def free_promo_candidate(slug: str, listing: dict) -> dict | None:
     }
 
 
+PRICE_TEST_VALUE = "2.99"        # bottom of the 70%-royalty band
+MIN_KENP_FOR_PRICE_TEST = 50     # someone actually READ it in KU, not a stray page
+MAX_ROYALTIES_FOR_PRICE_TEST = 1.0  # ...but nobody meaningfully buys it
+
+# --- Signal-sufficiency (distribution-starved) gate --------------------------
+# A price test optimizes PAID conversion, and its outcome is measured over a
+# 14-day window. That outcome is only above statistical noise if the title
+# already gets enough traffic — orders (incl. free downloads/borrows) plus KU
+# read-throughs — that "reads but nobody buys" is a genuine conversion signal
+# rather than a visibility artifact. Below the floor a title is
+# *distribution-starved*: the bottleneck is being seen, not the price, so tuning
+# price/metadata just measures luck. We don't spend a scarce experiment slot
+# (MAX_ACTIVE=3) on that; the title is surfaced for distribution work instead.
+# Free promo — the traffic-generating lever — stays available to these titles.
+PAGES_PER_BORROW = 300           # ≈ one full KU read-through of an avg nonfiction/workbook
+MIN_TRAFFIC_FOR_PRICE_TEST = 10  # orders + borrow-equivalents in the peak recorded month
+
+
+def _title_traffic(history: list) -> float:
+    """Peak-month demand proxy from the same MTD fields kdp_sales_sync records:
+    orders (incl. free downloads/borrows) + KU borrow-equivalents. This is how
+    many eyeballs reach the title — a price conversion change is only measurable
+    once that traffic clears MIN_TRAFFIC_FOR_PRICE_TEST."""
+    orders = max((int(e.get("mtd_orders") or 0) for e in history), default=0)
+    pages = max((int(e.get("mtd_kenp") or 0) for e in history), default=0)
+    return orders + pages / PAGES_PER_BORROW
+
+
+def distribution_starved_titles(kdp_dir: Path = KDP_DIR) -> list:
+    """LIVE, published titles whose peak-month traffic is below the price-test
+    measurability floor. Their bottleneck is distribution (being seen), not
+    price/metadata — surfaced daily so human effort goes to traffic, not tuning."""
+    starved = []
+    for listing_path in sorted(kdp_dir.glob("*/listing.json")):
+        try:
+            listing = json.loads(listing_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if listing.get("status") != "uploaded":
+            continue
+        if str(listing.get("live_status") or "").upper() != "LIVE":
+            continue
+        try:
+            history = json.loads((listing_path.parent / "feedback-history.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            history = []
+        if _title_traffic(history) < MIN_TRAFFIC_FOR_PRICE_TEST:
+            starved.append(listing_path.parent.name)
+    return starved
+
+
+def _current_price(slug: str, listing: dict, kdp_dir: Path) -> float | None:
+    """listing.price is written by set_price on every change; before the first
+    change the live price is whatever kdp_upload set = recommended_price_usd
+    from pricing-recommendation.json. Neither record → None (skip, never guess)."""
+    for value in (listing.get("price"),):
+        try:
+            if value is not None:
+                return float(value)
+        except (TypeError, ValueError):
+            return None
+    try:
+        rec = json.loads((kdp_dir / slug / "pricing-recommendation.json").read_text(encoding="utf-8"))
+        return float(rec["recommended_price_usd"])
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def price_candidate(slug: str, listing: dict, royalties: float, kdp_dir: Path = KDP_DIR) -> dict | None:
+    """KU readers engage with the book but nobody buys at the current price →
+    test the lowest 70%-band price. Evidence is deterministic (KENP recorded by
+    kdp_sales_sync in feedback-history.json); missing/unreadable evidence = skip,
+    never guess. LIVE books only — the executor gate re-checks this too."""
+    if str(listing.get("live_status") or "").upper() != "LIVE":
+        return None
+    price = _current_price(slug, listing, kdp_dir)
+    if price is None or price <= float(PRICE_TEST_VALUE):
+        return None
+    try:
+        history = json.loads((kdp_dir / slug / "feedback-history.json").read_text(encoding="utf-8"))
+        kenp = max(int(entry.get("mtd_kenp") or 0) for entry in history)
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return None  # ไม่มั่นใจ = ข้าม
+    if kenp < MIN_KENP_FOR_PRICE_TEST or royalties > MAX_ROYALTIES_FOR_PRICE_TEST:
+        return None
+    # Signal-sufficiency: a distribution-starved title (too little traffic for a
+    # 14-day conversion change to clear noise) is a visibility problem, not a
+    # price problem — don't spend a scarce experiment slot tuning luck.
+    if _title_traffic(history) < MIN_TRAFFIC_FOR_PRICE_TEST:
+        return None
+    # One variable per window: a free promo inside the 14-day evaluation window
+    # would pollute the price signal (and KDP locks royalty binding during the
+    # promo). Re-proposed automatically once the promo has passed.
+    promo = listing.get("free_promo") or {}
+    start, end = promo.get("start"), promo.get("end")
+    if start and end:
+        today = datetime.now(timezone.utc).date()
+        window_end = (today + timedelta(days=14)).isoformat()
+        if start <= window_end and end >= today.isoformat():
+            return None
+    return {
+        "kind": "price_update", "field": "list_price",
+        "proposed_value": PRICE_TEST_VALUE, "cost_usd": 0,
+        "hypothesis": "KU readers engage with this title but nobody buys at the current price; the lowest 70%-band price can convert that interest into orders.",
+        "variable": "price",
+    }
+
+
 def attributed_royalties(db_path: Path) -> dict:
     """asin -> lifetime-attributed royalties from the latest snapshot."""
     with sqlite3.connect(db_path) as connection:
@@ -229,8 +339,12 @@ def gather_proposals(kdp_dir: Path, db_path: Path, leaves: set) -> list:
             continue
         if listing.get("status") != "uploaded":
             continue
+        if str(listing.get("live_status") or "").upper() == "BLOCKED":
+            continue  # dead listing (content-review block) — never spend a slot on it
+        royalty = royalties.get(listing.get("asin"), 0.0)
         for candidate in (category_candidate(slug, listing, leaves),
-                          free_promo_candidate(slug, listing)):
+                          free_promo_candidate(slug, listing),
+                          price_candidate(slug, listing, royalty, kdp_dir)):
             if candidate is None:
                 continue
             if already_tried(db_path, slug, candidate["kind"], candidate["proposed_value"]):
@@ -243,14 +357,16 @@ def gather_proposals(kdp_dir: Path, db_path: Path, leaves: set) -> list:
                 continue
             proposals.append({
                 "slug": slug, "asin": listing.get("asin"),
-                "royalties": royalties.get(listing.get("asin"), 0.0),
+                "royalties": royalty,
                 "action": action, "hypothesis": candidate["hypothesis"],
                 "variable": candidate["variable"],
             })
-    # Highest-earning titles first (fix where the money is); category fixes
-    # before promos at equal royalties; slug for determinism.
+    # Highest-earning titles first (fix where the money is); at equal royalties
+    # category fixes, then first promos (review engine), then price tests; slug
+    # for determinism.
+    kind_rank = {"category_update": 0, "free_promo": 1, "price_update": 2}
     proposals.sort(key=lambda p: (-p["royalties"],
-                                  0 if p["action"]["kind"] == "category_update" else 1,
+                                  kind_rank.get(p["action"]["kind"], 3),
                                   p["slug"]))
     return proposals
 
@@ -290,8 +406,16 @@ def run_proposer(*, kdp_dir: Path = KDP_DIR, db_path: Path = LEDGER_FILE,
             f"Libra proposer 🧪 experiment ใหม่ #{experiment['id']} {proposal['slug']}: "
             f"{proposal['action']['kind']} → {proposal['action']['proposed_value']}"
         )
+    starved = distribution_starved_titles(kdp_dir)
+    if starved:
+        _notify(
+            f"Libra proposer 📉 {len(starved)} เล่ม distribution-starved "
+            f"(traffic ต่ำเกินวัดผล price/metadata ได้) — คอขวด = คนไม่เห็น ไม่ใช่ราคา"
+        )
     return {"closed_exhausted": len(closed), "candidates": len(proposals),
-            "created": created, "active_before": active_count}
+            "created": created, "active_before": active_count,
+            "distribution_starved": len(starved),
+            "distribution_starved_slugs": starved}
 
 
 def main() -> None:

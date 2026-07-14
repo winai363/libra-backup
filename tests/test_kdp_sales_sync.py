@@ -2,7 +2,7 @@ import asyncio
 import json
 
 import kdp_sales_sync
-from kdp_sales_sync import ledger_snapshot_from_kdp, merge_title_baselines
+from kdp_sales_sync import ledger_snapshot_from_kdp, merge_title_baselines, merged_title_rows
 
 
 def test_partial_top_titles_preserves_missing_baseline():
@@ -22,6 +22,32 @@ def test_title_reentry_replaces_its_preserved_baseline():
 
     assert merged["A"]["orders"] == 6
     assert merged["B"]["orders"] == 8
+
+
+def test_merged_title_rows_keep_titles_kdp_dropped_from_the_widget():
+    # acuarela earned $0.68 MTD, then fell out of KDP's top-N widget on 13 ก.ค.
+    # — its money still counts in the overview total, so the ledger snapshot
+    # must keep its last-seen row instead of faking an attribution gap.
+    merged = merge_title_baselines(
+        {"OLD": {"orders": 20, "pagesRead": 147, "royalties": 0.68, "currency": "USD"}},
+        [{"asin": "NEW", "orders": 6, "pagesRead": 0, "royalties": 2.33, "currency": "USD"}],
+    )
+
+    rows = merged_title_rows(
+        merged,
+        [{"asin": "NEW", "orders": 6, "pagesRead": 0, "royalties": 2.33, "currency": "USD"}],
+        "USD",
+    )
+
+    assert [row["asin"] for row in rows] == ["NEW", "OLD"]
+    dropped = next(row for row in rows if row["asin"] == "OLD")
+    assert dropped["royalties"] == 0.68 and dropped["currency"] == "USD"
+
+
+def test_merged_title_rows_legacy_state_without_currency_uses_overview_currency():
+    rows = merged_title_rows({"OLD": {"orders": 1, "pagesRead": 0, "royalties": 0.5}}, [], "USD")
+
+    assert rows[0]["currency"] == "USD"
 
 
 def test_overview_snapshot_keeps_total_separate_from_attribution():

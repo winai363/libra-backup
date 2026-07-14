@@ -250,6 +250,15 @@ def create_experiment(db_path: Path, *, slug: str, asin: str, variable: str,
     return _experiment_from_row(row)
 
 
+# KDP's dashboard only breaks royalties down per title through the top-N
+# "top earning titles" widget, so a title with no row in a snapshot is not
+# missing data — it earned at most the snapshot's unattributed remainder
+# (overview total minus every attributed row). When that remainder is at or
+# below this bound, an absent title is attributed zero and the boundary is
+# complete-with-bound; above it, the ledger refuses to call absence zero.
+ATTRIBUTION_ABSENT_ZERO_BOUND_USD = 2.00
+
+
 def title_financial_boundary(db_path: Path, asin: str, snapshot_id: int, *, slug: str | None = None) -> dict:
     """Return cumulative title royalties and costs as-of an immutable snapshot."""
     _init_schema(db_path)
@@ -259,10 +268,16 @@ def title_financial_boundary(db_path: Path, asin: str, snapshot_id: int, *, slug
             raise ValueError("unknown snapshot boundary")
         observed_at = boundary[0]
         monthly = connection.execute(
-            "SELECT s.id, a.royalties_usd FROM kdp_snapshots s LEFT JOIN kdp_title_attribution a ON a.snapshot_id=s.id AND a.asin=? WHERE s.observed_at<=? AND s.id=(SELECT id FROM kdp_snapshots WHERE month=s.month AND observed_at<=? ORDER BY observed_at DESC,id DESC LIMIT 1)",
+            "SELECT s.id, a.royalties_usd, s.royalties_usd - (SELECT COALESCE(SUM(t.royalties_usd),0) FROM kdp_title_attribution t WHERE t.snapshot_id=s.id) FROM kdp_snapshots s LEFT JOIN kdp_title_attribution a ON a.snapshot_id=s.id AND a.asin=? WHERE s.observed_at<=? AND s.id=(SELECT id FROM kdp_snapshots WHERE month=s.month AND observed_at<=? ORDER BY observed_at DESC,id DESC LIMIT 1)",
             (asin, observed_at, observed_at),
         ).fetchall()
-        complete = bool(monthly) and all(row[1] is not None for row in monthly)
+        complete = bool(monthly) and all(
+            row[1] is not None or max(0.0, float(row[2] or 0)) <= ATTRIBUTION_ABSENT_ZERO_BOUND_USD
+            for row in monthly
+        )
+        attribution_bound = round(sum(
+            max(0.0, float(row[2] or 0)) for row in monthly if row[1] is None
+        ), 2)
         royalties = sum(float(row[1] or 0) for row in monthly)
         if slug is None:
             slug_row = connection.execute("SELECT slug FROM experiments WHERE asin=? ORDER BY id DESC LIMIT 1", (asin,)).fetchone()
@@ -281,6 +296,7 @@ def title_financial_boundary(db_path: Path, asin: str, snapshot_id: int, *, slug
             "royalties_usd": round(royalties, 2), "direct_costs_usd": round(cost, 2),
             "contribution_profit_usd": round(royalties-cost, 2),
             "attribution_complete": complete, "cost_complete": cost_complete,
+            "attribution_bound_usd": attribution_bound,
             "complete": complete and cost_complete}
 
 
@@ -380,7 +396,7 @@ def propose_transition(experiment: dict, financials: dict, now: datetime) -> dic
     if status == "executing" and target == "cooldown":
         delay = (
             timedelta(days=14)
-            if experiment.get("evaluation_kind") == "commercial"
+            if experiment.get("evaluation_kind") in ("commercial", "price")
             else timedelta(hours=72)
         )
         changed["earliest_evaluation_at"] = (now + delay).isoformat()

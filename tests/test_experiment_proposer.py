@@ -68,6 +68,54 @@ def test_undrivable_sibling_categories_block_the_book():
     assert pick_category_fix(listing, LEAVES) is None
 
 
+def test_price_candidate_needs_ku_reading_but_no_royalties(tmp_path):
+    from scripts.experiment_proposer import price_candidate
+
+    def _book(slug, listing, history=None, rec_price=None):
+        folder = tmp_path / slug
+        folder.mkdir(exist_ok=True)
+        if history is not None:
+            (folder / "feedback-history.json").write_text(json.dumps(history))
+        if rec_price is not None:
+            (folder / "pricing-recommendation.json").write_text(
+                json.dumps({"recommended_price_usd": rec_price}))
+        return price_candidate(slug, listing, listing.pop("_royalties", 0.0), tmp_path)
+
+    live = {"live_status": "LIVE", "price": 5.99}
+    # KU reads AND real traffic (orders incl. free) — a measurable conversion test
+    read_history = [{"mtd_orders": 12, "mtd_kenp": 133}, {"mtd_orders": 14, "mtd_kenp": 147}]
+
+    good = _book("good", dict(live), read_history)
+    assert good is not None and good["proposed_value"] == "2.99" and good["variable"] == "price"
+
+    assert _book("blocked", {**live, "live_status": "BLOCKED"}, read_history) is None
+    assert _book("cheap", {**live, "price": 2.99}, read_history) is None
+    assert _book("no-history", dict(live), None) is None            # ไม่มั่นใจ = ข้าม
+    assert _book("unread", dict(live), [{"mtd_kenp": 3}]) is None   # stray pages ≠ read
+    # distribution-starved: passes the old KENP≥50 gate but traffic is far below
+    # the noise floor → visibility problem, not a price problem → skip the slot
+    assert _book("starved", dict(live), [{"mtd_orders": 1, "mtd_kenp": 60}]) is None
+    assert _book("earning", {**live, "_royalties": 5.0}, read_history) is None
+
+    # price never recorded on listing → fall back to the upload-time
+    # recommended price; no record at all → skip, never guess
+    unpriced = {"live_status": "LIVE"}
+    assert _book("rec-price", dict(unpriced), read_history, rec_price=6.99) is not None
+    assert _book("rec-cheap", dict(unpriced), read_history, rec_price=2.99) is None
+    assert _book("no-price-record", dict(unpriced), read_history) is None
+
+    # a promo inside the 14-day evaluation window pollutes the price signal
+    from datetime import date, timedelta
+    soon = {"status": "Scheduled",
+            "start": (date.today() + timedelta(days=10)).isoformat(),
+            "end": (date.today() + timedelta(days=11)).isoformat()}
+    passed = {"status": "Done",
+              "start": (date.today() - timedelta(days=20)).isoformat(),
+              "end": (date.today() - timedelta(days=18)).isoformat()}
+    assert _book("promo-soon", {**live, "free_promo": soon}, read_history) is None
+    assert _book("promo-past", {**live, "free_promo": passed}, read_history) is not None
+
+
 def test_free_promo_only_for_enrolled_never_promoted():
     enrolled = {"kdp_select": {"status": "Enrolled"}}
     assert free_promo_candidate("s", enrolled) is not None
@@ -75,7 +123,19 @@ def test_free_promo_only_for_enrolled_never_promoted():
     assert free_promo_candidate("s", {}) is None
 
 
-def test_gather_skips_active_slugs_and_validates(tmp_path):
+def _pair_slugs(tmp_path, monkeypatch, slugs):
+    # experiment_proposer imports validate_action from the flat
+    # "kdp_action_executor" module (scripts/ on sys.path), not the
+    # scripts.kdp_action_executor instance the executor tests use.
+    import kdp_action_executor as executor_module
+
+    pairings = tmp_path / "promo_pairings.json"
+    pairings.write_text(json.dumps({"pairings": {slug: [{"channel": "reddit"}] for slug in slugs}}))
+    monkeypatch.setattr(executor_module, "PAIRINGS_FILE", pairings)
+    monkeypatch.setattr(executor_module, "REDDIT_SCHEDULE_FILE", tmp_path / "reddit_promo_schedule.json")
+
+
+def test_gather_skips_active_slugs_and_validates(tmp_path, monkeypatch):
     import sqlite3
 
     from business_ledger import init_ledger
@@ -93,6 +153,7 @@ def test_gather_skips_active_slugs_and_validates(tmp_path):
         folder = kdp / slug
         folder.mkdir(parents=True)
         (folder / "listing.json").write_text(json.dumps(listing))
+    _pair_slugs(tmp_path, monkeypatch, ["busy-book", "free-candidate"])
     create_experiment(db, slug="busy-book", asin="A1", variable="promotion",
                       action={"kind": "free_promo", "cost_usd": 0, "proposed_value": "2-day KDP Select free promotion"},
                       now=datetime(2026, 7, 11, tzinfo=timezone.utc))
@@ -101,3 +162,22 @@ def test_gather_skips_active_slugs_and_validates(tmp_path):
 
     assert [p["slug"] for p in proposals] == ["free-candidate"]
     assert proposals[0]["action"]["kind"] == "free_promo"
+
+
+def test_gather_never_proposes_an_unpaired_free_promo(tmp_path, monkeypatch):
+    from business_ledger import init_ledger
+    from profit_agent import _init_schema
+
+    db = tmp_path / "ledger.db"
+    init_ledger(db)
+    _init_schema(db)
+    kdp = tmp_path / "kdp"
+    folder = kdp / "naked-candidate"
+    folder.mkdir(parents=True)
+    (folder / "listing.json").write_text(json.dumps(
+        {"status": "uploaded", "asin": "A9", "kdp_select": {"status": "Enrolled"}}))
+    _pair_slugs(tmp_path, monkeypatch, [])  # no pairing declared for any slug
+
+    proposals = gather_proposals(kdp, db, LEAVES)
+
+    assert proposals == []

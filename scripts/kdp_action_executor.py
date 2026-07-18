@@ -409,22 +409,25 @@ async def _execute_price(action: dict, listing: dict, price: str) -> dict:
     from set_price import set_price
 
     slug = action["slug"]
-    before_price = listing.get("price")
-    ok = await set_price(slug, price, False)
+    browser_evidence = {}
+    ok = await set_price(slug, price, False, browser_evidence)
     if not ok:
         return {"returncode": 1,
                 "error": "set_price did not verify a published price change (35%-lock abort or no confirmation — see /tmp/set_price_*.png)"}
-    after = json.loads((KDP_DIR / slug / "listing.json").read_text(encoding="utf-8"))
-    if abs(float(after.get("price") or 0) - float(price)) >= 0.01:
-        return {"returncode": 1, "error": "listing price not updated after publish confirmation"}
+    before = browser_evidence.get("before") or {}
+    after = browser_evidence.get("after") or {}
+    if (not browser_evidence.get("confirmation_url") or
+            abs(float(after.get("price") or 0) - float(price)) >= 0.01):
+        return {"returncode": 1, "error": "browser did not return verified price evidence"}
     snapshot_id = latest_snapshot_id()
     return {
         "returncode": 0,
-        "confirmation_id": f"kdp-price-update:{slug}:{price}:{after.get('price_updated_at')}",
-        "external_url": f"https://kdp.amazon.com/en_US/title-setup/kindle/{after.get('kdp_book_id')}/pricing",
+        "confirmation_id": f"kdp-price-update:{slug}:{price}:{browser_evidence.get('confirmed_at')}",
+        "external_url": browser_evidence["confirmation_url"],
+        "screenshot": browser_evidence.get("screenshot"),
         "verified_state_change": {
-            "before": {"price": before_price},
-            "after": {"price": float(price), "price_updated_at": after.get("price_updated_at")},
+            "before": before,
+            "after": after,
             "before_snapshot_id": snapshot_id,
             "after_snapshot_id": snapshot_id,
         },

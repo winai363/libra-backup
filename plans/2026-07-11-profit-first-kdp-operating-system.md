@@ -14,6 +14,7 @@ The 90-day policy remains the source of truth. Libra now adds an internal 110% b
 - New verified royalty signals with meaningful orders or KENP enter `winner_watch`. They require a second observation window before repeatable-winner status.
 - Free-promotion distribution distinguishes planned, reminded, and verified. `reminded_at` and publisher capability declarations are not publication evidence; the proposer and executor both require an external `post_url` or `post_id` before consuming a promotion slot.
 - Overview royalties remain the headline. Attributed and unattributed royalties are reconciliation details and must not replace the account total.
+- Price mutations now return browser-native audit evidence from the live KDP page: input value before editing, confirmation text/URL after publish, confirmation timestamp, and screenshot. `listing.json` is a cache and is not execution proof.
 
 Implementation reference: `docs/superpowers/specs/2026-07-18-libra-profit-pace-agent-design.md` and `docs/superpowers/plans/2026-07-18-libra-profit-pace-agent.md`.
 

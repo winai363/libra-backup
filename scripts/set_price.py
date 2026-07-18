@@ -65,7 +65,9 @@ def _is_signin(url: str) -> bool:
     return "signin" in path or "/ap/" in path
 
 
-async def set_price(slug: str, price: str, dry_run: bool) -> bool:
+async def set_price(
+    slug: str, price: str, dry_run: bool, evidence_out: dict | None = None
+) -> bool:
     from playwright.async_api import async_playwright
 
     listing_file = KDP_DIR / slug / "listing.json"
@@ -193,8 +195,32 @@ async def set_price(slug: str, price: str, dry_run: bool) -> bool:
                 logger.error(f"No publish confirmation (url={page.url})")
                 return False
 
+            confirmation_text = "publish confirmation observed"
+            try:
+                body = await page.locator("body").inner_text(timeout=5000)
+                confirmation_text = next(
+                    (line.strip() for line in body.splitlines()
+                     if any(word in line.lower() for word in ("publish", "review", "submitted"))
+                     and line.strip()),
+                    confirmation_text,
+                )[:300]
+            except Exception:
+                pass
+            after_shot = f"/tmp/set_price_confirmed_{slug}.png"
+            await page.screenshot(path=after_shot, full_page=True)
+            confirmed_at = datetime.now().isoformat(timespec="seconds")
+            if evidence_out is not None:
+                evidence_out.update({
+                    "pricing_url": pricing_url,
+                    "before": {"price": old_val, "source": "kdp_price_input"},
+                    "after": {"price": str(price), "confirmation": confirmation_text},
+                    "confirmation_url": page.url,
+                    "confirmed_at": confirmed_at,
+                    "screenshot": after_shot,
+                })
+
             data["price"] = float(price)
-            data["price_updated_at"] = datetime.now().isoformat(timespec="seconds")
+            data["price_updated_at"] = confirmed_at
             listing_file.write_text(json.dumps(data, ensure_ascii=False, indent=2))
             logger.info(f"✅ Price updated: {slug} {old_val} → ${price}")
             return True

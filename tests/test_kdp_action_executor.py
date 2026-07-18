@@ -1,8 +1,41 @@
 from scripts.kdp_action_executor import (
+    _execute_price,
     validate_action,
     validate_category_action,
     verify_chips,
 )
+
+
+def test_execute_price_uses_browser_evidence_not_local_listing(monkeypatch):
+    import asyncio
+    import sys
+    import types
+
+    async def fake_set_price(slug, price, dry_run, evidence_out):
+        evidence_out.update({
+            "pricing_url": "https://kdp.amazon.com/title/pricing",
+            "before": {"price": "5.99", "source": "kdp_price_input"},
+            "after": {"price": "2.99", "confirmation": "Submitted for publication"},
+            "confirmation_url": "https://kdp.amazon.com/bookshelf",
+            "screenshot": "/tmp/after.png",
+        })
+        return True
+
+    monkeypatch.setitem(sys.modules, "set_price", types.SimpleNamespace(set_price=fake_set_price))
+    monkeypatch.setattr("scripts.kdp_action_executor.latest_snapshot_id", lambda: 9)
+
+    result = asyncio.run(_execute_price(
+        {"slug": "book"}, {"price": 99.0, "kdp_book_id": "X1"}, "2.99"
+    ))
+
+    assert result["verified_state_change"] == {
+        "before": {"price": "5.99", "source": "kdp_price_input"},
+        "after": {"price": "2.99", "confirmation": "Submitted for publication"},
+        "before_snapshot_id": 9,
+        "after_snapshot_id": 9,
+    }
+    assert result["external_url"] == "https://kdp.amazon.com/bookshelf"
+    assert result["screenshot"] == "/tmp/after.png"
 
 LEAVES = {
     "Crafts, Hobbies & Home > Crafts & Hobbies > Painting",

@@ -472,3 +472,9 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - Reminder/digest/queue/click/process success alone is not proof. Stale, incomplete, OTP/CAPTCHA/login-blocked, or unverifiable work must stop as `manual_required`/`insufficient_data` and notify Bui.
 - Account-safety, no-paid, experiment-cap, and no-republish rules always override automation.
 - For workflows without a reliable API, Bui requires Claude-for-Chrome-style browser automation: inspect the live page, act, wait, and verify the live after-state. Record page/URL, before, after, confirmation, and screenshot when needed; a click alone is never success.
+## 2026-07-18 — Browser-native price evidence
+
+- Upgraded the active `price_update` lane so `scripts/set_price.py` returns evidence read from the live KDP browser session: pricing URL, input value before the edit, target value, publish confirmation text/URL, timestamp, and post-confirmation screenshot.
+- `scripts/kdp_action_executor.py` now builds `verified_state_change` from that browser evidence instead of reading `listing.json` as proof. Missing confirmation URL/evidence fails the action.
+- Kept the existing CLI and boolean caller contract backward compatible. No live price mutation was triggered during this change.
+- Verification: `189 passed`; py_compile and diff check passed.

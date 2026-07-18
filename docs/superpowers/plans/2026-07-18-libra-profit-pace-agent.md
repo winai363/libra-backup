@@ -78,5 +78,5 @@
 - [x] Run `PYTHONPATH=. pytest -q` and require zero failures.
 - [x] Run `python3 -m py_compile app.py profit_pace.py scripts/libra_profit_agent_daily.py scripts/experiment_proposer.py`.
 - [x] Restart `libra.service`, verify it is active, and inspect `/api/profit/portfolio`.
-- [ ] Commit and push only Libra source changes; preserve existing runtime changes in `data/reddit_promo_schedule.json`.
-- [ ] Update memory immediately, refresh handoff, and release ownership with `ai-work finish`.
+- [x] Commit and push only Libra source changes; preserve existing runtime changes in `data/reddit_promo_schedule.json`.
+- [x] Update memory immediately, refresh handoff, and release ownership with `ai-work finish`.

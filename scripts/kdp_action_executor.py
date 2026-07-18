@@ -131,16 +131,13 @@ def has_distribution_pairing(slug: str) -> bool:
     """A free promo only moves books that get an external push while free —
     measured July 2026: 13 of 17 promos with no paired channel got 0 downloads,
     and KDP Select allows just 5 free days per title per 90-day term. A pairing
-    is a declared entry in promo_pairings.json or a scheduled Reddit post."""
-    try:
-        pairings = json.loads(PAIRINGS_FILE.read_text(encoding="utf-8")).get("pairings", {})
-        if pairings.get(slug):
-            return True
-    except (OSError, json.JSONDecodeError):
-        pass
+    requires external publication evidence, not a declaration or reminder."""
     try:
         posts = json.loads(REDDIT_SCHEDULE_FILE.read_text(encoding="utf-8")).get("posts", [])
-        return any(post.get("slug") == slug for post in posts)
+        return any(
+            post.get("slug") == slug and (post.get("post_url") or post.get("post_id"))
+            for post in posts
+        )
     except (OSError, json.JSONDecodeError):
         return False
 
@@ -172,8 +169,8 @@ def validate_action(action: dict, listing: dict | None, leaves: set) -> tuple[bo
         if not 1 <= days <= 5:
             return False, f"free promo days out of KDP Select range: {days}", {}
         if not has_distribution_pairing(action.get("slug") or ""):
-            return False, ("refused: free promo requires a paired distribution channel "
-                           "(promo_pairings.json or a scheduled Reddit post) — unpaired promos "
+            return False, ("refused: free promo requires verified distribution evidence "
+                           "(post_url or post_id) — unverified promos "
                            "measured 0 downloads and burn the 5-free-days/term quota"), {}
         return True, "ok", {"days": days}
     if kind == "price_update":

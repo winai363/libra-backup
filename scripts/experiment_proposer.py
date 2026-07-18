@@ -39,6 +39,7 @@ sys.path.insert(0, str(LIBRA_DIR / "scripts"))
 from category_resolver import _tok, resolve_paths  # noqa: E402
 from distribution_report import send_telegram  # noqa: E402
 from kdp_action_executor import load_tree_leaves, validate_action  # noqa: E402
+import kdp_action_executor as executor_config  # noqa: E402
 from kdp_categories import _tokens as _matcher_tokens  # noqa: E402
 from profit_agent import ACTIVE_STATUSES, create_experiment, record_action_result  # noqa: E402
 
@@ -148,6 +149,49 @@ def free_promo_candidate(slug: str, listing: dict) -> dict | None:
         "hypothesis": "A first free promotion can surface verified commercial demand for an invisible title.",
         "variable": "promotion",
     }
+
+
+def distribution_evidence(slug: str, pairings: dict, schedule: dict) -> dict:
+    """Classify distribution truth without equating reminders to publication."""
+    posts = [post for post in schedule.get("posts", []) if post.get("slug") == slug]
+    for post in posts:
+        proof = post.get("post_url") or post.get("post_id")
+        if proof:
+            return {
+                "status": "verified",
+                "usable_for_promo": True,
+                "channel": post.get("channel") or "reddit",
+                "proof": str(proof),
+            }
+    declared = pairings.get("pairings", {}).get(slug, [])
+    if any(post.get("reminded_at") for post in posts):
+        return {
+            "status": "reminded", "usable_for_promo": False,
+            "channel": "reddit", "proof": None,
+        }
+    if declared or posts:
+        channel = (declared[0].get("channel") if declared else
+                   posts[0].get("channel") or "reddit")
+        return {
+            "status": "planned", "usable_for_promo": False,
+            "channel": channel, "proof": None,
+        }
+    return {
+        "status": "missing", "usable_for_promo": False,
+        "channel": None, "proof": None,
+    }
+
+
+def _distribution_evidence_for(slug: str) -> dict:
+    try:
+        pairings = json.loads(executor_config.PAIRINGS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        pairings = {}
+    try:
+        schedule = json.loads(executor_config.REDDIT_SCHEDULE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        schedule = {}
+    return distribution_evidence(slug, pairings, schedule)
 
 
 PRICE_TEST_VALUE = "2.99"        # bottom of the 70%-royalty band
@@ -346,6 +390,9 @@ def gather_proposals(kdp_dir: Path, db_path: Path, leaves: set) -> list:
                           free_promo_candidate(slug, listing),
                           price_candidate(slug, listing, royalty, kdp_dir)):
             if candidate is None:
+                continue
+            if (candidate["kind"] == "free_promo" and
+                    not _distribution_evidence_for(slug)["usable_for_promo"]):
                 continue
             if already_tried(db_path, slug, candidate["kind"], candidate["proposed_value"]):
                 continue

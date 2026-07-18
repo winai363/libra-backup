@@ -10,7 +10,7 @@ Move Libra from a policy-compliant experiment runner to a profit-paced portfolio
 - The internal stretch target is 110% of the approved 90-day revenue target; the approved target itself is unchanged.
 - Paid spend, new-title generation, and metadata/category mutation on published ASINs remain disabled.
 - At most three experiments may be active, one variable per experiment.
-- Free promotion eligibility requires distribution evidence. A reminder or planned queue entry is not proof of publication.
+- Free promotion eligibility requires `post_url` or `post_id` evidence. A capability declaration, reminder, or planned queue entry is not proof of publication.
 
 ## Components
 
@@ -34,7 +34,7 @@ Rank titles using verified royalties, recent orders, KENP, data completeness, ac
 
 ### Distribution Evidence
 
-Distinguish `planned`, `reminded`, and `verified` distribution. Only a record containing an external `post_url` or `post_id` is verified. New free-promotion proposals require verified evidence or an explicitly scheduled post whose publisher can return verifiable evidence before promotion execution. Existing experiments are not rewritten retroactively.
+Distinguish `planned`, `reminded`, and `verified` distribution. Only a record containing an external `post_url` or `post_id` is verified. New free-promotion proposals and executor actions require verified external evidence before KDP scheduling. Existing completed experiments are not rewritten retroactively.
 
 ### Reporting
 
@@ -53,4 +53,3 @@ Expose the pace controller, allocation summary, ranked opportunities, and winner
 - Existing 178 tests remain green.
 - Production API returns current overview royalties and the new decision blocks.
 - A dry-run proposer cannot create an unverified free-promotion candidate.
-

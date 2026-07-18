@@ -31,6 +31,7 @@ from profit_agent import (  # noqa: E402
     record_action_result,
     title_financial_boundary,
 )
+from profit_pace import build_pace_controller, snapshot_revenue_windows  # noqa: E402
 
 LEDGER_FILE = LIBRA_DIR / "data" / "libra-business.db"
 STATE_FILE = LIBRA_DIR / "data" / "profit-agent-state.json"
@@ -102,6 +103,26 @@ def _persisted_mode_start(state_path: Path) -> str | None:
         return datetime.fromisoformat(value).isoformat() if value else None
     except (OSError, json.JSONDecodeError, TypeError, ValueError):
         return None
+
+
+def _mode_revenue(db_path: Path, started_at: datetime | None = None) -> tuple[float, float, float]:
+    """Return mode-window revenue plus conservative 7/14-day deltas."""
+    if not db_path.exists():
+        return 0.0, 0.0, 0.0
+    try:
+        with sqlite3.connect(db_path) as connection:
+            rows = connection.execute(
+                "SELECT observed_at, month, royalties_usd FROM kdp_snapshots "
+                "ORDER BY observed_at ASC, id ASC"
+            ).fetchall()
+    except sqlite3.Error:
+        return 0.0, 0.0, 0.0
+    if not rows:
+        return 0.0, 0.0, 0.0
+    windows = snapshot_revenue_windows(
+        rows, datetime.fromisoformat(rows[-1][0]), started_at=started_at
+    )
+    return windows["mode"], windows["days_7"], windows["days_14"]
 
 
 def _policy_registry(db_path: Path, experiments: list[dict]) -> list[dict]:
@@ -376,6 +397,17 @@ def run_daily(
         "gate_reason": next((reason for reason in policy_reasons if reason != "allowed"), "allowed"),
         "experiments": advanced,
     }
+    try:
+        pace_start = datetime.fromisoformat(mode_started_at)
+        pace_end = datetime.fromisoformat(policy_mode["ends_at"]) if policy_mode else pace_start + timedelta(days=90)
+    except (KeyError, TypeError, ValueError):
+        pace_start = now
+        pace_end = now + timedelta(days=90)
+    mode_revenue, revenue_7d, revenue_14d = _mode_revenue(db_path, pace_start)
+    state["pace"] = build_pace_controller(
+        mode_revenue, 75.0, pace_start, pace_end, now, revenue_7d, revenue_14d,
+        data_fresh=freshness_open,
+    )
     if not dry_run:
         _write_atomic(state_path, state)
         if send:

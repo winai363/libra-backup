@@ -4,6 +4,19 @@
 
 Make Libra optimize for verified KDP royalties and net contribution profit, not generated-book count, free downloads, or completed distribution tasks. The first milestone is a trustworthy daily decision loop for the existing catalog; new-book generation and paid ads remain off until the data gates below pass.
 
+## Current Operating Layer — Profit Pace (2026-07-18)
+
+The 90-day policy remains the source of truth. Libra now adds an internal 110% buffer (`$82.50` against the approved `$75` revenue target) so management aims above the minimum without changing the approved target.
+
+- Daily mode is `ahead`, `on_pace`, `recovery`, `critical`, or `insufficient_data`, based on verified mode-window royalties versus elapsed approved-target pace.
+- The controller reports variance, required daily revenue to reach the stretch target, 7/14-day run rates, and projected Day-90 revenue.
+- The live portfolio is allocated `70% exploit / 20% explore / 10% archive`; this is attention allocation, not automatic listing mutation.
+- New verified royalty signals with meaningful orders or KENP enter `winner_watch`. They require a second observation window before repeatable-winner status.
+- Free-promotion distribution distinguishes planned, reminded, and verified. `reminded_at` and publisher capability declarations are not publication evidence; the proposer and executor both require an external `post_url` or `post_id` before consuming a promotion slot.
+- Overview royalties remain the headline. Attributed and unattributed royalties are reconciliation details and must not replace the account total.
+
+Implementation reference: `docs/superpowers/specs/2026-07-18-libra-profit-pace-agent-design.md` and `docs/superpowers/plans/2026-07-18-libra-profit-pace-agent.md`.
+
 ## Current Evidence
 
 - KDP Reports log on 2026-07-11 shows 252 all-type orders/downloads, 361 KENP, and $7.6301905904 MTD royalties.

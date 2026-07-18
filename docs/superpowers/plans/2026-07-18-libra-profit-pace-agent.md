@@ -29,10 +29,10 @@
 - Produces: `classify_portfolio(books: list[dict]) -> dict`
 - Produces: `rank_opportunities(books: list[dict]) -> list[dict]`
 
-- [ ] Write failing tests for elapsed pace, recovery/critical/ahead boundaries, 110% stretch target, portfolio buckets, and evidence-based ranking.
-- [ ] Run `PYTHONPATH=. pytest tests/test_profit_pace.py -q` and confirm failures are caused by the missing module/functions.
-- [ ] Implement deterministic pure functions with no network, file, or database writes.
-- [ ] Run the focused tests and confirm they pass.
+- [x] Write failing tests for elapsed pace, recovery/critical/ahead boundaries, 110% stretch target, portfolio buckets, and evidence-based ranking.
+- [x] Run `PYTHONPATH=. pytest tests/test_profit_pace.py -q` and confirm failures are caused by the missing module/functions.
+- [x] Implement deterministic pure functions with no network, file, or database writes.
+- [x] Run the focused tests and confirm they pass.
 
 ### Task 2: Portfolio API and Daily Agent Integration
 
@@ -46,10 +46,10 @@
 - Consumes: Task 1 decision functions.
 - Produces: `pace`, `allocation`, `opportunities`, and `winner_watch` in API/agent state.
 
-- [ ] Write failing API and daily-agent tests asserting the new decision blocks and overview-royalty headline.
-- [ ] Run focused tests and confirm the expected missing-key failures.
-- [ ] Integrate the pure decision module without changing the experiment state machine or executor gates.
-- [ ] Run focused tests and confirm they pass.
+- [x] Write failing API and daily-agent tests asserting the new decision blocks and overview-royalty headline.
+- [x] Run focused tests and confirm the expected missing-key failures.
+- [x] Integrate the pure decision module without changing the experiment state machine or executor gates.
+- [x] Run focused tests and confirm they pass.
 
 ### Task 3: Verified Distribution Gate
 
@@ -61,10 +61,10 @@
 - Produces: `distribution_evidence(slug, pairings, schedule) -> dict` with `planned`, `reminded`, or `verified` status.
 - Consumes: current pairing and Reddit schedule JSON structures.
 
-- [ ] Write failing tests proving `reminded_at` alone is not verified and `post_url`/`post_id` is verified.
-- [ ] Run focused tests and confirm the new proof requirements fail.
-- [ ] Require usable distribution evidence for new free-promotion proposals while leaving existing experiment records unchanged.
-- [ ] Run proposer tests and confirm they pass.
+- [x] Write failing tests proving `reminded_at` alone is not verified and `post_url`/`post_id` is verified.
+- [x] Run focused tests and confirm the new proof requirements fail.
+- [x] Require usable distribution evidence for new free-promotion proposals while leaving existing experiment records unchanged.
+- [x] Run proposer tests and confirm they pass.
 
 ### Task 4: Plan, Full Verification, and Deployment
 
@@ -74,10 +74,9 @@
 - Modify: `/root/memory.md`
 - Modify: `/root/telos.md` only if business status materially changes.
 
-- [ ] Update the operating plan with the profit-pace layer, stretch target, portfolio allocation, and distribution proof rule.
-- [ ] Run `PYTHONPATH=. pytest -q` and require zero failures.
-- [ ] Run `python3 -m py_compile app.py profit_pace.py scripts/libra_profit_agent_daily.py scripts/experiment_proposer.py`.
-- [ ] Restart `libra.service`, verify it is active, and inspect `/api/profit/portfolio`.
+- [x] Update the operating plan with the profit-pace layer, stretch target, portfolio allocation, and distribution proof rule.
+- [x] Run `PYTHONPATH=. pytest -q` and require zero failures.
+- [x] Run `python3 -m py_compile app.py profit_pace.py scripts/libra_profit_agent_daily.py scripts/experiment_proposer.py`.
+- [x] Restart `libra.service`, verify it is active, and inspect `/api/profit/portfolio`.
 - [ ] Commit and push only Libra source changes; preserve existing runtime changes in `data/reddit_promo_schedule.json`.
 - [ ] Update memory immediately, refresh handoff, and release ownership with `ai-work finish`.
-

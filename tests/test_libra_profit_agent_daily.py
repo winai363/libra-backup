@@ -62,6 +62,8 @@ def test_fresh_reconciled_ledger_advances_and_audits_experiments(tmp_path):
     assert all(item["status"] == "ready" for item in state["experiments"])
     assert state_path.exists()
     assert state["mode_started_at"] == NOW.isoformat()
+    assert state["pace"]["stretch_target"] == 82.5
+    assert state["pace"]["mode"] == "insufficient_data"
     with sqlite3.connect(db) as connection:
         assert connection.execute("SELECT COUNT(*) FROM agent_actions").fetchone()[0] == 3
 

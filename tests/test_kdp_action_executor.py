@@ -142,8 +142,12 @@ def _pair_slug(tmp_path, monkeypatch, slug):
 
     pairings = tmp_path / "promo_pairings.json"
     pairings.write_text(json.dumps({"pairings": {slug: [{"channel": "reddit"}]}}))
+    schedule = tmp_path / "reddit_promo_schedule.json"
+    schedule.write_text(json.dumps({"posts": [
+        {"slug": slug, "post_url": f"https://example.com/{slug}"}
+    ]}))
     monkeypatch.setattr(executor_module, "PAIRINGS_FILE", pairings)
-    monkeypatch.setattr(executor_module, "REDDIT_SCHEDULE_FILE", tmp_path / "reddit_promo_schedule.json")
+    monkeypatch.setattr(executor_module, "REDDIT_SCHEDULE_FILE", schedule)
 
 
 def test_free_promo_days_parsed_and_bounded(tmp_path, monkeypatch):
@@ -168,17 +172,18 @@ def test_free_promo_without_distribution_pairing_is_refused(tmp_path, monkeypatc
         {"kind": "free_promo", "slug": "unpaired-book", "cost_usd": 0,
          "proposed_value": "2-day KDP Select free promotion"},
         LISTING, LEAVES)
-    assert ok is False and "paired distribution channel" in reason
+    assert ok is False and "verified distribution evidence" in reason
 
 
-def test_free_promo_pairing_accepts_scheduled_reddit_post(tmp_path, monkeypatch):
+def test_free_promo_pairing_accepts_verified_reddit_post(tmp_path, monkeypatch):
     import json
 
     import scripts.kdp_action_executor as executor_module
 
     monkeypatch.setattr(executor_module, "PAIRINGS_FILE", tmp_path / "missing.json")
     schedule = tmp_path / "reddit_promo_schedule.json"
-    schedule.write_text(json.dumps({"posts": [{"date": "2026-07-16", "slug": "reddit-book"}]}))
+    schedule.write_text(json.dumps({"posts": [{"date": "2026-07-16", "slug": "reddit-book",
+                                                "post_url": "https://example.com/post/1"}]}))
     monkeypatch.setattr(executor_module, "REDDIT_SCHEDULE_FILE", schedule)
     ok, _, extra = validate_action(
         {"kind": "free_promo", "slug": "reddit-book", "cost_usd": 0,

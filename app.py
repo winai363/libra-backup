@@ -363,6 +363,10 @@ def build_profit_dashboard() -> dict:
     from business_ledger import portfolio_financials
     from profit_agent import read_policy_mode
     from profit_tracker import build_portfolio
+    from profit_pace import (
+        build_pace_controller, classify_portfolio, rank_opportunities,
+        snapshot_revenue_windows,
+    )
 
     now = _profit_now()
     ledger = portfolio_financials(PROFIT_LEDGER_FILE, now.strftime("%Y-%m"))
@@ -415,13 +419,65 @@ def build_profit_dashboard() -> dict:
     if persisted_start:
         start_candidates.append(datetime.fromisoformat(persisted_start))
     started_at = min(start_candidates) if start_candidates else None
+    kpi_plan = _profit_kpi_plan(ledger)
+    mode_period = next(
+        (period for period in kpi_plan["periods"] if period["key"] == "mode"),
+        {"metrics": []},
+    )
+    mode_revenue = next(
+        (float(metric["actual"]) for metric in mode_period["metrics"]
+         if metric["name"] == "Verified royalties"),
+        0.0,
+    )
+    policy_mode = read_policy_mode(PROFIT_LEDGER_FILE) or {
+        "paid_spend_allowed": False, "enabled": False
+    }
+    pace_start = datetime.fromisoformat(policy_mode["started_at"]) if policy_mode.get("started_at") else now
+    pace_end = datetime.fromisoformat(policy_mode["ends_at"]) if policy_mode.get("ends_at") else pace_start + timedelta(days=90)
+    try:
+        with sqlite3.connect(PROFIT_LEDGER_FILE) as connection:
+            revenue_rows = connection.execute(
+                "SELECT observed_at, month, royalties_usd FROM kdp_snapshots "
+                "ORDER BY observed_at ASC, id ASC"
+            ).fetchall()
+    except sqlite3.Error:
+        revenue_rows = []
+    revenue_windows = snapshot_revenue_windows(revenue_rows, now, started_at=pace_start)
+    pace = build_pace_controller(
+        mode_revenue, 75.0, pace_start, pace_end, now,
+        revenue_windows["days_7"], revenue_windows["days_14"],
+        data_fresh=reconciliation["fresh"],
+    )
+    decision_books = []
+    for book in portfolio["books"]:
+        try:
+            listing = json.loads(
+                (KDP_DIR / book["slug"] / "listing.json").read_text(encoding="utf-8")
+            )
+            live_status = listing.get("live_status")
+        except (OSError, json.JSONDecodeError):
+            live_status = None
+        latest_date = (book.get("latest_snapshot") or {}).get("date")
+        try:
+            title_fresh = (now.date() - datetime.fromisoformat(latest_date).date()).days <= 2
+        except (TypeError, ValueError):
+            title_fresh = False
+        decision_books.append({
+            **book, "live_status": live_status, "data_fresh": title_fresh
+        })
+    allocation = classify_portfolio(decision_books)
+    opportunities = rank_opportunities(decision_books)
     return {
         "generated_at": now.isoformat(),
         "financials": financials,
-        "kpi_plan": _profit_kpi_plan(ledger),
+        "kpi_plan": kpi_plan,
+        "pace": pace,
+        "allocation": allocation,
+        "opportunities": opportunities,
+        "winner_watch": [item for item in opportunities if item["lane"] == "winner_watch"],
         "reconciliation": reconciliation,
         "policy": {
-            **(read_policy_mode(PROFIT_LEDGER_FILE) or {"paid_spend_allowed": False, "enabled": False}),
+            **policy_mode,
             "active_experiment_limit": 3,
             "active_experiment_limit_violated": active_experiment_count > 3,
         },

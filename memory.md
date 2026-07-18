@@ -456,3 +456,12 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - เทสต์: แก้ 4 ตัวที่ encode พฤติกรรมเก่า + เพิ่ม 9 ตัวใหม่ (deadlock regression, pairing refuse/accept, merged rows, boundary bound, KPI window) → **178 passed**
 - Registry หลังปิด exp6: active 2 (exp2 cooldown ประเมิน ~25 ก.ค., exp7) — slot ว่าง 1 จะไม่ถูกเติมจนกว่ามีเล่ม paired (by design)
 - ⚠️ บทเรียน: **listing.json เชื่อไม่ได้เรื่องประวัติโปรโม** — เช็ค promotion-manager จริงก่อนเสมอ (เขียนลง CLAUDE.md แล้ว)
+## 2026-07-18 — Profit-Pace Agent deployed
+
+- Added `profit_pace.py`: 110% internal stretch target (`$82.50` vs approved `$75`), elapsed pace, variance, recovery/critical/ahead modes, real 7/14-day run rates, required daily revenue, and Day-90 projection.
+- Added evidence-based portfolio allocation (`70% exploit / 20% explore / 10% archive`) and winner fast lane. Live state: exploit 5, explore 4, archive 31; winner watch = `ai-workflows-accountants-pt`, `beginner-watercolor-spanish`.
+- Fixed pace accounting across KDP calendar-month resets and excluded snapshots before the persisted 90-day mode start. Stale data produces `insufficient_data`.
+- Tightened free-promo distribution: proposer and executor require an external `post_url` or `post_id`; pairing declarations and `reminded_at` are not publication evidence.
+- Blocked/non-LIVE titles are excluded from allocation and opportunities. No paid spend, new-title generation, or published-ASIN metadata/category safety gate was weakened.
+- Production after deploy: verified royalties `$12.59`, contribution Profit A `$3.69`, mode revenue `$4.96`, pace `recovery`, variance `-$0.87`, required stretch pace `$0.93/day`, projected Day-90 `$62.82` at current 7-day run rate.
+- Verification: `188 passed`, py_compile passed, `libra.service` active, production API verified.

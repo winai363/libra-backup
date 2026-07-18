@@ -71,6 +71,13 @@ def test_profit_api_separates_business_truth_and_checkpoints(tmp_path, monkeypat
     assert payload["checkpoints"][0]["outcome"] == "passed"
     assert payload["checkpoints"][1]["outcome"] == "pending"
     assert payload["checkpoints"][2]["outcome"] == "pending"
+    assert payload["pace"]["stretch_target"] == 82.5
+    assert payload["pace"]["mode"] == "insufficient_data"
+    assert payload["allocation"]["policy"] == {"exploit": 70, "explore": 20, "archive": 10}
+    assert isinstance(payload["opportunities"], list)
+    assert payload["winner_watch"] == [
+        item for item in payload["opportunities"] if item["lane"] == "winner_watch"
+    ]
 
 
 def test_profit_agent_api_returns_sanitized_latest_state(tmp_path, monkeypatch):

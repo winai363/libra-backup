@@ -1,6 +1,7 @@
 import json
 
 from scripts.experiment_proposer import (
+    distribution_evidence,
     free_promo_candidate,
     gather_proposals,
     leaf_drivable,
@@ -131,8 +132,12 @@ def _pair_slugs(tmp_path, monkeypatch, slugs):
 
     pairings = tmp_path / "promo_pairings.json"
     pairings.write_text(json.dumps({"pairings": {slug: [{"channel": "reddit"}] for slug in slugs}}))
+    schedule = tmp_path / "reddit_promo_schedule.json"
+    schedule.write_text(json.dumps({"posts": [
+        {"slug": slug, "post_url": f"https://example.com/{slug}"} for slug in slugs
+    ]}))
     monkeypatch.setattr(executor_module, "PAIRINGS_FILE", pairings)
-    monkeypatch.setattr(executor_module, "REDDIT_SCHEDULE_FILE", tmp_path / "reddit_promo_schedule.json")
+    monkeypatch.setattr(executor_module, "REDDIT_SCHEDULE_FILE", schedule)
 
 
 def test_gather_skips_active_slugs_and_validates(tmp_path, monkeypatch):
@@ -181,3 +186,32 @@ def test_gather_never_proposes_an_unpaired_free_promo(tmp_path, monkeypatch):
     proposals = gather_proposals(kdp, db, LEAVES)
 
     assert proposals == []
+
+
+def test_distribution_evidence_does_not_treat_reminder_as_publication():
+    evidence = distribution_evidence(
+        "book",
+        {"pairings": {"book": [{"channel": "reddit"}]}},
+        {"posts": [{"slug": "book", "reminded_at": "2026-07-17T20:00:00"}]},
+    )
+
+    assert evidence["status"] == "reminded"
+    assert evidence["usable_for_promo"] is False
+
+
+def test_distribution_evidence_requires_external_proof():
+    verified = distribution_evidence(
+        "book", {}, {"posts": [{"slug": "book", "post_url": "https://example.com/post/1"}]}
+    )
+    capable = distribution_evidence(
+        "book",
+        {"pairings": {"book": [{"channel": "reddit", "publisher_returns_evidence": True}]}},
+        {},
+    )
+
+    assert verified == {
+        "status": "verified", "usable_for_promo": True,
+        "channel": "reddit", "proof": "https://example.com/post/1",
+    }
+    assert capable["status"] == "planned"
+    assert capable["usable_for_promo"] is False

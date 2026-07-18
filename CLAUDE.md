@@ -35,6 +35,8 @@ block ครั้งถัดไปเสี่ยงระดับปิด�
 - Auto ได้เมื่อ input มาจากหลักฐานตรวจสอบได้ และผลลัพธ์มี `verified_state_change`, KDP/API response, report/transaction จริง หรือ external `post_url`/`post_id` ที่ตรวจย้อนกลับได้
 - การคำนวณ, จัดอันดับ, forecast และข้อเสนอทำ auto ได้ แต่ต้องแยก verified fact ออกจาก inference และแสดง data freshness/confidence
 - External action จะนับว่า `executed` ได้ต่อเมื่อมีหลักฐานผลลัพธ์จริง ห้ามนับ reminder, digest, planned queue, browser click หรือ process exit code อย่างเดียวเป็นความสำเร็จ
+- งานที่ไม่มี API ให้ใช้ browser automation แบบ Claude for Chrome/Playwright: เปิดหน้าจริง → อ่านสถานะก่อนทำ → คลิก/กรอก → รอผล → อ่านสถานะหลังทำและเก็บหลักฐาน before/after; ห้ามใช้ข้อมูลในไฟล์แทนหน้าจริงเมื่อหน้าจอเป็น source of truth
+- Browser action ต้องบันทึก URL/หน้าที่ทำ, ค่าก่อนทำ, ค่าหลังทำ และ confirmation/status ที่หน้าเว็บแสดง (รวม screenshot เมื่อจำเป็น) การคลิกสำเร็จทางเทคนิคอย่างเดียวไม่ใช่ผลลัพธ์ธุรกิจ
 - ถ้าต้องเดา, ข้อมูล stale/incomplete, ติด OTP/CAPTCHA/login, หรือยืนยัน before/after ไม่ได้ → หยุดเป็น `manual_required`/`insufficient_data` และแจ้งบุ๋ย ห้ามฝืนทำ
 - กฎความปลอดภัยบัญชี, no-paid policy, experiment cap และข้อห้าม republish มีอำนาจเหนือ automation เสมอ
 

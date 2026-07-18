@@ -471,3 +471,4 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - `executed` requires a verified external result such as KDP/API response, before/after state change, report/transaction, or external `post_url`/`post_id`.
 - Reminder/digest/queue/click/process success alone is not proof. Stale, incomplete, OTP/CAPTCHA/login-blocked, or unverifiable work must stop as `manual_required`/`insufficient_data` and notify Bui.
 - Account-safety, no-paid, experiment-cap, and no-republish rules always override automation.
+- For workflows without a reliable API, Bui requires Claude-for-Chrome-style browser automation: inspect the live page, act, wait, and verify the live after-state. Record page/URL, before, after, confirmation, and screenshot when needed; a click alone is never success.

@@ -28,6 +28,16 @@ block ครั้งถัดไปเสี่ยงระดับปิด�
 ## โหมดปัจจุบัน (11 ก.ค. 2026 →)
 90-day profit mode: หยุดสร้างเล่มใหม่, cron หลัก = profit agent 10:15 (`--execute-actions`), เลน experiment = **free_promo + price_update** (category ปิดโดย gate). Checkpoint 31 ก.ค. = วันตัดสิน ads/paid promo.
 
+## กฎ Autonomous Management (บุ๋ยยืนยัน 18 ก.ค. 2026)
+
+**อะไรทำ auto ได้ให้ทำ แต่ต้องมั่นใจและเห็นผลจริง ห้ามเดา**
+
+- Auto ได้เมื่อ input มาจากหลักฐานตรวจสอบได้ และผลลัพธ์มี `verified_state_change`, KDP/API response, report/transaction จริง หรือ external `post_url`/`post_id` ที่ตรวจย้อนกลับได้
+- การคำนวณ, จัดอันดับ, forecast และข้อเสนอทำ auto ได้ แต่ต้องแยก verified fact ออกจาก inference และแสดง data freshness/confidence
+- External action จะนับว่า `executed` ได้ต่อเมื่อมีหลักฐานผลลัพธ์จริง ห้ามนับ reminder, digest, planned queue, browser click หรือ process exit code อย่างเดียวเป็นความสำเร็จ
+- ถ้าต้องเดา, ข้อมูล stale/incomplete, ติด OTP/CAPTCHA/login, หรือยืนยัน before/after ไม่ได้ → หยุดเป็น `manual_required`/`insufficient_data` และแจ้งบุ๋ย ห้ามฝืนทำ
+- กฎความปลอดภัยบัญชี, no-paid policy, experiment cap และข้อห้าม republish มีอำนาจเหนือ automation เสมอ
+
 ### เลน price experiment (บุ๋ยอนุมัติ 11 ก.ค.)
 - เกณฑ์เสนอ (proposer, deterministic): LIVE + KENP ≥50 (มีคนอ่าน KU จริง) + royalties ≤$1 + ราคาปัจจุบัน >$2.99 → ทดลอง $2.99, วัดผล 14 วัน (contribution delta)
 - ราคาปัจจุบันอ่านจาก listing.price → fallback pricing-recommendation.json `recommended_price_usd`; ไม่มีทั้งคู่ = ข้าม

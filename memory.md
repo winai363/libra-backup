@@ -465,3 +465,9 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - Blocked/non-LIVE titles are excluded from allocation and opportunities. No paid spend, new-title generation, or published-ASIN metadata/category safety gate was weakened.
 - Production after deploy: verified royalties `$12.59`, contribution Profit A `$3.69`, mode revenue `$4.96`, pace `recovery`, variance `-$0.87`, required stretch pace `$0.93/day`, projected Day-90 `$62.82` at current 7-day run rate.
 - Verification: `188 passed`, py_compile passed, `libra.service` active, production API verified.
+## 2026-07-18 — Permanent autonomous-management rule
+
+- Bui confirmed: automate anything Libra can do with high confidence and directly verifiable evidence; never guess.
+- `executed` requires a verified external result such as KDP/API response, before/after state change, report/transaction, or external `post_url`/`post_id`.
+- Reminder/digest/queue/click/process success alone is not proof. Stale, incomplete, OTP/CAPTCHA/login-blocked, or unverifiable work must stop as `manual_required`/`insufficient_data` and notify Bui.
+- Account-safety, no-paid, experiment-cap, and no-republish rules always override automation.

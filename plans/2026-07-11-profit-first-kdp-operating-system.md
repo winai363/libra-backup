@@ -40,6 +40,7 @@ Implementation reference: `docs/superpowers/specs/2026-07-18-libra-profit-pace-a
 5. Paid actions, price changes, metadata changes, enrollment changes, and browser-driven KDP mutations require an explicit policy gate and audit record.
 6. New-book generation remains paused until at least one repeatable profitable segment is proven.
 7. KDP reporting and ad attribution can lag. Do not make same-day scale/kill decisions.
+8. Automate every action whose inputs and external result are verifiable. Never infer execution from a reminder, queue entry, browser click, or process exit code; unverifiable actions become `manual_required` or `insufficient_data`.
 
 ## Phase 0: Freeze False Decisions
 

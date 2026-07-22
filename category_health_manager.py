@@ -30,6 +30,7 @@ TREE = LIBRA / "data" / "kdp_category_tree.json"
 OUT_JSON = LIBRA / "data" / "category_health.json"
 OUT_MD = LIBRA / "data" / "category_health.md"
 STATE_FILE = LIBRA / "data" / "category_health_state.json"
+INCIDENTS_FILE = LIBRA / "data" / "kdp_metadata_incidents.json"
 QUEUE_FILE = LIBRA / "queue.txt"
 
 sys.path.insert(0, str(LIBRA))
@@ -78,6 +79,14 @@ def load_tree() -> set[str]:
         return set(json.loads(TREE.read_text(encoding="utf-8")).get("leaves", []))
     except Exception:
         return set()
+
+
+def load_metadata_incidents() -> list[dict]:
+    try:
+        payload = json.loads(INCIDENTS_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return [item for item in payload.get("incidents", []) if isinstance(item, dict)]
 
 
 def listing_files() -> list[Path]:
@@ -200,7 +209,18 @@ def build_report() -> dict:
     for item in ready_restore:
         warnings.append({"slug": item["slug"], "kind": "open_item_ready_for_restore_cron", "category": ""})
 
-    status = "ok" if not blockers else "blocker"
+    incidents = load_metadata_incidents()
+    active_incidents = [item for item in incidents if not item.get("resolved")]
+    blacklist: dict[str, list[str]] = {}
+    for item in incidents:
+        asin = str(item.get("asin") or "").strip()
+        category = str(item.get("category") or "").strip()
+        if asin and category:
+            blacklist.setdefault(asin, []).append(category)
+    for asin in blacklist:
+        blacklist[asin] = sorted(set(blacklist[asin]))
+
+    status = "blocker" if blockers else "metadata_risk" if active_incidents else "ok"
     return {
         "checked_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
         "status": status,
@@ -212,6 +232,9 @@ def build_report() -> dict:
         "warning_count": len(warnings),
         "blockers": blockers,
         "warnings": warnings,
+        "metadata_risk": bool(active_incidents),
+        "metadata_incidents": active_incidents,
+        "removed_category_blacklist": blacklist,
     }
 
 
@@ -226,12 +249,19 @@ def write_reports(report: dict) -> None:
         f"- tree_leaf_count: {report['tree_leaf_count']}",
         f"- blockers: {report['blocker_count']}",
         f"- warnings: {report['warning_count']}",
+        f"- metadata_risk: {report['metadata_risk']}",
         "",
         "## Blockers",
     ]
     if report["blockers"]:
         for item in report["blockers"]:
             lines.append(f"- {item['slug']}: {item['kind']} {item.get('category', '')}".rstrip())
+    else:
+        lines.append("- none")
+    lines.extend(["", "## KDP Metadata Incidents"])
+    if report["metadata_incidents"]:
+        for item in report["metadata_incidents"]:
+            lines.append(f"- {item.get('asin')}: removed {item.get('category')} ({item.get('noticed_at')})")
     else:
         lines.append("- none")
     lines.extend(["", "## Warnings"])
@@ -274,6 +304,10 @@ def maybe_notify(report: dict, force: bool = False) -> None:
         "blocker_count": report["blocker_count"],
         "warning_count": report["warning_count"],
         "blockers": sorted((b["slug"], b["kind"], b.get("category", "")) for b in report["blockers"]),
+        "metadata_incidents": sorted(
+            (item.get("asin", ""), item.get("category", ""), item.get("noticed_at", ""))
+            for item in report["metadata_incidents"]
+        ),
     }
     changed = previous.get("signature") != signature
     STATE_FILE.write_text(json.dumps({"signature": signature, "updated_at": report["checked_at"]}, indent=2), encoding="utf-8")
@@ -281,6 +315,14 @@ def maybe_notify(report: dict, force: bool = False) -> None:
         return
     if report["status"] == "ok":
         message = "✅ <b>Libra KDP category health OK</b>\nNo blockers."
+    elif report["status"] == "metadata_risk":
+        lines = [
+            "⚠️ <b>Libra KDP metadata risk</b>",
+            f"KDP notices: {len(report['metadata_incidents'])} | No live metadata changes allowed.",
+        ]
+        for item in report["metadata_incidents"][:8]:
+            lines.append(f"- {item.get('asin')}: removed {item.get('category')}")
+        message = "\n".join(lines)
     else:
         lines = [
             "⚠️ <b>Libra KDP category health BLOCKED</b>",

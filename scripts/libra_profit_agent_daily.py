@@ -31,11 +31,12 @@ from profit_agent import (  # noqa: E402
     record_action_result,
     title_financial_boundary,
 )
-from profit_pace import build_pace_controller, snapshot_revenue_windows  # noqa: E402
+from profit_pace import build_pace_controller, detect_revenue_stall, snapshot_revenue_windows  # noqa: E402
 
 LEDGER_FILE = LIBRA_DIR / "data" / "libra-business.db"
 STATE_FILE = LIBRA_DIR / "data" / "profit-agent-state.json"
 KDP_DIR = LIBRA_DIR.parent / "kdp"
+CATEGORY_HEALTH_FILE = LIBRA_DIR / "data" / "category_health.json"
 
 
 def _latest_observation(db_path: Path) -> datetime | None:
@@ -125,6 +126,33 @@ def _mode_revenue(db_path: Path, started_at: datetime | None = None) -> tuple[fl
     return windows["mode"], windows["days_7"], windows["days_14"]
 
 
+def _revenue_stall(db_path: Path) -> dict:
+    if not db_path.exists():
+        return detect_revenue_stall([])
+    try:
+        with sqlite3.connect(db_path) as connection:
+            rows = connection.execute(
+                "SELECT observed_at, royalties_usd FROM kdp_snapshots "
+                "ORDER BY observed_at ASC, id ASC"
+            ).fetchall()
+    except sqlite3.Error:
+        rows = []
+    return detect_revenue_stall(rows)
+
+
+def _metadata_risk(path: Path = CATEGORY_HEALTH_FILE) -> dict:
+    try:
+        report = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"active": False, "status": "unknown", "incidents": []}
+    incidents = report.get("metadata_incidents") or []
+    return {
+        "active": bool(report.get("metadata_risk")),
+        "status": report.get("status", "unknown"),
+        "incidents": incidents,
+    }
+
+
 def _policy_registry(db_path: Path, experiments: list[dict]) -> list[dict]:
     if not db_path.exists():
         return experiments
@@ -199,6 +227,7 @@ def run_daily(
     dry_run: bool = False,
     send: bool = False,
     executor=None,
+    category_health_path: Path | None = None,
 ) -> dict:
     now = now or datetime.now(timezone.utc)
     month = now.strftime("%Y-%m")
@@ -264,6 +293,9 @@ def run_daily(
         "title_attribution": "open" if attribution_open else "partial",
         "cost_completeness": "open" if financials.get("cost_complete") else "closed",
     }
+    health_path = category_health_path or (CATEGORY_HEALTH_FILE if db_path == LEDGER_FILE else Path("/nonexistent/category-health.json"))
+    metadata_risk = _metadata_risk(health_path)
+    gates["metadata_safety"] = "closed" if metadata_risk["active"] else "open"
 
     advanced = []
     policy_reasons = []
@@ -294,7 +326,12 @@ def run_daily(
         experiment_attribution_open = bool(asin and _title_attribution_complete(db_path, experiment["slug"]))
         title_allows = experiment_attribution_open or not _needs_complete_attribution(experiment)
         cost_allows = experiment["status"] != "ready" or bool((experiment.get("baseline") or {}).get("cost_complete"))
-        can_advance = policy_open and freshness_open and overview_open and title_allows and cost_allows
+        metadata_allows = not (
+            metadata_risk["active"]
+            and (action.get("kind") in {"category_update", "metadata_update"}
+                 or experiment.get("variable") in {"category", "metadata"})
+        )
+        can_advance = policy_open and freshness_open and overview_open and title_allows and cost_allows and metadata_allows
         transition_input = {}
         result = None
         changed = experiment.copy()
@@ -408,13 +445,19 @@ def run_daily(
         mode_revenue, 75.0, pace_start, pace_end, now, revenue_7d, revenue_14d,
         data_fresh=freshness_open,
     )
+    state["recovery_signals"] = {
+        "revenue_stall": _revenue_stall(db_path),
+        "metadata_risk": metadata_risk,
+    }
     if not dry_run:
         _write_atomic(state_path, state)
         if send:
             sent = send_telegram(
                 "Libra Profit Agent\n"
                 f"Operations gates: {gates}\n"
-                f"Verified royalties: ${financials['verified_royalties_usd']:.2f}"
+                f"Verified royalties: ${financials['verified_royalties_usd']:.2f}\n"
+                f"Revenue stall: {state['recovery_signals']['revenue_stall']['active']}\n"
+                f"KDP metadata risk: {metadata_risk['active']}"
             )
             state["telegram_sent"] = sent
     return state

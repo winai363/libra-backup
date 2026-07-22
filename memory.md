@@ -478,3 +478,11 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - `scripts/kdp_action_executor.py` now builds `verified_state_change` from that browser evidence instead of reading `listing.json` as proof. Missing confirmation URL/evidence fails the action.
 - Kept the existing CLI and boolean caller contract backward compatible. No live price mutation was triggered during this change.
 - Verification: `189 passed`; py_compile and diff check passed.
+## 2026-07-22 — Risk-aware Recovery Agent หลัง KDP ถอดหมวด 3 เล่ม
+
+- KDP ส่ง category quality notice และถอดหมวดที่ไม่เกี่ยวข้องจาก 3 ASIN โดยหนังสือยังขายต่อ: `B0H5C6PCBL / AI & Semantics`, `B0H6H2D17K / Career Counseling eBooks`, `B0H4KT12GV / Business Intelligence Software`.
+- Root cause ของ false green: `category_health_manager.py` เดิมตรวจ taxonomy/language และกฎเฉพาะบางคำ แต่ไม่มี registry ของ KDP notices จึงรายงาน `ok` ทั้งที่ KDP พบ semantic mismatch.
+- เพิ่ม `data/kdp_metadata_incidents.json`; category health แสดง `metadata_risk`, active incidents และ blacklist หมวดที่ KDP ถอด พร้อม Telegram เมื่อ signature เปลี่ยน. Production report เปลี่ยนจาก `ok` เป็น `metadata_risk`, blockers=0, warnings=26.
+- เพิ่ม revenue-stall signal: 3 วันล่าสุด royalties โตเพียง `$0.15` (< `$0.25`) จึง `active=true`. Profit agent เพิ่ม `metadata_safety=closed` และปิดเฉพาะ category/metadata mutation; observation/evaluation/organic lanes ยังทำงาน.
+- ไม่แก้ listing LIVE และไม่เรียก `--execute-actions`. Production pace วันที่ 22 ก.ค. = critical, actual mode revenue `$6.17`, projected 90-day `$49.73` เทียบเป้า `$75`.
+- Verification: focused red/green ผ่าน; full `PYTHONPATH=. pytest -q` = `194 passed`; runtime category health + profit state ยืนยัน signal จริง.

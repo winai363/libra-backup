@@ -1,4 +1,5 @@
 import sqlite3
+import json
 from datetime import datetime, timedelta, timezone
 
 from business_ledger import record_kdp_snapshot
@@ -77,6 +78,32 @@ def test_mode_start_is_preserved_across_controller_runs(tmp_path):
     second = run_daily(db, state_path, now=NOW + timedelta(days=5))
 
     assert second["mode_started_at"] == first["mode_started_at"] == NOW.isoformat()
+
+
+def test_daily_agent_surfaces_metadata_risk_and_revenue_stall(tmp_path):
+    db = tmp_path / "ledger.db"
+    state_path = tmp_path / "state.json"
+    health_path = tmp_path / "category-health.json"
+    health_path.write_text(json.dumps({
+        "status": "metadata_risk",
+        "metadata_risk": True,
+        "metadata_incidents": [{"asin": "NOTICE-ASIN", "category": "Career Counseling eBooks"}],
+    }))
+    for offset, royalties in enumerate((7.63, 7.63, 7.79, 7.78)):
+        observed = NOW - timedelta(days=3 - offset)
+        record_kdp_snapshot(db, {
+            "observed_at": observed.isoformat(),
+            "month": "2026-07",
+            "overview": {"royalties_usd": royalties, "orders_all_types": 4, "kenp": 20},
+            "titles": [{"asin": "A", "royalties_usd": royalties, "orders": 4, "kenp": 20}],
+        })
+
+    state = run_daily(db, state_path, now=NOW, category_health_path=health_path)
+
+    assert state["gates"]["metadata_safety"] == "closed"
+    assert state["recovery_signals"]["metadata_risk"]["active"] is True
+    assert state["recovery_signals"]["revenue_stall"]["active"] is True
+    assert state["recovery_signals"]["revenue_stall"]["growth_usd"] == 0.15
 
 
 def test_stale_financials_hold_experiments(tmp_path):

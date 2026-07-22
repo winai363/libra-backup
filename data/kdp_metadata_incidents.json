@@ -1,0 +1,28 @@
+{
+  "incidents": [
+    {
+      "asin": "B0H5C6PCBL",
+      "category": "AI & Semantics",
+      "noticed_at": "2026-07-22",
+      "source": "KDP category quality email",
+      "action": "category_removed_by_kdp",
+      "resolved": false
+    },
+    {
+      "asin": "B0H6H2D17K",
+      "category": "Career Counseling eBooks",
+      "noticed_at": "2026-07-22",
+      "source": "KDP category quality email",
+      "action": "category_removed_by_kdp",
+      "resolved": false
+    },
+    {
+      "asin": "B0H4KT12GV",
+      "category": "Business Intelligence Software",
+      "noticed_at": "2026-07-22",
+      "source": "KDP category quality email",
+      "action": "category_removed_by_kdp",
+      "resolved": false
+    }
+  ]
+}

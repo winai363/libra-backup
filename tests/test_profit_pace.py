@@ -2,10 +2,41 @@ from datetime import datetime
 
 from profit_pace import (
     build_pace_controller,
+    detect_revenue_stall,
     classify_portfolio,
     rank_opportunities,
     snapshot_revenue_windows,
 )
+
+
+def test_detect_revenue_stall_after_three_flat_daily_observations():
+    rows = [
+        ("2026-07-19T09:15:00+00:00", 13.73),
+        ("2026-07-20T09:15:00+00:00", 13.73),
+        ("2026-07-21T09:15:00+00:00", 13.89),
+        ("2026-07-22T09:15:00+00:00", 13.88),
+    ]
+
+    signal = detect_revenue_stall(rows)
+
+    assert signal == {
+        "active": True,
+        "observation_days": 3,
+        "growth_usd": 0.15,
+        "threshold_usd": 0.25,
+        "latest_observed_at": "2026-07-22T09:15:00+00:00",
+    }
+
+
+def test_detect_revenue_stall_stays_clear_when_revenue_grows():
+    rows = [
+        ("2026-07-19T09:15:00+00:00", 10.0),
+        ("2026-07-20T09:15:00+00:00", 10.1),
+        ("2026-07-21T09:15:00+00:00", 10.4),
+        ("2026-07-22T09:15:00+00:00", 10.8),
+    ]
+
+    assert detect_revenue_stall(rows)["active"] is False
 
 
 START = datetime.fromisoformat("2026-07-11T00:00:00+00:00")

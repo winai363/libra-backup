@@ -9,6 +9,33 @@ STRETCH_MULTIPLIER = 1.10
 ATTENTION_POLICY = {"exploit": 70, "explore": 20, "archive": 10}
 
 
+def detect_revenue_stall(
+    rows: list[tuple[str, float]],
+    minimum_days: int = 3,
+    growth_threshold_usd: float = 0.25,
+) -> dict:
+    """Flag weak cumulative royalty growth across consecutive daily observations."""
+    required_observations = minimum_days + 1
+    window = rows[-required_observations:]
+    latest_at = window[-1][0] if window else None
+    if len(window) < required_observations:
+        return {
+            "active": False,
+            "observation_days": max(0, len(window) - 1),
+            "growth_usd": None,
+            "threshold_usd": growth_threshold_usd,
+            "latest_observed_at": latest_at,
+        }
+    growth = round(float(window[-1][1]) - float(window[0][1]), 2)
+    return {
+        "active": growth < growth_threshold_usd,
+        "observation_days": minimum_days,
+        "growth_usd": growth,
+        "threshold_usd": growth_threshold_usd,
+        "latest_observed_at": latest_at,
+    }
+
+
 def snapshot_revenue_windows(
     rows: list[tuple], now: datetime, started_at: datetime | None = None
 ) -> dict:

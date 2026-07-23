@@ -1,6 +1,7 @@
 import json
 
 from scripts.experiment_proposer import (
+    analyze_proposals,
     distribution_evidence,
     free_promo_candidate,
     gather_proposals,
@@ -188,6 +189,117 @@ def test_gather_never_proposes_an_unpaired_free_promo(tmp_path, monkeypatch):
     assert proposals == []
 
 
+def test_unproved_promos_become_distribution_recovery_without_kdp_actions(tmp_path, monkeypatch):
+    from business_ledger import init_ledger
+    from profit_agent import _init_schema
+
+    db = tmp_path / "ledger.db"
+    init_ledger(db)
+    _init_schema(db)
+    kdp = tmp_path / "kdp"
+    for index in range(2):
+        slug = f"starved-{index}"
+        folder = kdp / slug
+        folder.mkdir(parents=True)
+        (folder / "listing.json").write_text(json.dumps({
+            "status": "uploaded",
+            "live_status": "LIVE",
+            "asin": f"A{index}",
+            "kdp_select": {"status": "Enrolled"},
+        }))
+    _pair_slugs(tmp_path, monkeypatch, [])
+
+    analysis = analyze_proposals(kdp, db, LEAVES)
+
+    assert analysis["blocker_funnel"] == {
+        "eligible_raw": 2,
+        "blocked_missing_distribution": 2,
+        "safe_executable": 0,
+    }
+    assert [item["slug"] for item in analysis["distribution_required"]] == [
+        "starved-0", "starved-1",
+    ]
+    assert all(item["kind"] == "distribution_required" for item in analysis["distribution_required"])
+    assert all(item["kdp_mutation"] is False for item in analysis["distribution_required"])
+
+
+def test_verified_distribution_promotes_exactly_to_safe_proposal(tmp_path, monkeypatch):
+    from business_ledger import init_ledger
+    from profit_agent import _init_schema
+
+    db = tmp_path / "ledger.db"
+    init_ledger(db)
+    _init_schema(db)
+    kdp = tmp_path / "kdp"
+    folder = kdp / "proved"
+    folder.mkdir(parents=True)
+    (folder / "listing.json").write_text(json.dumps({
+        "status": "uploaded",
+        "live_status": "LIVE",
+        "asin": "A1",
+        "kdp_select": {"status": "Enrolled"},
+    }))
+    _pair_slugs(tmp_path, monkeypatch, ["proved"])
+
+    analysis = analyze_proposals(kdp, db, LEAVES)
+
+    assert analysis["blocker_funnel"] == {
+        "eligible_raw": 1,
+        "blocked_missing_distribution": 0,
+        "safe_executable": 1,
+    }
+    assert analysis["distribution_required"] == []
+    assert analysis["proposals"][0]["action"]["kind"] == "free_promo"
+
+
+def test_running_and_scheduled_promos_lead_distribution_recovery(tmp_path, monkeypatch):
+    from business_ledger import init_ledger
+    from profit_agent import _init_schema, create_experiment
+    from datetime import datetime, timezone
+
+    db = tmp_path / "ledger.db"
+    init_ledger(db)
+    _init_schema(db)
+    kdp = tmp_path / "kdp"
+    for slug, promo in {
+        "running-now": {"status": "Running", "start": "2026-07-22", "end": "2026-07-26"},
+        "scheduled-next": {"status": "Scheduled", "start": "2026-07-25", "end": "2026-07-26"},
+    }.items():
+        folder = kdp / slug
+        folder.mkdir(parents=True)
+        (folder / "listing.json").write_text(json.dumps({
+            "status": "uploaded",
+            "live_status": "LIVE",
+            "asin": slug,
+            "kdp_select": {"status": "Enrolled"},
+            "free_promo": promo,
+        }))
+    _pair_slugs(tmp_path, monkeypatch, [])
+    create_experiment(
+        db,
+        slug="running-now",
+        asin="running-now",
+        variable="promotion",
+        action={"kind": "free_promo", "cost_usd": 0,
+                "proposed_value": "2-day KDP Select free promotion"},
+        now=datetime(2026, 7, 22, tzinfo=timezone.utc),
+    )
+    import sqlite3
+    with sqlite3.connect(db) as connection:
+        connection.execute(
+            "UPDATE experiments SET status='cooldown' WHERE slug='running-now'"
+        )
+
+    analysis = analyze_proposals(kdp, db, LEAVES)
+
+    assert analysis["blocker_funnel"]["eligible_raw"] == 0
+    assert [item["slug"] for item in analysis["distribution_required"]] == [
+        "running-now", "scheduled-next",
+    ]
+    assert analysis["distribution_required"][0]["promo_status"] == "Running"
+    assert "active promo" in analysis["distribution_required"][0]["next_action"]
+
+
 def test_distribution_evidence_does_not_treat_reminder_as_publication():
     evidence = distribution_evidence(
         "book",
@@ -215,3 +327,11 @@ def test_distribution_evidence_requires_external_proof():
     }
     assert capable["status"] == "planned"
     assert capable["usable_for_promo"] is False
+
+
+def test_distribution_evidence_rejects_placeholders_and_blank_values():
+    for proof in ("", " ", "planned", "reminded", True):
+        evidence = distribution_evidence(
+            "book", {}, {"posts": [{"slug": "book", "post_url": proof}]}
+        )
+        assert evidence["usable_for_promo"] is False

@@ -463,6 +463,68 @@ def run_daily(
     return state
 
 
+def _digest_message(state: dict) -> str:
+    proposer = state.get("proposer") or {}
+    funnel = proposer.get("blocker_funnel") or {}
+    recovery = proposer.get("distribution_required") or []
+    next_action = recovery[0] if recovery else None
+    lines = [
+        "Libra Profit Agent",
+        f"Operations gates: {state.get('gates', {})}",
+        f"Verified royalties: ${state['financials']['verified_royalties_usd']:.2f}",
+        f"Pace: {state.get('pace', {}).get('mode', 'unknown')}",
+        f"Revenue stall: {state.get('recovery_signals', {}).get('revenue_stall', {}).get('active', False)}",
+        f"KDP metadata risk: {state.get('recovery_signals', {}).get('metadata_risk', {}).get('active', False)}",
+    ]
+    if funnel:
+        lines.append(
+            "Recovery funnel: "
+            f"eligible_raw={funnel.get('eligible_raw', 0)} "
+            f"blocked_missing_distribution={funnel.get('blocked_missing_distribution', 0)} "
+            f"safe_executable={funnel.get('safe_executable', 0)}"
+        )
+    if next_action:
+        lines.append(
+            f"Next recovery: {next_action['slug']} — {next_action['next_action']}"
+        )
+    return "\n".join(lines)
+
+
+def run_controller(
+    db_path: Path = LEDGER_FILE,
+    state_path: Path = STATE_FILE,
+    *,
+    now: datetime | None = None,
+    dry_run: bool = False,
+    send: bool = False,
+    executor=None,
+    proposer=None,
+    sender=send_telegram,
+    category_health_path: Path | None = None,
+) -> dict:
+    """Run the daily cycle, proposer, final persistence, and digest in order."""
+    state = run_daily(
+        db_path,
+        state_path,
+        now=now,
+        dry_run=dry_run,
+        send=False,
+        executor=executor,
+        category_health_path=category_health_path,
+    )
+    if not dry_run and proposer is not None:
+        try:
+            state["proposer"] = proposer()
+        except Exception as exc:
+            state["proposer"] = {"error": f"{type(exc).__name__}: {exc}"}
+    if not dry_run:
+        _write_atomic(state_path, state)
+        if send:
+            state["telegram_sent"] = sender(_digest_message(state))
+            _write_atomic(state_path, state)
+    return state
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="calculate without writing files or SQLite")
@@ -484,15 +546,18 @@ def main() -> None:
     if args.execute_actions and not args.dry_run:
         from kdp_action_executor import build_executor
         executor = build_executor()
-    state = run_daily(LEDGER_FILE, STATE_FILE, dry_run=args.dry_run, send=args.send, executor=executor)
+    proposer = None
     if executor is not None:
-        # Propose the next experiment from observable state under the same
-        # gates the executor enforces. Never allowed to break the daily run.
-        try:
-            from experiment_proposer import run_proposer
-            state["proposer"] = run_proposer()
-        except Exception as exc:
-            state["proposer"] = {"error": f"{type(exc).__name__}: {exc}"}
+        from experiment_proposer import run_proposer
+        proposer = run_proposer
+    state = run_controller(
+        LEDGER_FILE,
+        STATE_FILE,
+        dry_run=args.dry_run,
+        send=args.send,
+        executor=executor,
+        proposer=proposer,
+    )
     print(json.dumps(state, sort_keys=True, default=str))
 
 

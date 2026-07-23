@@ -225,6 +225,29 @@ def test_free_promo_pairing_accepts_verified_reddit_post(tmp_path, monkeypatch):
     assert ok is True and extra == {"days": 2}
 
 
+def test_free_promo_pairing_rejects_placeholder_proof(tmp_path, monkeypatch):
+    import json
+
+    import scripts.kdp_action_executor as executor_module
+
+    monkeypatch.setattr(executor_module, "PAIRINGS_FILE", tmp_path / "missing.json")
+    schedule = tmp_path / "reddit_promo_schedule.json"
+    schedule.write_text(json.dumps({"posts": [
+        {"slug": "reddit-book", "post_url": "planned"},
+        {"slug": "reddit-book", "post_id": True},
+    ]}))
+    monkeypatch.setattr(executor_module, "REDDIT_SCHEDULE_FILE", schedule)
+
+    ok, reason, _ = validate_action(
+        {"kind": "free_promo", "slug": "reddit-book", "cost_usd": 0,
+         "proposed_value": "2-day KDP Select free promotion"},
+        LISTING, LEAVES,
+    )
+
+    assert ok is False
+    assert "verified distribution evidence" in reason
+
+
 def test_verify_chips_matches_parent_paths_without_leaf():
     # KDP chips omit the placement leaf — verify on the parent path.
     chips = [

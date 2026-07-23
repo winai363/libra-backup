@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from business_ledger import record_kdp_snapshot
 from profit_agent import create_initial_experiments
-from scripts.libra_profit_agent_daily import run_daily
+from scripts.libra_profit_agent_daily import run_controller, run_daily
 
 
 NOW = datetime(2026, 7, 11, 9, 30, tzinfo=timezone.utc)
@@ -226,3 +226,41 @@ def test_proposer_created_experiments_are_processed(tmp_path):
     proposer_rows = [e for e in state["experiments"] if e["slug"] == "proposer-book"]
     assert proposer_rows, "non-approved-slug experiment missing from the daily registry"
     assert proposer_rows[0]["status"] != "planned", "proposer experiment never advanced"
+
+
+def test_controller_persists_proposer_and_sends_critical_next_action(tmp_path):
+    db = tmp_path / "ledger.db"
+    state_path = tmp_path / "state.json"
+    _snapshot(db)
+    sent = []
+    proposer = {
+        "blocker_funnel": {
+            "eligible_raw": 8,
+            "blocked_missing_distribution": 8,
+            "safe_executable": 0,
+        },
+        "distribution_required": [{
+            "kind": "distribution_required",
+            "slug": "book-a",
+            "channel": "reddit",
+            "next_action": "publish externally and capture post_url or post_id",
+            "kdp_mutation": False,
+        }],
+        "created": [],
+    }
+
+    state = run_controller(
+        db,
+        state_path,
+        now=NOW,
+        send=True,
+        proposer=lambda: proposer,
+        sender=lambda message: sent.append(message) or True,
+    )
+
+    persisted = json.loads(state_path.read_text())
+    assert persisted["proposer"] == proposer
+    assert state["proposer"] == proposer
+    assert "blocked_missing_distribution=8" in sent[0]
+    assert "book-a" in sent[0]
+    assert "post_url or post_id" in sent[0]

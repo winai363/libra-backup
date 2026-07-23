@@ -26,6 +26,7 @@ import re
 import sqlite3
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 from urllib.parse import urlsplit
 
 LIBRA_DIR = Path(__file__).resolve().parent.parent
@@ -127,6 +128,24 @@ def validate_price_action(action: dict, listing: dict) -> tuple[bool, str, dict]
     return True, "ok", {"price": f"{price:.2f}"}
 
 
+_PROOF_PLACEHOLDERS = {"planned", "pending", "reminded", "scheduled", "todo", "true", "false"}
+
+
+def valid_distribution_proof(post: dict) -> str | None:
+    url = post.get("post_url")
+    if isinstance(url, str):
+        value = url.strip()
+        parsed = urlparse(value)
+        if parsed.scheme in {"http", "https"} and parsed.hostname and parsed.path not in {"", "/"}:
+            return value
+    post_id = post.get("post_id")
+    if isinstance(post_id, str):
+        value = post_id.strip()
+        if value.lower() not in _PROOF_PLACEHOLDERS and re.fullmatch(r"[A-Za-z0-9_-]{3,}", value):
+            return value
+    return None
+
+
 def has_distribution_pairing(slug: str) -> bool:
     """A free promo only moves books that get an external push while free —
     measured July 2026: 13 of 17 promos with no paired channel got 0 downloads,
@@ -135,7 +154,7 @@ def has_distribution_pairing(slug: str) -> bool:
     try:
         posts = json.loads(REDDIT_SCHEDULE_FILE.read_text(encoding="utf-8")).get("posts", [])
         return any(
-            post.get("slug") == slug and (post.get("post_url") or post.get("post_id"))
+            post.get("slug") == slug and valid_distribution_proof(post)
             for post in posts
         )
     except (OSError, json.JSONDecodeError):

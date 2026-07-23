@@ -155,7 +155,7 @@ def distribution_evidence(slug: str, pairings: dict, schedule: dict) -> dict:
     """Classify distribution truth without equating reminders to publication."""
     posts = [post for post in schedule.get("posts", []) if post.get("slug") == slug]
     for post in posts:
-        proof = post.get("post_url") or post.get("post_id")
+        proof = executor_config.valid_distribution_proof(post)
         if proof:
             return {
                 "status": "verified",
@@ -369,14 +369,17 @@ def close_exhausted_failures(db_path: Path, now: datetime, notify=None) -> list:
     return closed
 
 
-def gather_proposals(kdp_dir: Path, db_path: Path, leaves: set) -> list:
+def analyze_proposals(kdp_dir: Path, db_path: Path, leaves: set) -> dict:
+    """Expose why observable candidates cannot become safe experiments."""
     active_slugs, _ = active_state(db_path)
     royalties = attributed_royalties(db_path)
     proposals = []
+    eligible_raw = 0
+    blocked_missing_distribution = 0
+    distribution_required = []
     for listing_path in sorted(kdp_dir.glob("*/listing.json")):
         slug = listing_path.parent.name
-        if slug in active_slugs:
-            continue
+        is_active = slug in active_slugs
         try:
             listing = json.loads(listing_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
@@ -386,16 +389,52 @@ def gather_proposals(kdp_dir: Path, db_path: Path, leaves: set) -> list:
         if str(listing.get("live_status") or "").upper() == "BLOCKED":
             continue  # dead listing (content-review block) — never spend a slot on it
         royalty = royalties.get(listing.get("asin"), 0.0)
+        promo = listing.get("free_promo") or {}
+        promo_status = promo.get("status")
+        if promo_status in {"Running", "Scheduled"}:
+            evidence = _distribution_evidence_for(slug)
+            if not evidence["usable_for_promo"]:
+                active = promo_status == "Running"
+                distribution_required.append({
+                    "kind": "distribution_required",
+                    "slug": slug,
+                    "asin": listing.get("asin"),
+                    "channel": evidence.get("channel") or "reddit",
+                    "evidence_status": evidence["status"],
+                    "promo_status": promo_status,
+                    "promo_start": promo.get("start"),
+                    "promo_end": promo.get("end"),
+                    "next_action": (
+                        "publish during active promo and capture post_url or post_id"
+                        if active else
+                        "publish when promo becomes active and capture post_url or post_id"
+                    ),
+                    "kdp_mutation": False,
+                })
+        if is_active:
+            continue
         for candidate in (category_candidate(slug, listing, leaves),
                           free_promo_candidate(slug, listing),
                           price_candidate(slug, listing, royalty, kdp_dir)):
             if candidate is None:
                 continue
-            if (candidate["kind"] == "free_promo" and
-                    not _distribution_evidence_for(slug)["usable_for_promo"]):
-                continue
             if already_tried(db_path, slug, candidate["kind"], candidate["proposed_value"]):
                 continue
+            eligible_raw += 1
+            if candidate["kind"] == "free_promo":
+                evidence = _distribution_evidence_for(slug)
+                if not evidence["usable_for_promo"]:
+                    blocked_missing_distribution += 1
+                    distribution_required.append({
+                        "kind": "distribution_required",
+                        "slug": slug,
+                        "asin": listing.get("asin"),
+                        "channel": evidence.get("channel") or "reddit",
+                        "evidence_status": evidence["status"],
+                        "next_action": "publish externally and capture post_url or post_id",
+                        "kdp_mutation": False,
+                    })
+                    continue
             action = {k: candidate[k] for k in ("kind", "field", "proposed_value", "cost_usd")}
             if "replaces" in candidate:
                 action["replaces"] = candidate["replaces"]
@@ -415,7 +454,25 @@ def gather_proposals(kdp_dir: Path, db_path: Path, leaves: set) -> list:
     proposals.sort(key=lambda p: (-p["royalties"],
                                   kind_rank.get(p["action"]["kind"], 3),
                                   p["slug"]))
-    return proposals
+    promo_rank = {"Running": 0, "Scheduled": 1}
+    distribution_required.sort(key=lambda item: (
+        promo_rank.get(item.get("promo_status"), 2),
+        item.get("promo_start") or "9999-12-31",
+        item["slug"],
+    ))
+    return {
+        "proposals": proposals,
+        "blocker_funnel": {
+            "eligible_raw": eligible_raw,
+            "blocked_missing_distribution": blocked_missing_distribution,
+            "safe_executable": len(proposals),
+        },
+        "distribution_required": distribution_required,
+    }
+
+
+def gather_proposals(kdp_dir: Path, db_path: Path, leaves: set) -> list:
+    return analyze_proposals(kdp_dir, db_path, leaves)["proposals"]
 
 
 def run_proposer(*, kdp_dir: Path = KDP_DIR, db_path: Path = LEDGER_FILE,
@@ -436,7 +493,8 @@ def run_proposer(*, kdp_dir: Path = KDP_DIR, db_path: Path = LEDGER_FILE,
     created = []
     if not leaves:
         return {"error": "no category tree loaded — refusing to propose", "created": []}
-    proposals = gather_proposals(kdp_dir, db_path, leaves)
+    analysis = analyze_proposals(kdp_dir, db_path, leaves)
+    proposals = analysis["proposals"]
     for proposal in proposals:
         if len(created) >= MAX_NEW_PER_RUN or active_count + len(created) >= MAX_ACTIVE:
             break
@@ -461,6 +519,8 @@ def run_proposer(*, kdp_dir: Path = KDP_DIR, db_path: Path = LEDGER_FILE,
         )
     return {"closed_exhausted": len(closed), "candidates": len(proposals),
             "created": created, "active_before": active_count,
+            "blocker_funnel": analysis["blocker_funnel"],
+            "distribution_required": analysis["distribution_required"],
             "distribution_starved": len(starved),
             "distribution_starved_slugs": starved}
 

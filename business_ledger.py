@@ -143,7 +143,12 @@ def record_growth_evidence(path: Path, evidence: dict) -> int:
     if not (0.0 <= confidence <= 1.0):
         raise ValueError(f"confidence must be between 0.0 and 1.0, got {confidence}")
     source_key = evidence["source_key"]
-    content_hash = _hash(evidence)
+    value = {
+        "kind": evidence["kind"], "slug": evidence.get("slug"),
+        "observed_at": evidence["observed_at"], "fresh_until": evidence["fresh_until"],
+        "confidence": confidence, "payload": evidence.get("payload", {}),
+    }
+    content_hash = _hash(value)
     with sqlite3.connect(path) as connection:
         row = connection.execute(
             "SELECT id, content_hash FROM growth_evidence WHERE source_key = ?", (source_key,)
@@ -163,7 +168,11 @@ def record_growth_evidence(path: Path, evidence: dict) -> int:
 def record_growth_plan(path: Path, plan: dict) -> int:
     init_ledger(path)
     action_key = plan["action_key"]
-    content_hash = _hash(plan)
+    value = {
+        "planned_at": plan["planned_at"], "phase": plan["phase"], "status": plan["status"],
+        "plan_json": _canonical(plan),
+    }
+    content_hash = _hash(value)
     with sqlite3.connect(path) as connection:
         row = connection.execute(
             "SELECT id, content_hash FROM growth_plans WHERE action_key = ?", (action_key,)
@@ -182,20 +191,28 @@ def record_growth_plan(path: Path, plan: dict) -> int:
 def record_hub_event(path: Path, event: dict) -> int:
     init_ledger(path)
     event_key = event["event_key"]
-    payload_json = _canonical(event.get("payload", {}))
+    value = {
+        "occurred_at": event["occurred_at"], "slug": event["slug"], "campaign": event["campaign"],
+        "event_kind": event["event_kind"], "payload": event.get("payload", {}),
+    }
+    content_hash = _hash(value)
     with sqlite3.connect(path) as connection:
         row = connection.execute(
             "SELECT id, occurred_at, slug, campaign, event_kind, payload_json FROM hub_events WHERE event_key = ?",
             (event_key,),
         ).fetchone()
         if row:
-            if (row[1] != event["occurred_at"] or row[2] != event["slug"] or row[3] != event["campaign"]
-                    or row[4] != event["event_kind"] or row[5] != payload_json):
+            stored_value = {
+                "occurred_at": row[1], "slug": row[2], "campaign": row[3],
+                "event_kind": row[4], "payload": json.loads(row[5]),
+            }
+            if _hash(stored_value) != content_hash:
                 raise ValueError(f"conflicting hub event for {event_key}")
             return row[0]
         cursor = connection.execute(
             "INSERT INTO hub_events(event_key, occurred_at, slug, campaign, event_kind, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
-            (event_key, event["occurred_at"], event["slug"], event["campaign"], event["event_kind"], payload_json),
+            (event_key, event["occurred_at"], event["slug"], event["campaign"], event["event_kind"],
+             _canonical(event.get("payload", {}))),
         )
         return cursor.lastrowid
 

@@ -65,6 +65,18 @@ def test_growth_phase_fails_closed_on_bad_input():
     assert growth_phase(datetime.now(timezone.utc), None) == "organic"
 
 
+def test_growth_phase_fails_closed_on_naive_now_with_aware_started_at():
+    started = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    naive_now = datetime(2026, 9, 5)  # 35 days later, but naive
+    assert growth_phase(started, naive_now) == "organic"
+
+
+def test_growth_phase_fails_closed_on_naive_started_at_with_aware_now():
+    naive_started = datetime(2026, 8, 1)
+    aware_now = datetime(2026, 9, 5, tzinfo=timezone.utc)  # 35 days later, but aware
+    assert growth_phase(naive_started, aware_now) == "organic"
+
+
 # ---------------------------------------------------------------------------
 # ads_eligibility
 # ---------------------------------------------------------------------------
@@ -128,6 +140,42 @@ def test_missing_time_reference_is_denied():
         {"started_at": "not-a-date"}, {"kind": "price_update", "slug": "book-a"}, {"now": "also-not-a-date"},
     )
     assert result == {"allowed": False, "reason": "missing_time_reference"}
+
+
+def test_naive_now_with_aware_started_at_is_denied_not_crashed():
+    started = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    naive_now = datetime(2026, 9, 5)  # would be day 35 if comparable
+    result = authorize_growth_action(
+        policy_for(started), {"kind": "price_update", "slug": "book-a"}, {"now": naive_now},
+    )
+    assert result == {"allowed": False, "reason": "missing_time_reference"}
+
+
+def test_naive_started_at_with_aware_now_is_denied_not_crashed():
+    naive_started = datetime(2026, 8, 1)
+    aware_now = datetime(2026, 9, 5, tzinfo=timezone.utc)  # would be day 35 if comparable
+    result = authorize_growth_action(
+        {"started_at": naive_started}, {"kind": "price_update", "slug": "book-a"}, {"now": aware_now},
+    )
+    assert result == {"allowed": False, "reason": "missing_time_reference"}
+
+
+def test_naive_last_budget_increase_reference_is_denied_not_crashed():
+    """The same offset-naive/aware crash is reachable through
+    last_budget_increase_at inside the amazon_ads budget-increase check."""
+    started = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    now = started + timedelta(days=ORGANIC_DAYS)
+    result = authorize_growth_action(
+        policy_for(started),
+        {"kind": "amazon_ads", "slug": "book-a", "daily_budget_thb": 55},
+        state_at(
+            now, clicks=20,
+            advertised_title_slugs=["book-a"],
+            title_daily_budget_thb=50,
+            last_budget_increase_at=datetime(2026, 8, 29),  # naive, now is aware
+        ),
+    )
+    assert result == {"allowed": False, "reason": "invalid_last_increase_reference"}
 
 
 # ---------------------------------------------------------------------------
@@ -274,6 +322,20 @@ def test_third_advertised_title_is_blocked():
     assert MAX_AD_TITLES == 2
 
 
+@pytest.mark.parametrize("bad_value", [True, 5, "book-a"])
+def test_truthy_non_iterable_advertised_title_slugs_is_denied_not_crashed(bad_value):
+    """set(True) / set(5) raise TypeError; a bare string would silently be
+    treated as a set of characters. Both must fail closed, not crash or
+    silently misbehave."""
+    started = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    result = authorize_growth_action(
+        policy_for(started),
+        {"kind": "amazon_ads", "slug": "book-a", "daily_budget_thb": 50},
+        state_at(_growth_window(started), clicks=20, advertised_title_slugs=bad_value),
+    )
+    assert result == {"allowed": False, "reason": "invalid_advertised_title_slugs"}
+
+
 def test_initial_title_budget_above_50_is_blocked():
     started = datetime(2026, 8, 1, tzinfo=timezone.utc)
     result = authorize_growth_action(
@@ -326,6 +388,29 @@ def test_budget_increase_within_15_percent_after_72_hours_is_allowed():
             now, clicks=20,
             advertised_title_slugs=["book-a"],
             title_daily_budget_thb=50,
+            last_budget_increase_at=now - timedelta(hours=80),
+        ),
+    )
+    assert result["allowed"] is True
+
+
+def test_budget_increase_with_nonzero_other_portfolio_spend_pins_exclusion_contract():
+    """portfolio_daily_spend_thb/portfolio_monthly_spend_thb must EXCLUDE the
+    target title's own current budget. Here book-a already spends 50/day and
+    is increasing to 57.5; the other title (book-b) spends 40/day. If the
+    caller correctly excluded book-a's own 50 from portfolio_daily_spend_thb,
+    the total is 40 + 57.5 = 97.5, comfortably under the THB 100/day cap."""
+    started = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    now = _growth_window(started)
+    result = authorize_growth_action(
+        policy_for(started),
+        {"kind": "amazon_ads", "slug": "book-a", "daily_budget_thb": 57.5},
+        state_at(
+            now, clicks=20,
+            advertised_title_slugs=["book-a", "book-b"],
+            title_daily_budget_thb=50,
+            portfolio_daily_spend_thb=40,  # book-b only — excludes book-a's own 50
+            portfolio_monthly_spend_thb=1000,
             last_budget_increase_at=now - timedelta(hours=80),
         ),
     )
@@ -402,3 +487,39 @@ def test_profit_agent_check_policy_ignores_growth_path_when_not_opted_in():
     allowed, reason = check_policy({"kind": "amazon_ads", "cost_usd": 1}, {"no_spend": True})
     assert allowed is False
     assert reason == "paid actions disabled during 90-day organic mode"
+
+
+def test_profit_agent_check_policy_growth_allow_still_enforces_legacy_cooldown():
+    """A growth_policy allow must not bypass the legacy cooldown gate — the
+    opt-in branch only short-circuits on denial; an allow falls through to
+    the existing cooldown/one-variable checks (defense in depth)."""
+    from profit_agent import check_policy
+
+    started = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    allowed, reason = check_policy(
+        {"kind": "free_promo", "slug": "book-a"},
+        {
+            "growth_policy": policy_for(started),
+            "growth_state": state_at(started + timedelta(days=1)),
+            "cooldown_slugs": ["book-a"],
+        },
+    )
+    assert allowed is False
+    assert reason == "title is already in cooldown"
+
+
+def test_profit_agent_check_policy_growth_allow_passes_through_when_no_cooldown():
+    """Positive control for the fall-through: when growth_policy allows and
+    no legacy gate objects, the final result is still allowed."""
+    from profit_agent import check_policy
+
+    started = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    allowed, reason = check_policy(
+        {"kind": "free_promo", "slug": "book-a"},
+        {
+            "growth_policy": policy_for(started),
+            "growth_state": state_at(started + timedelta(days=1)),
+        },
+    )
+    assert allowed is True
+    assert reason == "allowed"

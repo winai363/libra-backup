@@ -40,11 +40,20 @@ def _deny(reason: str) -> dict:
     return {"allowed": False, "reason": reason}
 
 
+def _tz_consistent(a: datetime, b: datetime) -> bool:
+    """True when both datetimes are naive or both are aware — the only
+    combinations Python can subtract without raising."""
+    return (a.tzinfo is None) == (b.tzinfo is None)
+
+
 def growth_phase(started_at, now) -> str:
     """"organic" for the first ORGANIC_DAYS complete days, "growth" once the
-    Growth Gate window opens (day 31+). Invalid input fails closed to the
-    more restrictive "organic" phase."""
+    Growth Gate window opens (day 31+). Invalid input — wrong type, or one
+    of started_at/now naive while the other is timezone-aware — fails
+    closed to the more restrictive "organic" phase rather than raising."""
     if not isinstance(started_at, datetime) or not isinstance(now, datetime):
+        return "organic"
+    if not _tz_consistent(started_at, now):
         return "organic"
     if now - started_at < timedelta(days=ORGANIC_DAYS):
         return "organic"
@@ -73,7 +82,16 @@ def ads_eligibility(metrics) -> dict:
 
 def authorize_growth_action(policy, action, state) -> dict:
     """Authorize one proposed growth action. Every unknown or missing input
-    is refused with a stable reason; nothing here ever mutates state."""
+    is refused with a stable reason; nothing here ever mutates state.
+
+    Caller-side budget contract for ``amazon_ads``: ``state["portfolio_daily_spend_thb"]``
+    and ``state["portfolio_monthly_spend_thb"]`` must be the portfolio totals
+    with the target title's OWN current budget (``state["title_daily_budget_thb"]``)
+    already EXCLUDED. This function adds the proposed ``daily_budget_thb`` on
+    top of those totals to check the THB 100/day and THB 3,000/month caps —
+    if a caller included the title's existing spend in those totals, its
+    current budget would be double-counted against the cap.
+    """
     if not isinstance(policy, dict):
         return _deny("missing_policy")
     if not isinstance(action, dict):
@@ -95,6 +113,8 @@ def authorize_growth_action(policy, action, state) -> dict:
     started_at = policy.get("started_at")
     now = state.get("now")
     if not isinstance(started_at, datetime) or not isinstance(now, datetime):
+        return _deny("missing_time_reference")
+    if not _tz_consistent(started_at, now):
         return _deny("missing_time_reference")
 
     slug = action.get("slug")
@@ -124,7 +144,13 @@ def _authorize_ads(started_at, action, state, now) -> dict:
     if daily_budget <= 0:
         return _deny("invalid_budget")
 
-    advertised_slugs = set(state.get("advertised_title_slugs") or [])
+    raw_advertised = state.get("advertised_title_slugs")
+    if raw_advertised is None:
+        advertised_slugs = set()
+    elif isinstance(raw_advertised, (list, tuple, set, frozenset)):
+        advertised_slugs = set(raw_advertised)
+    else:
+        return _deny("invalid_advertised_title_slugs")
     is_new_title = slug not in advertised_slugs
 
     if is_new_title:
@@ -142,8 +168,11 @@ def _authorize_ads(started_at, action, state, now) -> dict:
             if daily_budget > max_allowed:
                 return _deny("budget_increase_exceeds_15_percent_cap")
             last_increase = state.get("last_budget_increase_at")
-            if isinstance(last_increase, datetime) and now - last_increase < timedelta(hours=BUDGET_INCREASE_MIN_HOURS):
-                return _deny("budget_increase_too_soon")
+            if isinstance(last_increase, datetime):
+                if not _tz_consistent(last_increase, now):
+                    return _deny("invalid_last_increase_reference")
+                if now - last_increase < timedelta(hours=BUDGET_INCREASE_MIN_HOURS):
+                    return _deny("budget_increase_too_soon")
 
     try:
         portfolio_daily_spend = float(state.get("portfolio_daily_spend_thb", 0) or 0)

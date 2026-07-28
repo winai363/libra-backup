@@ -453,6 +453,24 @@ async def _execute_price(action: dict, listing: dict, price: str) -> dict:
     }
 
 
+class KdpPromotionAdapter:
+    """Adapter hook for kdp_promotion_controller.reconcile_promotion — the
+    production entry point that turns an approved, evidence-paired one-day
+    promotion proposal into a real KDP mutation. Additive only: reuses the
+    SAME browser flow and audit-result shape as the free_promo action lane
+    above (_execute_free_promo), never a new path, and never touches
+    validate_action or any existing gate."""
+
+    def publish(self, action: dict) -> dict:
+        import asyncio
+
+        slug = action.get("slug") or ""
+        listing = load_listing(slug)
+        if listing is None:
+            return {"returncode": 1, "error": f"no listing.json for slug {slug}"}
+        return asyncio.run(_execute_free_promo(action, listing, int(action.get("days") or 1)))
+
+
 def build_executor(*, notify: bool = True):
     """Return an executor(action) -> result dict for run_daily."""
     budget = {"used": 0}

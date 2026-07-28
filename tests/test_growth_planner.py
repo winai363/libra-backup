@@ -164,3 +164,60 @@ def test_action_key_changes_when_phase_or_day_changes():
     )
     assert other_phase["action_key"] != base["action_key"]
     assert next_day["action_key"] != base["action_key"]
+
+
+# ---------------------------------------------------------------------------
+# Fail-closed row validation: malformed rows are excluded, never crash the
+# whole plan.
+# ---------------------------------------------------------------------------
+
+
+def test_malformed_score_excludes_row_without_crashing():
+    titles = ranked_titles(12) + [_title("book-bad-score", "scale", "high")]
+    plan = build_growth_plan(
+        scored_titles=titles, active_experiments=[], phase="organic_test", now=NOW,
+    )
+    active_slugs = {row["slug"] for row in plan["portfolio"]["active"]}
+    assert "book-bad-score" not in active_slugs
+
+
+def test_duplicate_slug_keeps_first_occurrence_only():
+    titles = ranked_titles(12) + [_title("book-scale-1", "scale", 999)]
+    plan = build_growth_plan(
+        scored_titles=titles, active_experiments=[], phase="organic_test", now=NOW,
+    )
+    active_rows = [row for row in plan["portfolio"]["active"] if row["slug"] == "book-scale-1"]
+    assert len(active_rows) == 1
+    # First occurrence (score 90 from ranked_titles) wins, not the score-999
+    # duplicate appended after it.
+    assert active_rows[0]["score"] == 90
+
+
+def test_non_dict_row_is_excluded_without_crashing():
+    titles = ranked_titles(12) + ["not-a-dict-row"]
+    plan = build_growth_plan(
+        scored_titles=titles, active_experiments=[], phase="organic_test", now=NOW,
+    )
+    assert len(plan["portfolio"]["active"]) == MAX_ACTIVE_TITLES
+
+
+def test_row_with_missing_or_non_string_slug_is_excluded():
+    titles = ranked_titles(12) + [
+        {"score": 99, "classification": "scale"},
+        {"slug": 12345, "score": 99, "classification": "scale"},
+    ]
+    plan = build_growth_plan(
+        scored_titles=titles, active_experiments=[], phase="organic_test", now=NOW,
+    )
+    active_slugs = {row["slug"] for row in plan["portfolio"]["active"]}
+    assert 12345 not in active_slugs
+    assert len(plan["portfolio"]["active"]) == MAX_ACTIVE_TITLES
+
+
+def test_row_with_unrecognized_classification_is_excluded():
+    titles = ranked_titles(12) + [_title("book-unknown", "pending_review", 999)]
+    plan = build_growth_plan(
+        scored_titles=titles, active_experiments=[], phase="organic_test", now=NOW,
+    )
+    active_slugs = {row["slug"] for row in plan["portfolio"]["active"]}
+    assert "book-unknown" not in active_slugs

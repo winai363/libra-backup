@@ -25,7 +25,7 @@ active experiment defaults to DEFAULT_ORGANIC_TEST_VARIABLE.
 Action kinds: this planner only ever emits `organic_test` actions, for
 "test"-classified titles in the active portfolio, bounded by
 MAX_ORGANIC_TESTS and gated by phase (ORGANIC_TEST_PHASES). It never emits
-a metadata/republish kind or variable (title/subtitle/description/
+a metadata/republish kind or variable (title/subtitle/author/description/
 keywords/categories/cover/interior) — those stay forbidden everywhere in
 this system, so any action that would touch one is dropped rather than
 emitted.
@@ -75,21 +75,47 @@ def _experiment_variable_by_slug(active_experiments: list[dict]) -> dict:
     return variables
 
 
+def _coerce_score(title: dict):
+    """Numeric score for ranking, or None if the row's score is malformed
+    (fails closed: the row is excluded from ranking entirely rather than
+    raising or silently defaulting to 0, which would let a bad row rank
+    as if it had the worst possible score)."""
+    try:
+        return float(title.get("score", 0) or 0)
+    except (TypeError, ValueError):
+        return None
+
+
 def _rank_active_portfolio(scored_titles: list[dict]) -> list[dict]:
-    eligible = [
-        title for title in (scored_titles or [])
-        if isinstance(title, dict)
-        and isinstance(title.get("slug"), str)
-        and title.get("classification") in _CLASSIFICATION_PRIORITY
-    ]
+    eligible = []
+    seen_slugs = set()
+    for title in scored_titles or []:
+        if not isinstance(title, dict):
+            continue
+        slug = title.get("slug")
+        if not isinstance(slug, str):
+            continue
+        if title.get("classification") not in _CLASSIFICATION_PRIORITY:
+            continue
+        score = _coerce_score(title)
+        if score is None:
+            continue
+        if slug in seen_slugs:
+            # First occurrence wins — a later duplicate row for the same
+            # slug is skipped so the active-portfolio cap counts unique
+            # titles, not duplicate rows.
+            continue
+        seen_slugs.add(slug)
+        eligible.append((title, score))
+
     eligible.sort(
-        key=lambda title: (
-            _CLASSIFICATION_PRIORITY[title["classification"]],
-            -float(title.get("score", 0) or 0),
-            title["slug"],
+        key=lambda pair: (
+            _CLASSIFICATION_PRIORITY[pair[0]["classification"]],
+            -pair[1],
+            pair[0]["slug"],
         )
     )
-    return eligible[:MAX_ACTIVE_TITLES]
+    return [title for title, _score in eligible[:MAX_ACTIVE_TITLES]]
 
 
 def _plan_organic_tests(

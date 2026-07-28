@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta
 
 from portfolio_scorer import (
+    CONVERSION_SIGNAL_CAP,
     EVIDENCE_FRESHNESS_DAYS,
     FREEZE_MIN_VERIFIED_PLACEMENTS,
     MAINTAIN_SCORE_THRESHOLD,
+    RISK_PENALTY,
     SCALE_SCORE_THRESHOLD,
     WEIGHT_CLICKS,
     WEIGHT_CONVERSION,
@@ -207,3 +209,73 @@ def test_deterministic_same_input_yields_same_output():
     assert score_title(dict(title)) == score_title(dict(title))
     now = datetime(2026, 7, 28)
     assert score_portfolio([title], now) == score_portfolio([title], now)
+
+
+# ---------------------------------------------------------------------------
+# Risk is a penalty AND a hard block (controller decision, round 2)
+# ---------------------------------------------------------------------------
+
+
+def test_risk_penalty_reduces_a_high_scorer_by_exactly_the_penalty():
+    clean = score_title(winner_input())
+    risky = score_title({**winner_input(), "risk_active": True})
+    assert risky["classification"] == "blocked"
+    assert risky["score"] == round(clean["score"] - RISK_PENALTY, 2)
+
+
+def test_risk_penalty_floors_at_zero_for_a_zero_scorer():
+    title = {
+        "slug": "book-g", "royalty_delta_usd": 0, "kenp_delta": 0,
+        "tracked_clicks": 0, "risk_active": True,
+    }
+    result = score_title(title)
+    assert result["score"] == 0.0
+    assert result["classification"] == "blocked"
+
+
+# ---------------------------------------------------------------------------
+# Minor: negative-delta clamping, blocked-beats-freeze, exact thresholds,
+# named conversion cap.
+# ---------------------------------------------------------------------------
+
+
+def test_negative_delta_clamps_component_to_zero():
+    title = {
+        "slug": "book-h", "royalty_delta_usd": -5, "kenp_delta": 0,
+        "tracked_clicks": 0, "risk_active": False,
+    }
+    result = score_title(title)
+    assert result["components"]["royalty_growth"] == 0.0
+
+
+def test_blocked_takes_priority_over_freeze():
+    title = {
+        "slug": "book-i", "royalty_delta_usd": 0, "kenp_delta": 0,
+        "tracked_clicks": 0, "verified_placements": 3, "risk_active": True,
+    }
+    result = score_title(title)
+    assert result["classification"] == "blocked"
+
+
+def test_scale_threshold_is_inclusive_at_exactly_70():
+    title = {
+        "slug": "book-j", "royalty_delta_usd": 5, "kenp_delta": 100,
+        "tracked_clicks": 0, "conversion_signal": 1, "risk_active": False,
+    }
+    result = score_title(title)
+    assert result["score"] == 70.0
+    assert result["classification"] == "scale"
+
+
+def test_maintain_threshold_is_inclusive_at_exactly_40():
+    title = {
+        "slug": "book-k", "royalty_delta_usd": 5, "kenp_delta": 40,
+        "tracked_clicks": 0, "risk_active": False,
+    }
+    result = score_title(title)
+    assert result["score"] == 40.0
+    assert result["classification"] == "maintain"
+
+
+def test_conversion_signal_cap_constant_is_used_for_normalization():
+    assert CONVERSION_SIGNAL_CAP == 1.0

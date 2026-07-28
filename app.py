@@ -10,8 +10,19 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+
+from business_ledger import record_hub_event
+from content_hub import (
+    build_outbound_event,
+    growth_summary,
+    make_tracking_token,
+    render_hub_page,
+    escape_text,
+    paragraphs_html,
+    resolve_tracking_token,
+)
 
 logger = logging.getLogger("libra")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -30,6 +41,7 @@ app = FastAPI(title="Libra")
 
 KDP_DIR = Path(ENV.get("KDP_DIR", "/root/kdp"))
 PROFIT_LEDGER_FILE = Path(__file__).parent / "data" / "libra-business.db"
+GROWTH_ARTICLES_DIR = Path(__file__).parent / "data" / "growth_articles"
 PROFIT_AGENT_STATE_FILE = Path(__file__).parent / "data" / "profit-agent-state.json"
 USERNAME = ENV.get("USERNAME", "")
 PASSWORD = ENV.get("PASSWORD", "")
@@ -1256,3 +1268,106 @@ POST /api/audit/run
 async def index():
     html_path = Path(__file__).parent / "templates" / "index.html"
     return HTMLResponse(html_path.read_text())
+
+
+# ── Content Hub & first-party tracking (Task 5) ────────────────────────────
+# Public organic-traffic pages plus signed, privacy-safe outbound Amazon
+# click tracking. See content_hub.py for token signing and the destination
+# allowlist.
+
+GROWTH_HUB_CAMPAIGN = "content-hub"
+_SLUG_ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{1,100}")
+
+
+def _live_book_asin(slug):
+    """Return (listing, asin) for a live, published book slug, or None if
+    the slug is malformed, unknown, or not yet uploaded with an ASIN."""
+    if not isinstance(slug, str) or not _SLUG_ID_RE.fullmatch(slug):
+        return None
+    listing_file = KDP_DIR / slug / "listing.json"
+    if not listing_file.exists():
+        return None
+    try:
+        listing = json.loads(listing_file.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    asin = listing.get("asin")
+    if not asin:
+        return None
+    return listing, asin
+
+
+def _hub_cta_path(slug: str, campaign: str, destination: str) -> str:
+    return f"/growth/out/{make_tracking_token(slug, campaign, destination)}"
+
+
+@app.get("/growth/books/{slug}", response_class=HTMLResponse)
+async def growth_book_hub_page(slug: str):
+    """Public book hub page with exactly one tracked Amazon CTA."""
+    result = _live_book_asin(slug)
+    if result is None:
+        return HTMLResponse("<h1>Book not found</h1>", status_code=404)
+    listing, asin = result
+    destination = f"https://www.amazon.com/dp/{asin}"
+    cta_path = _hub_cta_path(slug, GROWTH_HUB_CAMPAIGN, destination)
+    html_path = Path(__file__).parent / "templates" / "hub_book.html"
+    page = render_hub_page(html_path.read_text(), {
+        "TITLE": escape_text(listing.get("title", slug)),
+        "DESCRIPTION": escape_text(listing.get("description", "")),
+        "CTA_URL": escape_text(cta_path),
+        "CTA_LABEL": "View on Amazon",
+    })
+    return HTMLResponse(page)
+
+
+@app.get("/growth/articles/{article_id}", response_class=HTMLResponse)
+async def growth_article_hub_page(article_id: str):
+    """Public article hub page with exactly one tracked Amazon CTA linking
+    to the article's target book."""
+    if not _SLUG_ID_RE.fullmatch(article_id):
+        return HTMLResponse("<h1>Article not found</h1>", status_code=404)
+    article_file = GROWTH_ARTICLES_DIR / f"{article_id}.json"
+    if not article_file.exists():
+        return HTMLResponse("<h1>Article not found</h1>", status_code=404)
+    try:
+        article = json.loads(article_file.read_text())
+    except (OSError, json.JSONDecodeError):
+        return HTMLResponse("<h1>Article not found</h1>", status_code=404)
+
+    target_slug = article.get("target_slug")
+    result = _live_book_asin(target_slug)
+    if result is None:
+        return HTMLResponse("<h1>Article not found</h1>", status_code=404)
+    _, asin = result
+    destination = f"https://www.amazon.com/dp/{asin}"
+    campaign = article.get("campaign") or GROWTH_HUB_CAMPAIGN
+    cta_path = _hub_cta_path(target_slug, campaign, destination)
+    html_path = Path(__file__).parent / "templates" / "hub_article.html"
+    page = render_hub_page(html_path.read_text(), {
+        "TITLE": escape_text(article.get("title", article_id)),
+        "BODY": paragraphs_html(article.get("body", "")),
+        "CTA_URL": escape_text(cta_path),
+        "CTA_LABEL": escape_text(article.get("cta_label", "View on Amazon")),
+    })
+    return HTMLResponse(page)
+
+
+@app.get("/growth/out/{token}")
+async def growth_outbound_click(token: str):
+    """Verify a signed tracking token, record one privacy-safe
+    amazon_outbound hub event, and redirect to the approved destination."""
+    try:
+        payload = resolve_tracking_token(token)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Invalid or expired tracking link")
+    event = build_outbound_event(payload["slug"], payload["campaign"])
+    record_hub_event(PROFIT_LEDGER_FILE, event)
+    return RedirectResponse(url=payload["destination"], status_code=307)
+
+
+@app.get("/api/growth/summary")
+async def growth_summary_api(request: Request):
+    """Aggregate totals for tracked hub events (e.g. Amazon outbound
+    clicks) by event kind and slug."""
+    check_read(request)
+    return growth_summary(PROFIT_LEDGER_FILE)

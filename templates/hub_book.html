@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{TITLE}}</title>
+  <meta name="description" content="{{DESCRIPTION}}">
+  <style>
+    :root { color-scheme: light; }
+    body {
+      margin: 0; background: #0f172a; color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.7;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 3rem 1.5rem 5rem; }
+    h1 { font-size: 2rem; font-weight: 700; color: #f8fafc; margin: 0 0 1.25rem; }
+    p.description { color: #cbd5e1; font-size: 1.05rem; white-space: pre-wrap; }
+    .cta {
+      display: inline-block; margin-top: 2rem; padding: 0.9rem 1.8rem;
+      background: #f59e0b; color: #0f172a; font-weight: 700; text-decoration: none;
+      border-radius: 8px; font-size: 1.05rem;
+    }
+    .cta:hover { background: #fbbf24; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>{{TITLE}}</h1>
+    <p class="description">{{DESCRIPTION}}</p>
+    <a class="cta" href="{{CTA_URL}}" rel="nofollow sponsored">{{CTA_LABEL}}</a>
+  </div>
+</body>
+</html>

@@ -48,6 +48,7 @@ def _write_listing(kdp_dir, slug, **overrides):
         "description": "A useful description of the test book.",
         "status": "uploaded",
         "asin": "B0TESTASIN1",
+        "live_status": "LIVE",
     }
     listing.update(overrides)
     (book_dir / "listing.json").write_text(json.dumps(listing))
@@ -157,6 +158,36 @@ def test_book_hub_page_without_asin_is_404(client):
     assert response.status_code == 404
 
 
+def test_book_hub_page_with_live_status_live_is_200(client):
+    """asin + live_status LIVE renders — the positive case matching the
+    negative BLOCKED case below."""
+    _write_listing(libra_app.KDP_DIR, "book-a", live_status="LIVE")
+
+    response = client.get("/growth/books/book-a")
+
+    assert response.status_code == 200
+
+
+def test_book_hub_page_blocked_book_is_404(client):
+    """A book that was pulled from Amazon (live_status BLOCKED) must never
+    get a tracked CTA sending traffic to a dead ASIN — real example:
+    acuarela-para-principiantes-guia-paso-a-paso, blocked 11 Jul 2026."""
+    _write_listing(libra_app.KDP_DIR, "book-a", live_status="BLOCKED")
+
+    response = client.get("/growth/books/book-a")
+
+    assert response.status_code == 404
+
+
+def test_book_hub_page_missing_live_status_is_404(client):
+    """Fail closed: no live_status field at all must not be treated as live."""
+    _write_listing(libra_app.KDP_DIR, "book-a", live_status=None)
+
+    response = client.get("/growth/books/book-a")
+
+    assert response.status_code == 404
+
+
 def test_book_hub_page_escapes_html_in_listing_data(client):
     _write_listing(libra_app.KDP_DIR, "book-a", title="<script>alert(1)</script>")
 
@@ -203,6 +234,36 @@ def test_article_hub_page_missing_target_book_is_404(client):
     response = client.get("/growth/articles/article-1")
 
     assert response.status_code == 404
+
+
+def test_article_hub_page_blocked_target_book_is_404(client):
+    """Reuses _live_book_asin, so the BLOCKED gate must apply here too."""
+    _write_listing(libra_app.KDP_DIR, "book-a", live_status="BLOCKED")
+    _write_article(libra_app.GROWTH_ARTICLES_DIR, "article-1")
+
+    response = client.get("/growth/articles/article-1")
+
+    assert response.status_code == 404
+
+
+# ── Missing tracking secret (fail closed, but as a clean 503) ──────────────
+
+def test_book_hub_page_returns_503_when_tracking_secret_unset(client, monkeypatch):
+    _write_listing(libra_app.KDP_DIR, "book-a")
+    monkeypatch.delenv("LIBRA_GROWTH_TRACKING_SECRET", raising=False)
+
+    response = client.get("/growth/books/book-a")
+
+    assert response.status_code == 503
+
+
+def test_outbound_click_returns_503_when_tracking_secret_unset(client, monkeypatch):
+    token = make_tracking_token("book-a", "organic-1", "https://www.amazon.com/dp/ASIN")
+    monkeypatch.delenv("LIBRA_GROWTH_TRACKING_SECRET", raising=False)
+
+    response = client.get(f"/growth/out/{token}", follow_redirects=False)
+
+    assert response.status_code == 503
 
 
 # ── /api/growth/summary ─────────────────────────────────────────────────────

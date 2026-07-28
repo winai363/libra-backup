@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from business_ledger import record_hub_event
 from content_hub import (
+    TrackingConfigError,
     build_outbound_event,
     growth_summary,
     make_tracking_token,
@@ -1280,8 +1281,11 @@ _SLUG_ID_RE = re.compile(r"[a-z0-9][a-z0-9-]{1,100}")
 
 
 def _live_book_asin(slug):
-    """Return (listing, asin) for a live, published book slug, or None if
-    the slug is malformed, unknown, or not yet uploaded with an ASIN."""
+    """Return (listing, asin) for a book slug that is both uploaded AND
+    currently live on Amazon, or None if the slug is malformed, unknown,
+    missing an ASIN, or not live_status == "LIVE" (e.g. BLOCKED/pulled —
+    same convention as aplus_assets.py and kdp_bookshelf_roster.py). A
+    blocked/dead ASIN must never get a tracked CTA sending traffic to it."""
     if not isinstance(slug, str) or not _SLUG_ID_RE.fullmatch(slug):
         return None
     listing_file = KDP_DIR / slug / "listing.json"
@@ -1292,7 +1296,7 @@ def _live_book_asin(slug):
     except (OSError, json.JSONDecodeError):
         return None
     asin = listing.get("asin")
-    if not asin:
+    if not asin or listing.get("live_status") != "LIVE":
         return None
     return listing, asin
 
@@ -1309,7 +1313,10 @@ async def growth_book_hub_page(slug: str):
         return HTMLResponse("<h1>Book not found</h1>", status_code=404)
     listing, asin = result
     destination = f"https://www.amazon.com/dp/{asin}"
-    cta_path = _hub_cta_path(slug, GROWTH_HUB_CAMPAIGN, destination)
+    try:
+        cta_path = _hub_cta_path(slug, GROWTH_HUB_CAMPAIGN, destination)
+    except TrackingConfigError:
+        raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")
     html_path = Path(__file__).parent / "templates" / "hub_book.html"
     page = render_hub_page(html_path.read_text(), {
         "TITLE": escape_text(listing.get("title", slug)),
@@ -1341,7 +1348,10 @@ async def growth_article_hub_page(article_id: str):
     _, asin = result
     destination = f"https://www.amazon.com/dp/{asin}"
     campaign = article.get("campaign") or GROWTH_HUB_CAMPAIGN
-    cta_path = _hub_cta_path(target_slug, campaign, destination)
+    try:
+        cta_path = _hub_cta_path(target_slug, campaign, destination)
+    except TrackingConfigError:
+        raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")
     html_path = Path(__file__).parent / "templates" / "hub_article.html"
     page = render_hub_page(html_path.read_text(), {
         "TITLE": escape_text(article.get("title", article_id)),
@@ -1358,8 +1368,10 @@ async def growth_outbound_click(token: str):
     amazon_outbound hub event, and redirect to the approved destination."""
     try:
         payload = resolve_tracking_token(token)
+    except TrackingConfigError:
+        raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")
     except ValueError:
-        raise HTTPException(status_code=404, detail="Invalid or expired tracking link")
+        raise HTTPException(status_code=404, detail="Invalid tracking link")
     event = build_outbound_event(payload["slug"], payload["campaign"])
     record_hub_event(PROFIT_LEDGER_FILE, event)
     return RedirectResponse(url=payload["destination"], status_code=307)

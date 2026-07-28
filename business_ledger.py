@@ -35,6 +35,29 @@ CREATE TABLE IF NOT EXISTS cost_report_versions (
 );
 """
 
+GROWTH_SCHEMA = """
+CREATE TABLE IF NOT EXISTS growth_evidence (
+  id INTEGER PRIMARY KEY, source_key TEXT NOT NULL UNIQUE, kind TEXT NOT NULL,
+  slug TEXT, observed_at TEXT NOT NULL, fresh_until TEXT NOT NULL,
+  confidence REAL NOT NULL, payload_json TEXT NOT NULL, content_hash TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS growth_plans (
+  id INTEGER PRIMARY KEY, action_key TEXT NOT NULL UNIQUE, planned_at TEXT NOT NULL,
+  phase TEXT NOT NULL, status TEXT NOT NULL, plan_json TEXT NOT NULL,
+  content_hash TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS hub_events (
+  id INTEGER PRIMARY KEY, event_key TEXT NOT NULL UNIQUE, occurred_at TEXT NOT NULL,
+  slug TEXT NOT NULL, campaign TEXT NOT NULL, event_kind TEXT NOT NULL,
+  payload_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS growth_incidents (
+  id INTEGER PRIMARY KEY, incident_key TEXT NOT NULL UNIQUE, opened_at TEXT NOT NULL,
+  severity TEXT NOT NULL, scope TEXT NOT NULL, detail_json TEXT NOT NULL,
+  resolved_at TEXT
+);
+"""
+
 
 def _canonical(value: dict) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
@@ -48,6 +71,7 @@ def init_ledger(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path) as connection:
         connection.executescript(SCHEMA)
+        connection.executescript(GROWTH_SCHEMA)
         columns = {r[1] for r in connection.execute("PRAGMA table_info(kdp_snapshots)")}
         for name in ("source_key", "content_hash"):
             if name not in columns:
@@ -111,6 +135,91 @@ def record_direct_cost(path: Path, *, incurred_at: str, slug: str | None, catego
             (incurred_at, slug, category, amount_usd, source_key, digest),
         )
         return cursor.lastrowid
+
+
+def record_growth_evidence(path: Path, evidence: dict) -> int:
+    init_ledger(path)
+    confidence = float(evidence["confidence"])
+    if not (0.0 <= confidence <= 1.0):
+        raise ValueError(f"confidence must be between 0.0 and 1.0, got {confidence}")
+    source_key = evidence["source_key"]
+    content_hash = _hash(evidence)
+    with sqlite3.connect(path) as connection:
+        row = connection.execute(
+            "SELECT id, content_hash FROM growth_evidence WHERE source_key = ?", (source_key,)
+        ).fetchone()
+        if row:
+            if row[1] != content_hash:
+                raise ValueError(f"conflicting growth evidence for {source_key}")
+            return row[0]
+        cursor = connection.execute(
+            "INSERT INTO growth_evidence(source_key, kind, slug, observed_at, fresh_until, confidence, payload_json, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (source_key, evidence["kind"], evidence.get("slug"), evidence["observed_at"], evidence["fresh_until"],
+             confidence, _canonical(evidence.get("payload", {})), content_hash),
+        )
+        return cursor.lastrowid
+
+
+def record_growth_plan(path: Path, plan: dict) -> int:
+    init_ledger(path)
+    action_key = plan["action_key"]
+    content_hash = _hash(plan)
+    with sqlite3.connect(path) as connection:
+        row = connection.execute(
+            "SELECT id, content_hash FROM growth_plans WHERE action_key = ?", (action_key,)
+        ).fetchone()
+        if row:
+            if row[1] != content_hash:
+                raise ValueError(f"conflicting growth plan for {action_key}")
+            return row[0]
+        cursor = connection.execute(
+            "INSERT INTO growth_plans(action_key, planned_at, phase, status, plan_json, content_hash) VALUES (?, ?, ?, ?, ?, ?)",
+            (action_key, plan["planned_at"], plan["phase"], plan["status"], _canonical(plan), content_hash),
+        )
+        return cursor.lastrowid
+
+
+def record_hub_event(path: Path, event: dict) -> int:
+    init_ledger(path)
+    event_key = event["event_key"]
+    payload_json = _canonical(event.get("payload", {}))
+    with sqlite3.connect(path) as connection:
+        row = connection.execute(
+            "SELECT id, occurred_at, slug, campaign, event_kind, payload_json FROM hub_events WHERE event_key = ?",
+            (event_key,),
+        ).fetchone()
+        if row:
+            if (row[1] != event["occurred_at"] or row[2] != event["slug"] or row[3] != event["campaign"]
+                    or row[4] != event["event_kind"] or row[5] != payload_json):
+                raise ValueError(f"conflicting hub event for {event_key}")
+            return row[0]
+        cursor = connection.execute(
+            "INSERT INTO hub_events(event_key, occurred_at, slug, campaign, event_kind, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
+            (event_key, event["occurred_at"], event["slug"], event["campaign"], event["event_kind"], payload_json),
+        )
+        return cursor.lastrowid
+
+
+def growth_evidence(path: Path, *, slug: str | None = None, kind: str | None = None) -> list[dict]:
+    init_ledger(path)
+    query = "SELECT source_key, kind, slug, observed_at, fresh_until, confidence, payload_json FROM growth_evidence WHERE 1=1"
+    params: list[str] = []
+    if slug is not None:
+        query += " AND slug = ?"
+        params.append(slug)
+    if kind is not None:
+        query += " AND kind = ?"
+        params.append(kind)
+    query += " ORDER BY id"
+    with sqlite3.connect(path) as connection:
+        rows = connection.execute(query, params).fetchall()
+    return [
+        {
+            "source_key": r[0], "kind": r[1], "slug": r[2], "observed_at": r[3],
+            "fresh_until": r[4], "confidence": r[5], "payload": json.loads(r[6]),
+        }
+        for r in rows
+    ]
 
 
 def ingest_uploaded_title_costs(path: Path, books_dir: Path, *, checked_at: str = "1970-01-01T00:00:00+00:00") -> dict:

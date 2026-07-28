@@ -66,6 +66,60 @@ def test_unsupported_claim_flags_ambiguous_word_when_risk_domain_is_health():
     assert "unsupported_claim" in errors
 
 
+def test_unsupported_claim_flags_curing_inflection_regardless_of_domain():
+    # "curing" (an inflection of the always-flagged "cure" family) must be
+    # caught even in a non-health risk_domain.
+    errors = validate_growth_content(
+        {"language": "en", "body": "There is no curing this disease overnight."},
+        {"language": "en", "risk_domain": "fitness"},
+    )
+    assert "unsupported_claim" in errors
+
+
+def test_unsupported_claim_flags_healing_inflection_in_health_domain():
+    errors = validate_growth_content(
+        {"language": "en", "body": "This tea is healing your anxiety."},
+        {"language": "en", "risk_domain": "health"},
+    )
+    assert "unsupported_claim" in errors
+
+
+def test_unsupported_claim_flags_diagnosing_inflection_regardless_of_domain():
+    errors = validate_growth_content(
+        {"language": "en", "body": "This quiz is diagnosing your learning style."},
+        {"language": "en", "risk_domain": "education"},
+    )
+    assert "unsupported_claim" in errors
+
+
+def test_unsupported_claim_flags_prevented_inflection_in_health_domain():
+    errors = validate_growth_content(
+        {"language": "en", "body": "This supplement prevented her migraines."},
+        {"language": "en", "risk_domain": "health"},
+    )
+    assert "unsupported_claim" in errors
+
+
+def test_unsupported_claim_allows_treating_inflection_non_medically_outside_health():
+    # "treating" a topic, not a patient — same non-medical-use exemption as
+    # the bare "treats" case, extended to the inflected form.
+    errors = validate_growth_content(
+        {"language": "en", "body": "The essay keeps treating the topic of jazz history sensitively."},
+        {"language": "en", "risk_domain": "music"},
+    )
+    assert "unsupported_claim" not in errors
+
+
+def test_unsupported_claim_does_not_false_positive_on_unrelated_word_treatment():
+    # "treatment" is a distinct word from the "treat" family stem match —
+    # must not trip the health-domain gate on its own.
+    errors = validate_growth_content(
+        {"language": "en", "body": "This book explores the treatment of grief in literature."},
+        {"language": "en", "risk_domain": "health"},
+    )
+    assert "unsupported_claim" not in errors
+
+
 def test_build_content_request_is_grounded_in_listing_and_campaign():
     listing = {"language": "es", "slug": "book-a", "risk_domain": "health"}
     excerpt = "Excerpt text from the book body."

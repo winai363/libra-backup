@@ -18,28 +18,47 @@ Two responsibilities:
    why content was refused. Two gates today:
    - `language_mismatch`: the content's declared language doesn't match the
      listing's language, normalizing both code (`es`) and name (`Spanish`)
-     forms. Missing/unrecognized language on either side fails closed to a
-     mismatch — content can never ship without a confirmed language match.
-   - `unsupported_claim`: absolute medical-claim verbs ("cures", "heals",
-     "diagnoses", ...) are refused in ANY listing, since there is no niche
-     where an absolute cure claim is a supportable claim. A second,
-     health-domain-only word list additionally catches ambiguous verbs
-     ("treats", "prevents") that are only a medical claim when the listing's
-     `risk_domain` is `"health"` — the same word used non-medically (e.g.
-     "this chapter treats the history of jazz") elsewhere is not flagged.
+     forms (case/whitespace-insensitive) against a fixed alias table. A
+     missing/non-string language on either side always fails closed to a
+     mismatch. A language string outside the alias table is NOT treated as
+     missing — it normalizes to its own lowercased form, so two sides using
+     the identical unrecognized string still match; only DIFFERING
+     unrecognized strings mismatch. Add new languages to the alias table as
+     they come up rather than relying on this fallback.
+   - `unsupported_claim`: absolute medical-claim verbs ("cure"/"cures"/
+     "cured"/"curing", "heal"/"heals"/"healed"/"healing", "diagnose"/
+     "diagnoses"/"diagnosed"/"diagnosing") are refused in ANY listing, since
+     there is no niche where an absolute cure claim is a supportable claim.
+     A second, health-domain-only word list additionally catches ambiguous
+     verbs ("treat"/"treats"/"treated"/"treating", "prevent"/"prevents"/
+     "prevented"/"preventing") that are only a medical claim when the
+     listing's `risk_domain` is `"health"` — the same word used
+     non-medically (e.g. "this chapter treats the history of jazz", or
+     "the essay keeps treating the topic sensitively") elsewhere is not
+     flagged. All matching is whole-word (`\\b`-bounded), so an inflection
+     is caught without false-positiving on an unrelated word that merely
+     contains the stem (e.g. "treatment" does not match the "treat" family).
 """
 from __future__ import annotations
 
 import hashlib
 import re
 
-# Absolute medical-claim verbs: unambiguous cure/diagnosis language, refused
-# regardless of the listing's risk_domain.
-_ALWAYS_FLAGGED_CLAIM_WORDS = {"cures", "cure", "heals", "heal", "diagnoses", "diagnose"}
+# Absolute medical-claim verb families (all common inflections), refused
+# regardless of the listing's risk_domain. Non-capturing groups, longest
+# alternative first, so there's no ambiguity in what a bare stem match means.
+_ALWAYS_FLAGGED_CLAIM_PATTERNS = (
+    r"cur(?:es|ed|ing|e)",          # cures, cured, curing, cure
+    r"heal(?:s|ed|ing)?",          # heals, healed, healing, heal
+    r"diagnos(?:es|ed|ing|e)",     # diagnoses, diagnosed, diagnosing, diagnose
+)
 
-# Additional verbs that are only a medical claim in context — flagged only
-# when the listing's risk_domain is "health".
-_HEALTH_DOMAIN_CLAIM_WORDS = _ALWAYS_FLAGGED_CLAIM_WORDS | {"treats", "treat", "prevents", "prevent"}
+# Additional verb families that are only a medical claim in context —
+# flagged only when the listing's risk_domain is "health".
+_HEALTH_DOMAIN_CLAIM_PATTERNS = _ALWAYS_FLAGGED_CLAIM_PATTERNS + (
+    r"treat(?:s|ed|ing)?",         # treats, treated, treating, treat
+    r"prevent(?:s|ed|ing)?",       # prevents, prevented, preventing, prevent
+)
 
 _LANGUAGE_ALIASES = {
     "en": "english", "english": "english",
@@ -66,9 +85,9 @@ def _normalize_language(value) -> str | None:
     return _LANGUAGE_ALIASES.get(key) or (key or None)
 
 
-def _has_claim_word(body: str, words: set[str]) -> bool:
+def _has_claim_word(body: str, patterns: tuple[str, ...]) -> bool:
     lowered = body.lower()
-    return any(re.search(rf"\b{re.escape(word)}\b", lowered) for word in words)
+    return any(re.search(rf"\b{pattern}\b", lowered) for pattern in patterns)
 
 
 def build_content_request(listing: dict, source_excerpt: str, campaign: dict) -> dict:
@@ -101,8 +120,8 @@ def validate_growth_content(content: dict, listing: dict) -> list[str]:
 
     body = content.get("body")
     body = body if isinstance(body, str) else ""
-    claim_words = _HEALTH_DOMAIN_CLAIM_WORDS if listing.get("risk_domain") == "health" else _ALWAYS_FLAGGED_CLAIM_WORDS
-    if _has_claim_word(body, claim_words):
+    claim_patterns = _HEALTH_DOMAIN_CLAIM_PATTERNS if listing.get("risk_domain") == "health" else _ALWAYS_FLAGGED_CLAIM_PATTERNS
+    if _has_claim_word(body, claim_patterns):
         errors.append("unsupported_claim")
 
     return errors

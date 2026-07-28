@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from business_ledger import init_ledger
+from growth_policy import GROWTH_ACTION_KINDS, authorize_growth_action
 
 
 ACTIVE_STATUSES = {
@@ -301,6 +302,15 @@ def title_financial_boundary(db_path: Path, asin: str, snapshot_id: int, *, slug
 
 
 def check_policy(action: dict, context: dict) -> tuple[bool, str]:
+    # New growth-policy path (price_update/free_promo/countdown_deal/amazon_ads):
+    # only engages when a caller explicitly opts in with growth_policy/growth_state.
+    # Legacy metadata/category/paid-during-organic-mode gates below are untouched.
+    if action.get("kind") in GROWTH_ACTION_KINDS and "growth_policy" in context:
+        result = authorize_growth_action(
+            context["growth_policy"], action, context.get("growth_state") or {}
+        )
+        return result["allowed"], result["reason"]
+
     policy = context.get("policy")
     if policy is not None:
         now = context.get("now")

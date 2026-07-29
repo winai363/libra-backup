@@ -1463,8 +1463,22 @@ def build_growth_dashboard() -> dict:
         "traffic": growth_summary(PROFIT_LEDGER_FILE),
         "caps_thb": {"daily": DAILY_CAP_THB, "monthly": MONTHLY_CAP_THB, "initial_title": INITIAL_TITLE_CAP_THB},
         "contribution_profit_usd": financials.get("contribution_profit_usd"),
-        "paid_spend_allowed": state.get("phase") == "growth",
+        # Deliberately named for exactly what this checks -- the
+        # calendar/Growth-Gate WINDOW (phase == "growth"), never
+        # "ads may spend now". Real spend additionally requires per-title
+        # ads_eligibility (royalty growth / KENP >=100 / >=20 tracked
+        # clicks, see growth_policy.ads_eligibility), which this dashboard
+        # deliberately does not recompute -- see _growth_spend_html's
+        # caption, which must always accompany this value.
+        "growth_gate_window_open": state.get("phase") == "growth",
     }
+
+
+def _growth_score_text(value) -> str:
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return "—"
 
 
 def _growth_portfolio_table_html(portfolio: list) -> str:
@@ -1474,7 +1488,7 @@ def _growth_portfolio_table_html(portfolio: list) -> str:
         '<tr class="border-t border-slate-700">'
         f'<td class="py-2 pr-4 font-medium text-white">{escape_text(row.get("slug"))}</td>'
         f'<td class="py-2 pr-4">{escape_text(row.get("classification"))}</td>'
-        f'<td class="py-2 pr-4">{escape_text(row.get("score"))}</td>'
+        f'<td class="py-2 pr-4">{escape_text(_growth_score_text(row.get("score")))}</td>'
         f'<td class="py-2">{"fresh" if row.get("evidence_fresh") else "stale"}</td>'
         "</tr>"
         for row in portfolio
@@ -1564,11 +1578,14 @@ def _growth_spend_html(view: dict) -> str:
     caps = view.get("caps_thb") or {}
     contribution = view.get("contribution_profit_usd")
     contribution_text = f"${float(contribution):.2f}" if contribution is not None else "—"
+    window_open = view.get("growth_gate_window_open")
     return (
-        f'<p>Amazon Ads: <span class="font-medium">{"open" if view.get("paid_spend_allowed") else "closed"}</span> '
+        f'<p>Growth Gate window: <span class="font-medium">{"open" if window_open else "closed"}</span> '
         f'&middot; caps THB {float(caps.get("daily", 0)):.2f}/day, '
         f'THB {float(caps.get("monthly", 0)):.2f}/month, '
         f'THB {float(caps.get("initial_title", 0)):.2f}/title (initial).</p>'
+        f'<p class="mt-1 text-xs text-slate-400">Spend also requires per-title eligibility '
+        f'(royalty growth / KENP &ge;100 / &ge;20 tracked clicks).</p>'
         f'<p class="mt-2">Verified contribution profit (lifetime): '
         f'<span class="font-medium">{escape_text(contribution_text)}</span></p>'
     )

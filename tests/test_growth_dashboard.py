@@ -101,6 +101,28 @@ def test_growth_dashboard_renders_full_state_without_500(client, state_file):
     assert "No Growth Autopilot run recorded yet" not in response.text
 
 
+def test_growth_dashboard_spend_section_is_honest_about_ads_readiness(client, state_file):
+    """The Spend section must never read as "ads may spend now". It shows
+    only the calendar/Growth-Gate WINDOW state, labeled as such, with a
+    caption that per-title eligibility is a separate, additional
+    requirement -- and never the old "Amazon Ads: open/closed" phrasing,
+    which an operator could misread as spend authorization."""
+    state_file.write_text(json.dumps(FULL_STATE))
+
+    response = client.get("/growth")
+
+    assert response.status_code == 200
+    assert "Growth Gate window" in response.text
+    assert "per-title eligibility" in response.text
+    assert "royalty growth / KENP" in response.text
+    assert "Amazon Ads: open" not in response.text
+    assert "Amazon Ads: closed" not in response.text
+    # THB caps render at 2dp -- test-covered, not just manually verified.
+    assert "THB 100.00" in response.text
+    assert "THB 3000.00" in response.text
+    assert "THB 50.00" in response.text
+
+
 def test_growth_dashboard_never_renders_a_control_form(client, state_file):
     state_file.write_text(json.dumps(FULL_STATE))
     response = client.get("/growth")
@@ -150,6 +172,13 @@ def test_api_growth_state_json_contract_separates_plan_from_executed(client, sta
     assert data["caps_thb"] == {"daily": 100, "monthly": 3000, "initial_title": 50}
     assert "verified_royalties_usd" in data["verified_revenue"]
     assert "total_events" in data["traffic"]
+
+    # Honest label, not "paid spend allowed": this only reflects the
+    # calendar/Growth-Gate WINDOW (phase == "growth"), never whether any
+    # title has actually met ads_eligibility. FULL_STATE's phase is
+    # "organic", so the window is closed.
+    assert data["growth_gate_window_open"] is False
+    assert "paid_spend_allowed" not in data
 
 
 def test_api_growth_state_reflects_verified_revenue_from_ledger(client, ledger, state_file):

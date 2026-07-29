@@ -374,6 +374,62 @@ def test_same_day_replay_with_different_wall_clock_times_is_still_idempotent(tmp
     assert count == 1
 
 
+def test_same_day_plan_drift_with_identical_actions_does_not_crash(tmp_path):
+    """Regression: business_ledger.record_growth_plan's content hash covers
+    the full plan_json, including portfolio.active (score included per
+    title) -- but growth_planner's action_key covers only the selected
+    slug/variable pairs (see growth_planner._stable_action_key). If the
+    roster's SCORES drift intra-day (a fresh score_portfolio call sees new
+    evidence) while the selected actions stay byte-identical, a same-day
+    second run must not crash inside the ledger conflict check -- action_key
+    already proves the actions match, so this is the benign case."""
+    cfg = config(tmp_path)
+    first = run_growth_controller(cfg, now=NOW, shadow=True)
+
+    # Same slug still classifies "test" (score well under MAINTAIN's 40)
+    # but its score changed -- portfolio.active[0]["score"] drifts while
+    # actions (slug/variable) stay identical.
+    drifted_cfg = {**cfg, "titles": [{**_untested_title(), "royalty_delta_usd": 1}]}
+    second = run_growth_controller(drifted_cfg, now=NOW + timedelta(hours=2), shadow=True)
+
+    assert first["plan"]["action_key"] == second["plan"]["action_key"]
+    assert first["plan"]["portfolio"]["active"][0]["score"] != second["plan"]["portfolio"]["active"][0]["score"]
+    assert second["plan"]["actions"] == first["plan"]["actions"]
+    assert second["executed"] == []
+    assert second["locked"] is False
+
+    with sqlite3.connect(cfg["ledger_path"]) as connection:
+        count = connection.execute("SELECT COUNT(*) FROM growth_plans").fetchone()[0]
+    assert count == 1  # ledger append-only: no duplicate row, original untouched
+
+    assert cfg["state_path"].exists()
+    on_disk = json.loads(cfg["state_path"].read_text(encoding="utf-8"))
+    assert on_disk["plan"]["action_key"] == second["plan"]["action_key"]
+
+
+def test_conflicting_growth_plan_with_genuinely_different_actions_still_raises(tmp_path, monkeypatch):
+    """Whitebox guard: if the ledger read-back used to check "same actions"
+    ever disagreed with what this cycle actually selected, the controller
+    must still raise -- never silently swap in some other day's actions. In
+    practice this can't happen through record_growth_plan itself
+    (action_key already covers every slug/variable pair), so the read-back
+    helper is monkeypatched to force the mismatch and prove the re-raise
+    path is real, not dead code."""
+    import growth_autopilot
+
+    cfg = config(tmp_path)
+    run_growth_controller(cfg, now=NOW, shadow=True)
+
+    drifted_cfg = {**cfg, "titles": [{**_untested_title(), "royalty_delta_usd": 1}]}
+    monkeypatch.setattr(
+        growth_autopilot, "_growth_plan_actions_for_key",
+        lambda ledger_path, action_key: [{"slug": "book-z", "kind": "organic_test", "variable": "price"}],
+    )
+
+    with pytest.raises(ValueError):
+        run_growth_controller(drifted_cfg, now=NOW + timedelta(hours=1), shadow=True)
+
+
 # ---------------------------------------------------------------------------
 # State-file atomicity.
 # ---------------------------------------------------------------------------
@@ -590,6 +646,43 @@ def test_growth_digest_flags_blocked_mutation_plainly():
     assert "book-c" in text  # still reports the blocked action
 
 
+def test_growth_digest_is_silent_about_verification_when_absent():
+    """_DIGEST_STATE has no "verification" key -- the digest must not
+    fabricate or mention a verification section that never ran."""
+    text = build_growth_digest(_DIGEST_STATE)
+    assert "Verification" not in text
+    assert "FLAGGED" not in text
+
+
+def test_growth_digest_mentions_verification_status_when_present():
+    state = {
+        **_DIGEST_STATE,
+        "verification": {
+            "status": "verified", "checked": 3, "verified": [{"slug": "book-a"}], "flagged": [],
+        },
+    }
+    text = build_growth_digest(state)
+    assert "Verification" in text
+    assert "verified" in text.lower()
+
+
+def test_growth_digest_calls_out_flagged_verification_entries_prominently():
+    """A flagged entry means an action claimed "executed" without
+    verifiable before/after proof -- this must be impossible to miss in
+    the digest, not buried in cron log JSON only."""
+    state = {
+        **_DIGEST_STATE,
+        "verification": {
+            "status": "verified", "checked": 2, "verified": [],
+            "flagged": [{"slug": "book-b", "kind": "free_promo", "reason": "missing_verifiable_evidence"}],
+        },
+    }
+    text = build_growth_digest(state)
+    assert "FLAGGED" in text
+    assert "book-b" in text
+    assert "missing_verifiable_evidence" in text
+
+
 # ---------------------------------------------------------------------------
 # scripts/libra_growth_autopilot.py --send wiring (Task 10) — the CLI's
 # send path must hand the transport build_growth_digest's own output for
@@ -705,6 +798,26 @@ def test_collect_reports_locked_when_lock_is_contended(tmp_path):
     assert result["locked"] is True
     rows = growth_evidence(cfg["ledger_path"], kind="collection_heartbeat")
     assert rows == []  # never wrote while contended
+
+
+def test_collect_defensively_handles_a_ledger_conflict_without_crashing(tmp_path, monkeypatch):
+    """Symmetric defensive fix (T11a deferred Minor): the heartbeat's
+    source_key and payload are both derived from `now`'s calendar date
+    only, so a genuine conflict is unreachable today -- but the write must
+    still degrade gracefully (never crash out of the lock) if
+    record_growth_evidence ever raises here, mirroring verify_growth_state's
+    same defensive posture."""
+    import growth_autopilot
+
+    cfg = _collect_config(tmp_path)
+
+    def _raise(*args, **kwargs):
+        raise ValueError("conflicting growth evidence for growth-collect-heartbeat:2026-07-29")
+    monkeypatch.setattr(growth_autopilot, "record_growth_evidence", _raise)
+
+    result = collect_growth_observations(cfg, now=NOW)
+
+    assert result["locked"] is False  # must not crash out of the lock block
 
 
 # ---------------------------------------------------------------------------
@@ -861,6 +974,47 @@ def test_verify_reports_locked_when_lock_is_contended(tmp_path):
         fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
         handle.close()
     assert result["status"] == "locked"
+
+
+def test_verify_same_day_rerun_with_different_counts_does_not_crash(tmp_path):
+    """Regression: growth-verify's ledger evidence row is keyed one-per-day
+    (source_key f"growth-verify:{date}") with a payload built from the
+    CURRENT state's checked/verified/flagged counts. A manual re-run later
+    the same day, after the state file's executed set (and therefore this
+    run's counts) changed, used to raise an unhandled "conflicting growth
+    evidence" from inside the lock. The ledger stays append-only -- the run
+    must degrade gracefully and stay honest instead of crashing."""
+    cfg = _verify_config(tmp_path)
+    _write_prior_state(cfg["state_path"], executed=[{
+        "slug": "book-a", "kind": "price_update", "status": "executed",
+        "evidence": {"confirmation_id": "x", "verified_state_change": {"before": 1, "after": 2}},
+    }])
+    first = verify_growth_state(cfg, now=NOW)
+    assert first["status"] == "verified"
+    assert "ledger_note" not in first
+
+    # Same calendar day, but the state file's executed set changed in
+    # between -- this run's own checked/verified/flagged counts differ from
+    # the row already recorded for today.
+    _write_prior_state(cfg["state_path"], executed=[{
+        "slug": "book-a", "kind": "price_update", "status": "executed",
+        "evidence": {"confirmation_id": "x", "verified_state_change": {"before": 1, "after": 2}},
+    }, {
+        "slug": "book-b", "kind": "free_promo", "status": "executed", "evidence": {},
+    }])
+
+    second = verify_growth_state(cfg, now=NOW + timedelta(hours=3))
+
+    assert second["status"] == "verified"  # no crash
+    assert second["checked"] == 2  # honest -- reflects THIS run's own findings
+    assert second["ledger_note"] == "already_recorded_today_with_different_counts"
+
+    rows = growth_evidence(cfg["ledger_path"], kind="verification_run")
+    assert len(rows) == 1  # ledger append-only: no duplicate/second row this day
+
+    on_disk = json.loads(cfg["state_path"].read_text(encoding="utf-8"))
+    assert on_disk["verification"]["checked"] == 2  # state file honestly reflects the latest run
+    assert on_disk["verification"]["ledger_note"] == "already_recorded_today_with_different_counts"
 
 
 # ---------------------------------------------------------------------------

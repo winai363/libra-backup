@@ -1404,6 +1404,7 @@ def _load_growth_autopilot_state() -> dict:
     allowed = (
         "generated_at", "mode", "locked", "phase", "started_at", "readiness",
         "observations_collected", "scored_titles", "plan", "executed", "blocked", "reason",
+        "verification",
     )
     return {key: payload[key] for key in allowed if key in payload}
 
@@ -1454,6 +1455,7 @@ def build_growth_dashboard() -> dict:
         "plan": {"actions": plan.get("actions", []), "phase": plan.get("phase")},
         "executed": state.get("executed") or [],
         "blocked": state.get("blocked") or [],
+        "verification": state.get("verification"),
         "evidence_funnel": {"total": len(evidence_rows), "by_kind": evidence_by_kind},
         "verified_revenue": {
             "verified_royalties_usd": financials.get("verified_royalties_usd", 0.0),
@@ -1564,6 +1566,39 @@ def _growth_blocked_html(blocked: list) -> str:
     return f'<ul class="list-disc list-inside space-y-1">{items}</ul>'
 
 
+def _growth_verification_html(verification) -> str:
+    """Read-only section for verify_growth_state's findings (Task 11a
+    --verify). Silent (empty string, no section at all) when no
+    verification has run yet -- this must never fabricate a section for a
+    run that never happened. Flagged entries (an action recorded "executed"
+    without verifiable before/after proof) are listed with their reason,
+    same as the existing Blocked actions section's style, no buttons."""
+    if not verification:
+        return ""
+    status = verification.get("status", "unknown")
+    checked = verification.get("checked", 0)
+    flagged = verification.get("flagged") or []
+    if flagged:
+        flagged_html = '<ul class="list-disc list-inside space-y-1 text-red-300">' + "".join(
+            f'<li><span class="font-medium">{escape_text(entry.get("slug"))}</span>'
+            f' &middot; {escape_text(entry.get("kind"))}: {escape_text(entry.get("reason"))}</li>'
+            for entry in flagged
+        ) + "</ul>"
+    else:
+        flagged_html = '<p class="text-slate-400">No flagged actions.</p>'
+    return (
+        '<section class="py-6 border-b border-slate-700">'
+        '<h2 class="font-bold text-white">Verification</h2>'
+        '<p class="text-xs text-slate-400 mt-1">Reconciliation of executed actions against verifiable before/after proof.</p>'
+        f'<p class="mt-3 text-sm text-slate-200">Status: <span class="font-medium">{escape_text(status)}</span>'
+        f" &middot; {escape_text(checked)} action(s) checked.</p>"
+        f'<h3 class="mt-4 text-sm font-semibold text-red-300">Flagged</h3>'
+        f'<p class="text-xs text-slate-400 mt-1">Recorded "executed" but without verifiable before/after proof.</p>'
+        f'<div class="mt-2 text-sm text-slate-200">{flagged_html}</div>'
+        "</section>"
+    )
+
+
 def _growth_verified_revenue_html(revenue: dict) -> str:
     amount = revenue.get("verified_royalties_usd")
     amount_text = f"${float(amount):.2f}" if amount is not None else "—"
@@ -1641,6 +1676,7 @@ async def growth_dashboard_page(request: Request):
         "PLANNED_BODY": _growth_planned_html(view["plan"]["actions"]),
         "EXECUTED_BODY": _growth_executed_html(view["executed"]),
         "BLOCKED_BODY": _growth_blocked_html(view["blocked"]),
+        "VERIFICATION_SECTION": _growth_verification_html(view["verification"]),
         "SPEND_BODY": _growth_spend_html(view),
     }
     html_path = Path(__file__).parent / "templates" / "growth.html"

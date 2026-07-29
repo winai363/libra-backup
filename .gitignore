@@ -29,3 +29,5 @@ data/distribution-report.json
 kdp_session_aplus.json
 data/ebrolis_session.json
 data/.lovely-profile/
+data/growth-autopilot-state.json
+data/growth-autopilot.lock

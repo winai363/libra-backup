@@ -123,6 +123,38 @@ def test_growth_dashboard_spend_section_is_honest_about_ads_readiness(client, st
     assert "THB 50.00" in response.text
 
 
+def test_growth_dashboard_is_silent_about_verification_when_absent(client, state_file):
+    """FULL_STATE has no "verification" key -- the dashboard must not
+    render an empty/misleading verification section for a run that never
+    verified anything."""
+    state_file.write_text(json.dumps(FULL_STATE))
+    response = client.get("/growth")
+    assert response.status_code == 200
+    assert "Verification" not in response.text
+
+
+def test_growth_dashboard_renders_flagged_verification_entries(client, state_file):
+    """A flagged entry (an action recorded "executed" without verifiable
+    before/after proof) must be visible on the read-only dashboard, not
+    only in cron log JSON."""
+    state_with_verification = {
+        **FULL_STATE,
+        "verification": {
+            "status": "verified", "verified_at": "2026-07-29T20:30:00+07:00",
+            "checked": 2, "verified": [{"slug": "book-a", "kind": "free_promo"}],
+            "flagged": [{"slug": "book-b", "kind": "price_update", "reason": "missing_verifiable_evidence"}],
+        },
+    }
+    state_file.write_text(json.dumps(state_with_verification))
+
+    response = client.get("/growth")
+
+    assert response.status_code == 200
+    assert "Verification" in response.text
+    assert "book-b" in response.text
+    assert "missing_verifiable_evidence" in response.text
+
+
 def test_growth_dashboard_never_renders_a_control_form(client, state_file):
     state_file.write_text(json.dumps(FULL_STATE))
     response = client.get("/growth")

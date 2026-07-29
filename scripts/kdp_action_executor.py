@@ -458,8 +458,9 @@ class KdpPromotionAdapter:
     production entry point that turns an approved, evidence-paired one-day
     promotion proposal into a real KDP mutation. Additive only: reuses the
     SAME browser flow and audit-result shape as the free_promo action lane
-    above (_execute_free_promo), never a new path, and never touches
-    validate_action or any existing gate.
+    above (_execute_free_promo), never a new path — publish() itself runs
+    every call through validate_action FIRST (see below), the same gate
+    the legacy free_promo action kind is gated by.
 
     publish() itself is a gate, not just a router: it re-expresses the
     caller's action as a `free_promo` action and runs it through

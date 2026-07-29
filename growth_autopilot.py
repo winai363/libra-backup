@@ -221,6 +221,38 @@ def _derive_readiness(incidents: list[dict]) -> dict:
     }
 
 
+def _growth_plan_actions_for_key(ledger_path: Path, action_key: str) -> list | None:
+    """Read back the "actions" list of an already-recorded growth plan by
+    action_key -- used only by run_growth_controller's same-day plan-drift
+    handling below. Returns None if no such plan exists yet (or its
+    plan_json is unreadable), which the caller treats as "cannot confirm
+    benign" and re-raises the original conflict rather than guessing."""
+    with sqlite3.connect(ledger_path) as connection:
+        row = connection.execute(
+            "SELECT plan_json FROM growth_plans WHERE action_key = ?", (action_key,)
+        ).fetchone()
+    if not row:
+        return None
+    try:
+        stored = json.loads(row[0])
+    except (TypeError, ValueError):
+        return None
+    return stored.get("actions") if isinstance(stored, dict) else None
+
+
+def _canonical_actions(actions) -> list:
+    """Order-independent, field-stable view of a plan's actions list, for
+    comparing "are these really the same actions" the same way
+    growth_planner._stable_action_key itself does (sorted by slug/variable)
+    -- a ranking-order shuffle from drifted scores must not read as a real
+    difference."""
+    return sorted(
+        (action.get("slug"), action.get("kind"), action.get("variable"))
+        for action in (actions or [])
+        if isinstance(action, dict)
+    )
+
+
 def _latest_active_experiments(ledger_path: Path) -> list[dict]:
     """The most recently persisted plan's actions ARE this cycle's active
     experiments — an organic_test proposed yesterday is a running test
@@ -532,7 +564,27 @@ def run_growth_controller(config: dict, now: datetime, shadow: bool = True) -> d
         # that same false conflict.
         planned_at = datetime.combine(now.date(), datetime.min.time(), tzinfo=now.tzinfo).isoformat()
         plan_record = {**plan, "planned_at": planned_at, "status": "planned"}
-        record_growth_plan(ledger_path, plan_record)
+        try:
+            record_growth_plan(ledger_path, plan_record)
+        except ValueError:
+            # record_growth_plan's content hash covers the FULL plan_json,
+            # including portfolio.active (per-title score) -- but
+            # action_key (see growth_planner._stable_action_key) covers
+            # only the selected slug/variable pairs. A roster whose SCORES
+            # drift intra-day while the selected actions stay identical
+            # trips this hash mismatch even though nothing this controller
+            # cares about actually changed. Confirm that benign case by
+            # reading back the actions already on record for this
+            # action_key: if they match, this cycle simply continues with
+            # the freshly computed `plan` (same actions) instead of
+            # re-recording -- the ledger's existing row for this action_key
+            # is never touched (stays append-only). If they genuinely
+            # differ (shouldn't happen -- action_key already covers every
+            # slug/variable pair), re-raise rather than silently picking a
+            # side.
+            existing_actions = _growth_plan_actions_for_key(ledger_path, plan["action_key"])
+            if _canonical_actions(existing_actions) != _canonical_actions(plan.get("actions")):
+                raise
 
         executed: list = []
         blocked: list = []
@@ -621,6 +673,22 @@ def build_growth_digest(state: dict) -> str:
     for item in blocked[:10]:
         lines.append(f"  - {item.get('slug')} / {item.get('kind')}: {item.get('reason', 'unknown')}")
 
+    verification = state.get("verification")
+    if verification:
+        flagged_entries = verification.get("flagged") or []
+        lines.append(
+            f"Verification: {verification.get('status', 'unknown')} "
+            f"({verification.get('checked', 0)} checked)"
+        )
+        if flagged_entries:
+            # A flagged entry means an action was recorded "executed" but
+            # carries no verifiable before/after proof -- surfaced
+            # prominently here so it can never be missed in cron log JSON
+            # only (see verify_growth_state._has_verifiable_proof).
+            lines.append(f"FLAGGED -- executed without verifiable proof ({len(flagged_entries)}):")
+            for item in flagged_entries[:10]:
+                lines.append(f"  - {item.get('slug')} / {item.get('kind')}: {item.get('reason', 'unknown')}")
+
     return "\n".join(lines)
 
 
@@ -708,15 +776,25 @@ def collect_growth_observations(config: dict, now: datetime) -> dict:
                 "titles_visible": len(titles),
                 "reason": "lock_contention",
             }
-        record_growth_evidence(ledger_path, {
-            "source_key": f"growth-collect-heartbeat:{date_key}",
-            "kind": "collection_heartbeat",
-            "slug": None,
-            "observed_at": day_start.isoformat(),
-            "fresh_until": (day_start + timedelta(days=1)).isoformat(),
-            "confidence": 1.0,
-            "payload": {"date": date_key},
-        })
+        try:
+            record_growth_evidence(ledger_path, {
+                "source_key": f"growth-collect-heartbeat:{date_key}",
+                "kind": "collection_heartbeat",
+                "slug": None,
+                "observed_at": day_start.isoformat(),
+                "fresh_until": (day_start + timedelta(days=1)).isoformat(),
+                "confidence": 1.0,
+                "payload": {"date": date_key},
+            })
+        except ValueError:
+            # Same defensive posture as verify_growth_state below: the
+            # heartbeat's source_key and payload are both derived from
+            # `now`'s calendar date only, so two same-day calls are
+            # byte-identical and this branch is unreachable in practice
+            # (record_growth_evidence's own content-hash match already
+            # no-ops that case). Kept purely so a future change to the
+            # heartbeat payload can never turn into an unhandled crash here.
+            pass
         evidence_rows = growth_evidence(ledger_path)
 
     return {
@@ -826,15 +904,26 @@ def verify_growth_state(config: dict, now: datetime) -> dict:
     with _file_lock(lock_path) as acquired:
         if not acquired:
             return {**result, "status": "locked", "reason": "lock_contention"}
-        record_growth_evidence(ledger_path, {
-            "source_key": f"growth-verify:{date_key}",
-            "kind": "verification_run",
-            "slug": None,
-            "observed_at": day_start.isoformat(),
-            "fresh_until": (day_start + timedelta(days=1)).isoformat(),
-            "confidence": 1.0,
-            "payload": {"checked": result["checked"], "verified": len(verified), "flagged": len(flagged)},
-        })
+        try:
+            record_growth_evidence(ledger_path, {
+                "source_key": f"growth-verify:{date_key}",
+                "kind": "verification_run",
+                "slug": None,
+                "observed_at": day_start.isoformat(),
+                "fresh_until": (day_start + timedelta(days=1)).isoformat(),
+                "confidence": 1.0,
+                "payload": {"checked": result["checked"], "verified": len(verified), "flagged": len(flagged)},
+            })
+        except ValueError:
+            # A same-day re-run whose checked/verified/flagged counts
+            # differ from the day's first verify run collides with
+            # growth-verify's one-row-per-day idempotency key (the same
+            # pattern every other evidence writer in this module uses).
+            # The ledger stays append-only -- this run's counts are simply
+            # not re-recorded -- and the result (and therefore the state
+            # file's "verification" section) honestly says so instead of
+            # crashing or silently pretending the mismatch didn't happen.
+            result = {**result, "ledger_note": "already_recorded_today_with_different_counts"}
         _write_atomic(state_path, {**prior_state, "verification": result})
 
     return result

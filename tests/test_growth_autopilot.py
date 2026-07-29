@@ -1,0 +1,458 @@
+"""Tests for growth_autopilot — the single controller that composes
+collection, readiness, scoring, planning, authorization, and execution for
+the Libra Growth Autopilot. Two tests below are verbatim from the Task 9
+brief; the rest cover lock contention, shadow-vs-execute divergence, an
+authorize-refusal path, and state-file atomicity, per the task instructions.
+"""
+from __future__ import annotations
+
+import fcntl
+import json
+import sqlite3
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from business_ledger import growth_evidence, init_ledger, record_growth_evidence
+from growth_autopilot import growth_authority_transferred, run_growth_controller
+from scripts.libra_growth_autopilot import _default_titles, _persisted_started_at
+
+NOW = datetime(2026, 7, 29, 9, 0, tzinfo=timezone.utc)
+ORGANIC_STARTED_AT = NOW - timedelta(days=5)  # well inside the 30-day organic window
+GROWTH_STARTED_AT = NOW - timedelta(days=40)  # past day 31 — Growth Gate window open
+
+
+def _seed_evidence(db_path: Path) -> None:
+    """A collector always has SOMETHING on record — seed one real evidence
+    row so observations_collected is genuinely > 0, not an artifact of an
+    empty ledger."""
+    record_growth_evidence(db_path, {
+        "source_key": "test-seed:book-a",
+        "kind": "hub_click",
+        "slug": "book-a",
+        "observed_at": NOW.isoformat(),
+        "fresh_until": (NOW + timedelta(days=30)).isoformat(),
+        "confidence": 1.0,
+        "payload": {},
+    })
+
+
+def _untested_title(slug: str = "book-a") -> dict:
+    """All-zero verified signals, fewer than 3 placements — scores 0 and
+    classifies "test" (portfolio_scorer.score_title), which is exactly what
+    growth_planner proposes an organic_test action for."""
+    return {
+        "slug": slug, "royalty_delta_usd": 0, "kenp_delta": 0,
+        "tracked_clicks": 0, "conversion_signal": 0, "verified_placements": 0,
+        "risk_active": False,
+    }
+
+
+def config(tmp_path, *, incidents=None, started_at=ORGANIC_STARTED_AT, **overrides) -> dict:
+    db_path = tmp_path / "ledger.db"
+    init_ledger(db_path)
+    _seed_evidence(db_path)
+    base = {
+        "ledger_path": db_path,
+        "lock_path": tmp_path / "growth-autopilot.lock",
+        "state_path": tmp_path / "growth-autopilot-state.json",
+        "started_at": started_at,
+        "titles": [_untested_title()],
+        "active_experiments": [],
+        "incidents": incidents or [],
+    }
+    base.update(overrides)
+    return base
+
+
+# ---------------------------------------------------------------------------
+# Verbatim tests from the Task 9 brief.
+# ---------------------------------------------------------------------------
+
+def test_shadow_mode_writes_plan_but_executes_nothing(tmp_path):
+    state = run_growth_controller(config(tmp_path), now=NOW, shadow=True)
+    assert state["mode"] == "shadow"
+    assert state["executed"] == []
+    assert state["plan"]["actions"]
+
+
+def test_account_incident_stops_mutation_but_keeps_collection(tmp_path):
+    cfg = config(tmp_path, incidents=[{"severity": "critical", "scope": "account", "detail": {}}])
+    state = run_growth_controller(cfg, now=NOW, shadow=False)
+    assert state["readiness"]["mutation_allowed"] is False
+    assert state["observations_collected"] > 0
+    assert state["executed"] == []
+
+
+# ---------------------------------------------------------------------------
+# Shadow-vs-execute divergence: the same config, actually exercised through
+# a full translate -> authorize -> execute -> reconcile -> record cycle for
+# a price_update action, via an injected fake executor standing in for
+# scripts/kdp_action_executor.py's real build_executor().
+# ---------------------------------------------------------------------------
+
+def _fake_price_executor(calls):
+    def executor(pending):
+        calls.append(pending)
+        return {
+            "returncode": 0,
+            "confirmation_id": "kdp-price-update:book-a:2.99",
+            "verified_state_change": {
+                "before": {"price": 9.99}, "after": {"price": 2.99},
+                "before_snapshot_id": 1, "after_snapshot_id": 2,
+            },
+        }
+    return executor
+
+
+def test_shadow_vs_execute_diverge_on_the_same_config(tmp_path):
+    calls = []
+    cfg = config(tmp_path, price_proposals={"book-a": 2.99}, adapters={"price_executor": _fake_price_executor(calls)})
+
+    shadow_state = run_growth_controller(cfg, now=NOW, shadow=True)
+    assert shadow_state["mode"] == "shadow"
+    assert shadow_state["executed"] == []
+    assert calls == []  # the adapter must never be touched in shadow mode
+
+    execute_state = run_growth_controller(cfg, now=NOW, shadow=False)
+    assert execute_state["mode"] == "execute"
+    assert len(execute_state["executed"]) == 1
+    executed = execute_state["executed"][0]
+    assert executed["slug"] == "book-a"
+    assert executed["kind"] == "price_update"
+    assert executed["status"] == "executed"
+    assert calls  # the adapter WAS called this time
+
+    # Reconciled evidence is recorded to the ledger, source-keyed so a same-
+    # day replay is idempotent rather than a duplicate row.
+    recorded = growth_evidence(cfg["ledger_path"], slug="book-a", kind="price_update_executed")
+    assert len(recorded) == 1
+
+
+def test_execute_mode_with_no_adapter_configured_is_manual_required_not_executed(tmp_path):
+    cfg = config(tmp_path, price_proposals={"book-a": 2.99})  # no adapters at all
+    state = run_growth_controller(cfg, now=NOW, shadow=False)
+    assert state["executed"] == []
+    assert any(item["slug"] == "book-a" and item["reason"] == "no_price_executor_configured" for item in state["blocked"])
+
+
+# ---------------------------------------------------------------------------
+# Authorize-refusal path: the plan proposes a price_update action, but the
+# planned variable has no wired controller ("distribution" is not one of
+# VARIABLE_ACTION_KIND's entries) — the action must be refused BEFORE ever
+# reaching authorize_growth_action/check_policy, not silently dropped.
+# ---------------------------------------------------------------------------
+
+def test_unmapped_variable_is_refused_before_authorization_not_silently_dropped(tmp_path):
+    cfg = config(tmp_path, active_experiments=[{"slug": "book-a", "variable": "distribution"}])
+    state = run_growth_controller(cfg, now=NOW, shadow=False)
+    assert state["executed"] == []
+    assert any(
+        item["slug"] == "book-a" and item["reason"] == "unsupported_growth_action_variable"
+        for item in state["blocked"]
+    )
+
+
+def test_growth_action_context_never_carries_stale_no_spend_or_policy_keys(tmp_path):
+    """Regression guard for the Task-8 review note: a context built for
+    profit_agent.check_policy's opted-in growth path must never carry
+    "policy"/"no_spend" — either would fall through to the legacy 90-day
+    gate and re-deny an action growth_policy already authorized."""
+    from growth_autopilot import _growth_action_context
+    context = _growth_action_context(GROWTH_STARTED_AT, {"now": NOW})
+    assert "no_spend" not in context
+    assert "policy" not in context
+    assert set(context) == {"growth_policy", "growth_state"}
+
+
+def _scale_title(slug: str = "book-scale") -> dict:
+    """Same shape as test_portfolio_scorer.py's revenue-winner example —
+    scores 100, classifies "scale"."""
+    return {
+        "slug": slug, "royalty_delta_usd": 5, "kenp_delta": 120,
+        "tracked_clicks": 25, "conversion_signal": 1, "verified_placements": 5,
+        "risk_active": False,
+    }
+
+
+def _fake_ads_adapter(calls):
+    class Adapter:
+        def publish(self, action):
+            calls.append(action)
+            return {
+                "campaign_id": "camp-1", "budget_thb": action["daily_budget_thb"],
+                "status": "active", "after_state": {"budget_thb": action["daily_budget_thb"]},
+            }
+    return Adapter()
+
+
+def test_amazon_ads_executes_end_to_end_once_growth_phase_and_gate_signal_are_both_present(tmp_path):
+    """Full compose-through-execute proof for the Ads path (the gap an
+    earlier review found: ads_decision's own proposed budget and this
+    title's Growth Gate evidence must both actually reach authorize, not
+    just be computed and discarded)."""
+    calls = []
+    cfg = config(
+        tmp_path,
+        started_at=GROWTH_STARTED_AT,
+        titles=[_scale_title()],
+        ads_metrics={"book-scale": {"royalty_growth_usd": 0, "kenp_delta": 0, "tracked_clicks": 25}},
+        adapters={"ads": _fake_ads_adapter(calls)},
+    )
+    state = run_growth_controller(cfg, now=NOW, shadow=False)
+    assert state["phase"] == "growth"
+    ads_entries = [item for item in state["executed"] if item["kind"] == "amazon_ads"]
+    assert len(ads_entries) == 1
+    assert ads_entries[0]["slug"] == "book-scale"
+    assert ads_entries[0]["status"] == "executed"
+    assert calls and calls[0]["daily_budget_thb"] == 50.0  # INITIAL_TITLE_CAP_THB, new title
+
+    recorded = growth_evidence(cfg["ledger_path"], slug="book-scale", kind="amazon_ads_executed")
+    assert len(recorded) == 1
+
+
+def test_amazon_ads_title_scoped_incident_blocks_ads_too(tmp_path):
+    """Regression: an earlier review found _run_ads_decisions ignored
+    readiness["blocked_slugs"] entirely, so a title-scoped critical
+    incident blocked organic actions but NOT an Ads decision on the same
+    slug."""
+    cfg = config(
+        tmp_path,
+        started_at=GROWTH_STARTED_AT,
+        titles=[_scale_title()],
+        ads_metrics={"book-scale": {"royalty_growth_usd": 0, "kenp_delta": 0, "tracked_clicks": 25}},
+        adapters={"ads": _fake_ads_adapter([])},
+        incidents=[{"severity": "critical", "scope": "title", "detail": {"slug": "book-scale"}}],
+    )
+    state = run_growth_controller(cfg, now=NOW, shadow=False)
+    assert state["executed"] == []
+    assert any(
+        item["slug"] == "book-scale" and item["kind"] == "amazon_ads" and item["reason"] == "title_incident_blocked"
+        for item in state["blocked"]
+    )
+
+
+def test_amazon_ads_action_authorized_through_check_policy_in_growth_phase(tmp_path):
+    """End-to-end proof the context hygiene above actually matters: an
+    amazon_ads action that growth_policy.authorize_growth_action would
+    allow (Growth Gate open, clean caps) must also be allowed by
+    profit_agent.check_policy — not re-blocked by a stale legacy key."""
+    from growth_autopilot import _authorize
+    allowed, reason = _authorize(
+        "amazon_ads", "book-a", GROWTH_STARTED_AT,
+        {
+            "now": NOW, "advertised_title_slugs": [], "portfolio_daily_spend_thb": 0,
+            "portfolio_monthly_spend_thb": 0, "title_daily_budget_thb": 0,
+            "last_budget_increase_at": None, "tracked_clicks": 20,
+        },
+    )
+    # No daily_budget_thb on the action itself -> authorize_growth_action's
+    # own "invalid_budget" refusal proves the growth_policy branch was
+    # actually reached (not silently skipped) rather than asserting success.
+    assert reason == "invalid_budget"
+    assert allowed is False
+
+
+# ---------------------------------------------------------------------------
+# Lock contention: a second run must not double-write while a first run
+# (real or otherwise) holds the lock.
+# ---------------------------------------------------------------------------
+
+def test_concurrent_run_reports_locked_and_does_not_write_a_new_plan(tmp_path):
+    cfg = config(tmp_path)
+    lock_path = cfg["lock_path"]
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    holder = open(lock_path, "a+")
+    fcntl.flock(holder.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    try:
+        state = run_growth_controller(cfg, now=NOW, shadow=True)
+    finally:
+        fcntl.flock(holder.fileno(), fcntl.LOCK_UN)
+        holder.close()
+
+    assert state["locked"] is True
+    assert state["executed"] == []
+    assert state["plan"] is None
+    assert not cfg["state_path"].exists()
+    with sqlite3.connect(cfg["ledger_path"]) as connection:
+        count = connection.execute("SELECT COUNT(*) FROM growth_plans").fetchone()[0]
+    assert count == 0
+
+
+def test_sequential_replay_is_idempotent_not_a_duplicate_write(tmp_path):
+    cfg = config(tmp_path)
+    run_growth_controller(cfg, now=NOW, shadow=True)
+    run_growth_controller(cfg, now=NOW, shadow=True)
+    with sqlite3.connect(cfg["ledger_path"]) as connection:
+        count = connection.execute("SELECT COUNT(*) FROM growth_plans").fetchone()[0]
+    assert count == 1
+
+
+def test_same_day_replay_with_different_wall_clock_times_is_still_idempotent(tmp_path):
+    """Regression: found via a manual CLI smoke test against a copied real
+    ledger — two real invocations minutes apart on the same calendar day
+    raised "conflicting growth plan" because `planned_at` used `now`'s full
+    wall-clock precision while growth_planner's action_key is scoped to
+    the calendar DATE only. A real cron running --collect then --shadow
+    --send (or a retried run) would hit this every single day."""
+    cfg = config(tmp_path)
+    first = run_growth_controller(cfg, now=NOW, shadow=True)
+    second = run_growth_controller(cfg, now=NOW + timedelta(minutes=7), shadow=True)
+    assert first["plan"]["action_key"] == second["plan"]["action_key"]
+    with sqlite3.connect(cfg["ledger_path"]) as connection:
+        count = connection.execute("SELECT COUNT(*) FROM growth_plans").fetchone()[0]
+    assert count == 1
+
+
+# ---------------------------------------------------------------------------
+# State-file atomicity.
+# ---------------------------------------------------------------------------
+
+def test_state_file_is_written_atomically_and_no_tmp_file_is_left_behind(tmp_path):
+    cfg = config(tmp_path)
+    state = run_growth_controller(cfg, now=NOW, shadow=True)
+    state_path = cfg["state_path"]
+    assert state_path.exists()
+    assert not state_path.with_suffix(".json.tmp").exists()
+    on_disk = json.loads(state_path.read_text(encoding="utf-8"))
+    assert on_disk["mode"] == state["mode"]
+    assert on_disk["plan"]["action_key"] == state["plan"]["action_key"]
+
+
+def test_state_file_is_fully_overwritten_not_merged_with_a_stale_file(tmp_path):
+    cfg = config(tmp_path)
+    cfg["state_path"].parent.mkdir(parents=True, exist_ok=True)
+    cfg["state_path"].write_text(json.dumps({"stale_marker": True, "mode": "execute"}), encoding="utf-8")
+    run_growth_controller(cfg, now=NOW, shadow=True)
+    on_disk = json.loads(cfg["state_path"].read_text(encoding="utf-8"))
+    assert "stale_marker" not in on_disk
+    assert on_disk["mode"] == "shadow"
+
+
+# ---------------------------------------------------------------------------
+# Emergency stop, title scope: a title-scoped critical incident blocks only
+# that title, not the whole account.
+# ---------------------------------------------------------------------------
+
+def test_title_scoped_incident_with_no_detail_key_fails_closed_not_crash(tmp_path):
+    """Regression: a malformed/minimal incident row (no "detail" key at
+    all) must be tolerated, not raise KeyError from inside readiness
+    derivation — fail closed by simply not matching any slug."""
+    cfg = config(tmp_path, incidents=[{"severity": "critical", "scope": "title"}])
+    state = run_growth_controller(cfg, now=NOW, shadow=True)
+    assert state["readiness"]["blocked_slugs"] == []
+
+
+def test_organic_test_actions_still_proposed_once_growth_phase_opens(tmp_path):
+    """Regression: organic testing of "test"-classified titles and the
+    Amazon Ads Growth Gate are independent levers — reaching day 31 must
+    not silently stop organic_test proposals for the titles that will
+    never qualify for the 2-title Ads cap."""
+    cfg = config(tmp_path, started_at=GROWTH_STARTED_AT)
+    state = run_growth_controller(cfg, now=NOW, shadow=True)
+    assert state["phase"] == "growth"
+    assert state["plan"]["actions"]
+
+
+def test_title_scoped_incident_blocks_only_that_title(tmp_path):
+    cfg = config(
+        tmp_path,
+        incidents=[{"severity": "critical", "scope": "title", "detail": {"slug": "book-a"}}],
+        price_proposals={"book-a": 2.99},
+        adapters={"price_executor": _fake_price_executor([])},
+    )
+    state = run_growth_controller(cfg, now=NOW, shadow=False)
+    assert state["readiness"]["mutation_allowed"] is True
+    assert state["readiness"]["blocked_slugs"] == ["book-a"]
+    assert state["executed"] == []
+    assert any(item["slug"] == "book-a" and item["reason"] == "title_incident_blocked" for item in state["blocked"])
+
+
+# ---------------------------------------------------------------------------
+# growth_authority_transferred — used by scripts/libra_profit_agent_daily.py
+# to stay read-only after Task 11's authority transfer. This is a plain
+# marker FILE (never written by run_growth_controller itself) so a single
+# ad-hoc `--execute` invocation — e.g. a manual smoke test — can never
+# silently and irreversibly flip it; only a deliberate, separate,
+# documented operational step (Task 11) creates the marker.
+# ---------------------------------------------------------------------------
+
+def test_growth_authority_transferred_false_when_marker_missing(tmp_path):
+    assert growth_authority_transferred(tmp_path / "missing-marker") is False
+
+
+def test_growth_authority_transferred_true_once_the_marker_exists(tmp_path):
+    marker = tmp_path / "growth-autopilot-authority-transferred"
+    marker.write_text("", encoding="utf-8")
+    assert growth_authority_transferred(marker) is True
+
+
+def test_a_real_execute_run_never_creates_the_authority_marker_itself(tmp_path):
+    """The bug this guards against: run_growth_controller must never treat
+    running with shadow=False as self-authorizing authority transfer —
+    only a separate, deliberate marker file (created outside this module)
+    may do that."""
+    cfg = config(tmp_path)
+    marker = tmp_path / "growth-autopilot-authority-transferred"
+    run_growth_controller(cfg, now=NOW, shadow=False)
+    assert not marker.exists()
+    assert growth_authority_transferred(marker) is False
+
+
+# ---------------------------------------------------------------------------
+# scripts/libra_growth_autopilot.py — CLI config-building helpers. Added
+# after an independent review found the persisted `started_at` round-trip
+# and the LIVE-title filter had no dedicated coverage (the bug this caught:
+# run_growth_controller's state dict originally omitted "started_at"
+# entirely, so every real CLI run silently reset the Growth Gate's 30-day
+# window to "now" and the gate could never open — see
+# test_same_day_replay_with_different_wall_clock_times_is_still_idempotent
+# above for the sibling bug this same review pass caught).
+# ---------------------------------------------------------------------------
+
+def test_persisted_started_at_falls_back_to_now_when_state_file_is_missing(tmp_path):
+    assert _persisted_started_at(tmp_path / "missing.json", NOW) == NOW
+
+
+def test_persisted_started_at_falls_back_to_now_on_corrupt_json(tmp_path):
+    path = tmp_path / "state.json"
+    path.write_text("{not json", encoding="utf-8")
+    assert _persisted_started_at(path, NOW) == NOW
+
+
+def test_persisted_started_at_re_reads_a_previously_persisted_value(tmp_path):
+    path = tmp_path / "state.json"
+    earlier = NOW - timedelta(days=10)
+    path.write_text(json.dumps({"mode": "shadow", "started_at": earlier.isoformat()}), encoding="utf-8")
+    assert _persisted_started_at(path, NOW) == earlier
+
+
+def test_default_titles_only_includes_live_status(tmp_path, monkeypatch):
+    kdp_dir = tmp_path / "kdp"
+    for slug, status in (("book-live", "LIVE"), ("book-draft", "DRAFT"), ("book-blocked", "BLOCKED")):
+        book_dir = kdp_dir / slug
+        book_dir.mkdir(parents=True)
+        (book_dir / "listing.json").write_text(json.dumps({"live_status": status}), encoding="utf-8")
+
+    import scripts.libra_growth_autopilot as cli
+    monkeypatch.setattr(cli, "KDP_DIR", kdp_dir)
+
+    titles = _default_titles()
+    assert [t["slug"] for t in titles] == ["book-live"]
+    assert titles[0]["risk_active"] is False
+    assert titles[0]["royalty_delta_usd"] == 0
+
+
+def test_default_titles_skips_missing_or_malformed_listing_json(tmp_path, monkeypatch):
+    kdp_dir = tmp_path / "kdp"
+    ok_dir = kdp_dir / "book-ok"
+    ok_dir.mkdir(parents=True)
+    (ok_dir / "listing.json").write_text(json.dumps({"live_status": "LIVE"}), encoding="utf-8")
+    bad_dir = kdp_dir / "book-bad-json"
+    bad_dir.mkdir(parents=True)
+    (bad_dir / "listing.json").write_text("{not json", encoding="utf-8")
+
+    import scripts.libra_growth_autopilot as cli
+    monkeypatch.setattr(cli, "KDP_DIR", kdp_dir)
+
+    titles = _default_titles()
+    assert [t["slug"] for t in titles] == ["book-ok"]

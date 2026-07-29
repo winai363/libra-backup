@@ -16,6 +16,7 @@ sys.path.insert(0, str(LIBRA_DIR))
 
 from business_ledger import ingest_uploaded_title_costs, portfolio_financials  # noqa: E402
 from distribution_report import send_telegram  # noqa: E402
+from growth_autopilot import growth_authority_transferred  # noqa: E402
 from profit_agent import (  # noqa: E402
     ACTIVE_STATUSES,
     APPROVED_EXPERIMENTS,
@@ -37,6 +38,11 @@ LEDGER_FILE = LIBRA_DIR / "data" / "libra-business.db"
 STATE_FILE = LIBRA_DIR / "data" / "profit-agent-state.json"
 KDP_DIR = LIBRA_DIR.parent / "kdp"
 CATEGORY_HEALTH_FILE = LIBRA_DIR / "data" / "category_health.json"
+# A plain marker file, created only by Task 11's deliberate authority-
+# transfer step — never by growth_autopilot.py itself. Its absence (today,
+# always) fails closed to "not transferred", so current behavior is
+# unchanged until that step happens. See growth_authority_transferred.
+GROWTH_AUTHORITY_TRANSFER_MARKER = LIBRA_DIR / "data" / "growth-autopilot-authority-transferred"
 
 
 def _latest_observation(db_path: Path) -> datetime | None:
@@ -544,8 +550,19 @@ def main() -> None:
         return
     executor = None
     if args.execute_actions and not args.dry_run:
-        from kdp_action_executor import build_executor
-        executor = build_executor()
+        if growth_authority_transferred(GROWTH_AUTHORITY_TRANSFER_MARKER):
+            # The Growth Autopilot has already run in execute mode (Task 11
+            # authority transfer) — this legacy agent stays read-only even
+            # though --execute-actions was passed, rather than mutating
+            # KDP through two independent writers.
+            print(
+                "Libra Profit Agent: Growth Autopilot has authority — staying read-only "
+                "(--execute-actions ignored)",
+                file=sys.stderr,
+            )
+        else:
+            from kdp_action_executor import build_executor
+            executor = build_executor()
     proposer = None
     if executor is not None:
         from experiment_proposer import run_proposer

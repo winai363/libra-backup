@@ -397,6 +397,112 @@ def test_budget_increase_capped_by_remaining_daily_headroom():
 
 
 # ---------------------------------------------------------------------------
+# 15% increase-ceiling rounding must agree with growth_policy's own
+# rounding (THB, 2dp) -- NOT a separate satang-domain rounding, which
+# disagrees at some budget levels (Python round-half-to-even).
+# ---------------------------------------------------------------------------
+
+
+def test_increase_ceiling_pinned_at_a_previously_divergent_value():
+    # THB 1.30 * 1.15 = 1.4949999999999999 in float -> round(.,2) = 1.49
+    # (growth_policy's own rounding domain). A satang-domain rounding
+    # instead computes round(130 * 1.15) = round(149.5) = 150 (banker's
+    # rounding on the exact half), i.e. THB 1.50 -- a whole satang off.
+    decision = ads_decision(
+        PROFITABLE_TITLE,
+        campaign_state(budget=1.30, contribution=1000, last_increase_hours=80),
+        portfolio=portfolio_state(),
+        policy=day_31_policy(), now=DAY_31,
+    )
+    assert decision == {"action": "increase", "budget_thb": 1.49, "reason": "profitable_budget_increase"}
+
+
+def test_increase_ceiling_agrees_with_growth_policys_rounding_across_a_range_of_budgets():
+    from growth_policy import BUDGET_INCREASE_MAX_FRACTION
+
+    # Kept under ~87 THB so the 15%-growth ceiling (current * 1.15) never
+    # crosses the fixed THB 100/day portfolio cap and becomes the binding
+    # constraint instead of the thing under test.
+    for satang in range(100, 8600, 7):  # a range of odd/uneven current budgets
+        current_thb = satang / 100
+        expected_ceiling_thb = round(current_thb * (1 + BUDGET_INCREASE_MAX_FRACTION), 2)
+        decision = ads_decision(
+            PROFITABLE_TITLE,
+            campaign_state(budget=current_thb, contribution=1_000_000, last_increase_hours=80),
+            portfolio=portfolio_state(),
+            policy=day_31_policy(), now=DAY_31,
+        )
+        if expected_ceiling_thb <= current_thb:
+            # No real increase possible at this budget (rounds down to
+            # itself or below) -- ads_decision must not report "increase".
+            assert decision["action"] != "increase", (current_thb, decision)
+        else:
+            assert decision == {
+                "action": "increase", "budget_thb": expected_ceiling_thb,
+                "reason": "profitable_budget_increase",
+            }, (current_thb, decision)
+
+
+# ---------------------------------------------------------------------------
+# Negative money is malformed data, not a valid low value
+# ---------------------------------------------------------------------------
+
+
+def test_negative_current_budget_is_denied_not_silently_accepted():
+    decision = ads_decision(
+        PROFITABLE_TITLE,
+        campaign_state(budget=-50, contribution=100, last_increase_hours=80),
+        portfolio=portfolio_state(),
+        policy=day_31_policy(), now=DAY_31,
+    )
+    assert decision == {"action": "hold", "budget_thb": 0, "reason": "invalid_current_budget"}
+
+
+def test_negative_direct_cost_is_denied_not_silently_accepted():
+    decision = ads_decision(
+        PROFITABLE_TITLE,
+        campaign_state(budget=50, direct_cost=-10, contribution=100, last_increase_hours=80),
+        portfolio=portfolio_state(),
+        policy=day_31_policy(), now=DAY_31,
+    )
+    assert decision == {"action": "hold", "budget_thb": 50.0, "reason": "insufficient_financial_data"}
+
+
+def test_negative_portfolio_daily_spend_is_denied_not_silently_accepted():
+    decision = ads_decision(
+        PROFITABLE_TITLE, campaign=None,
+        portfolio=portfolio_state(daily_spend=-10),
+        policy=day_31_policy(), now=DAY_31,
+    )
+    assert decision == {"action": "hold", "budget_thb": 0, "reason": "invalid_portfolio_state"}
+
+
+# ---------------------------------------------------------------------------
+# Malformed vs. absent `orders` -- absent keeps the pre-existing semantics
+# (no verified order count -- skip the no-order-stop check); a present but
+# malformed value is a distinct, explicit fail-closed hold.
+# ---------------------------------------------------------------------------
+
+
+def test_absent_orders_field_skips_the_no_order_stop_check():
+    campaign = campaign_state(budget=50, contribution=100, last_increase_hours=80)
+    del campaign["orders"]
+    decision = ads_decision(PROFITABLE_TITLE, campaign, portfolio_state(), day_31_policy(), DAY_31)
+    assert decision["action"] == "increase"
+
+
+@pytest.mark.parametrize("bad_orders", [None, "three", True, False])
+def test_malformed_orders_present_holds_with_insufficient_order_data(bad_orders):
+    decision = ads_decision(
+        PROFITABLE_TITLE,
+        campaign_state(budget=50, contribution=100, orders=bad_orders, last_increase_hours=80),
+        portfolio=portfolio_state(),
+        policy=day_31_policy(), now=DAY_31,
+    )
+    assert decision == {"action": "hold", "budget_thb": 50.0, "reason": "insufficient_order_data"}
+
+
+# ---------------------------------------------------------------------------
 # reconcile_ads_action -- adapter boundary
 # ---------------------------------------------------------------------------
 

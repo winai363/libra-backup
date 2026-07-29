@@ -113,19 +113,22 @@ def _decision(action: str, budget_satang: int, reason: str) -> dict:
 
 def _to_satang(thb_value) -> int | None:
     """Coerce a THB amount to an integer satang count. Fails closed to
-    None on anything that isn't a genuine finite number -- bool is
-    explicitly excluded since Python's bool is an int subclass and
-    True/False are never real money amounts, and inf/-inf/nan are
-    excluded via math.isfinite since round(inf) raises OverflowError
-    (not ValueError -- float("nan") raises ValueError on its own, but
-    float("inf") converts cleanly and only blows up inside round())."""
+    None on anything that isn't a genuine finite, non-negative number --
+    bool is explicitly excluded since Python's bool is an int subclass and
+    True/False are never real money amounts; inf/-inf/nan are excluded via
+    math.isfinite since round(inf) raises OverflowError (not ValueError --
+    float("nan") raises ValueError on its own, but float("inf") converts
+    cleanly and only blows up inside round()); negative amounts are
+    excluded since nothing in this module's money model (budgets, spend,
+    royalty, cost) is ever legitimately negative -- a negative figure is
+    malformed upstream data, not a valid low value."""
     if isinstance(thb_value, bool):
         return None
     try:
         value = float(thb_value)
     except (TypeError, ValueError):
         return None
-    if not math.isfinite(value):
+    if not math.isfinite(value) or value < 0:
         return None
     return round(value * 100)
 
@@ -221,15 +224,28 @@ def _decide_existing_title(campaign, portfolio, now) -> dict:
     if current_satang is None:
         return _decision("hold", 0, "invalid_current_budget")
 
-    orders = campaign.get("orders")
-    orders_valid = isinstance(orders, (int, float)) and not isinstance(orders, bool)
+    # Orders: a MISSING key keeps the pre-existing semantics (no verified
+    # order count at all -- skip the no-order-stop check, same as before
+    # this field existed). A PRESENT but malformed value (None/str/bool)
+    # is different: the caller tried to report an order count and it
+    # can't be trusted, so fail closed with its own reason rather than
+    # silently treating it the same as "not reported."
+    _no_orders_reported = object()
+    raw_orders = campaign.get("orders", _no_orders_reported)
+    if raw_orders is _no_orders_reported:
+        orders_known_zero = False
+    else:
+        if isinstance(raw_orders, bool) or not isinstance(raw_orders, (int, float)):
+            return _decision("hold", current_satang, "insufficient_order_data")
+        orders_known_zero = raw_orders == 0
+
     cost_satang = _to_satang(campaign.get("direct_cost_thb"))
 
     # No-order stop -- checked first, highest priority: verified zero
     # orders at or above the stop-spend threshold is a guaranteed loss
     # with no offsetting signal, regardless of what break-even ACOS says.
     if (
-        orders_valid and orders == 0
+        orders_known_zero
         and cost_satang is not None and cost_satang >= _to_satang(NO_ORDER_STOP_SPEND_THB)
     ):
         return _decision("stop", 0, "no_order_stop_threshold")
@@ -263,7 +279,17 @@ def _decide_existing_title(campaign, portfolio, now) -> dict:
     daily_spend, monthly_spend = spend
     daily_cap, monthly_cap = _caps_satang()
 
-    max_by_growth = round(current_satang * (1 + BUDGET_INCREASE_MAX_FRACTION))
+    # Round in THB, exactly like growth_policy._authorize_ads's
+    # `round(current_budget * (1 + BUDGET_INCREASE_MAX_FRACTION), 2)` --
+    # NOT in satang. The two roundings disagree at some budget levels
+    # (e.g. THB 1.30: THB-rounding gives 1.30*1.15=1.4949999999999999 ->
+    # round(.,2)=1.49, but satang-rounding gives round(130*1.15)=
+    # round(149.5)=150 courtesy of Python's round-half-to-even -- a whole
+    # satang apart). Matching growth_policy's own rounding domain here
+    # keeps the two modules in agreement on every ceiling they'd both
+    # compute for the same current budget.
+    max_by_growth_thb = round(_from_satang(current_satang) * (1 + BUDGET_INCREASE_MAX_FRACTION), 2)
+    max_by_growth = _to_satang(max_by_growth_thb)
     max_by_daily = daily_cap - daily_spend
     max_by_monthly = monthly_cap - monthly_spend
     target = min(max_by_growth, max_by_daily, max_by_monthly)

@@ -568,6 +568,62 @@ def run_growth_controller(config: dict, now: datetime, shadow: bool = True) -> d
     return state
 
 
+# ---------------------------------------------------------------------------
+# Plain-language digest (Task 10)
+# ---------------------------------------------------------------------------
+
+def build_growth_digest(state: dict) -> str:
+    """Plain-language Telegram digest for one Growth Autopilot state
+    snapshot -- the SAME dict shape run_growth_controller writes to
+    data/growth-autopilot-state.json. Pure function: state dict in, text
+    out, no I/O. Lives in this pure module (not app.py) specifically so
+    the cron-driven CLI (scripts/libra_growth_autopilot.py) can import it
+    without pulling in the FastAPI app and its import-time side effects --
+    the same coupling problem Task 9 already fixed once (see
+    growth_authority_transferred's docstring). Mirrors the Task 10
+    dashboard's own separation rule so an operator reading this on a phone
+    can tell "Planned" (proposed, nothing happened) from "Executed with
+    evidence" (adapter proof + verified before/after state) in one glance.
+    Sending stays behind the project's existing Telegram transport
+    (distribution_report.send_telegram) -- this function only ever builds
+    the text."""
+    if not state:
+        return "Libra Growth Autopilot\nNo run recorded yet."
+
+    plan = state.get("plan") or {}
+    planned = plan.get("actions") or []
+    executed = state.get("executed") or []
+    blocked = state.get("blocked") or []
+    readiness = state.get("readiness") or {}
+
+    lines = [
+        "Libra Growth Autopilot -- daily digest",
+        f"Mode: {state.get('mode', 'unknown')}"
+        + (" (LOCKED -- another run in progress)" if state.get("locked") else ""),
+        f"Phase: {state.get('phase', 'unknown')}",
+    ]
+    if readiness.get("mutation_allowed"):
+        lines.append("Readiness: OK, mutations allowed")
+    else:
+        lines.append(f"Readiness: BLOCKED -- {readiness.get('reason', 'unknown')}")
+    if readiness.get("blocked_slugs"):
+        lines.append(f"Blocked titles: {', '.join(readiness['blocked_slugs'])}")
+
+    lines.append(f"Planned (not yet done): {len(planned)}")
+    for item in planned[:10]:
+        lines.append(f"  - {item.get('slug')} / {item.get('variable')}")
+
+    lines.append(f"Executed with evidence: {len(executed)}")
+    for item in executed[:10]:
+        lines.append(f"  - {item.get('slug')} / {item.get('kind')}: {item.get('reason', 'executed')}")
+
+    lines.append(f"Blocked actions: {len(blocked)}")
+    for item in blocked[:10]:
+        lines.append(f"  - {item.get('slug')} / {item.get('kind')}: {item.get('reason', 'unknown')}")
+
+    return "\n".join(lines)
+
+
 def growth_authority_transferred(marker_path: Path) -> bool:
     """True once authority has been deliberately transferred to the Growth
     Autopilot (Task 11) — the signal scripts/libra_profit_agent_daily.py

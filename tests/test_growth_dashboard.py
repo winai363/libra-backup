@@ -166,36 +166,11 @@ def test_api_growth_state_reflects_verified_revenue_from_ledger(client, ledger, 
     assert response.json()["verified_revenue"]["verified_royalties_usd"] == 12.5
 
 
-# ── Digest pure function: state dict -> plain-language text ───────────────
-
-def test_growth_digest_separates_planned_from_executed_in_plain_language():
-    text = libra_app.build_growth_digest(FULL_STATE)
-
-    assert "Planned" in text
-    assert "Executed with evidence" in text
-    assert "book-b" in text  # the planned action's slug
-    assert "book-a" in text  # the executed action's slug
-    assert text.index("Planned") < text.index("book-b")
-    assert text.index("Executed with evidence") < text.index("book-a")
-
-
-def test_growth_digest_handles_no_run_yet():
-    text = libra_app.build_growth_digest({})
-    assert "No" in text
-    assert "run" in text.lower()
-
-
-def test_growth_digest_flags_blocked_mutation_plainly():
-    state = {
-        **FULL_STATE,
-        "readiness": {
-            "mutation_allowed": False, "reason": "account_critical_incident",
-            "open_incidents": 1, "blocked_slugs": ["book-a"],
-        },
-    }
-    text = libra_app.build_growth_digest(state)
-    assert "account_critical_incident" in text
-    assert "book-c" in text  # still reports the blocked action
+# Note: the plain-language Telegram digest builder (build_growth_digest)
+# lives in growth_autopilot.py, not here -- the CLI (scripts/
+# libra_growth_autopilot.py) runs from cron and must not import this
+# FastAPI app just to format one string. See tests/test_growth_autopilot.py
+# for its tests and for the --send wiring test.
 
 
 # ── templates/profit.html gains a link to the growth dashboard ────────────

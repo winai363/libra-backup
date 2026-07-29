@@ -29,7 +29,7 @@ LIBRA_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(LIBRA_DIR))
 
 from distribution_report import send_telegram  # noqa: E402
-from growth_autopilot import run_growth_controller  # noqa: E402
+from growth_autopilot import build_growth_digest, run_growth_controller  # noqa: E402
 
 # LIBRA_LEDGER lets a verification run point at a copied ledger (see the
 # plan's Task 11 dry-run step) without touching the real production
@@ -85,20 +85,6 @@ def _default_config(now: datetime) -> dict:
     }
 
 
-def _digest(state: dict) -> str:
-    plan = state.get("plan") or {}
-    return (
-        "Libra Growth Autopilot\n"
-        f"Mode: {state.get('mode')}{' (LOCKED)' if state.get('locked') else ''}\n"
-        f"Phase: {state.get('phase')}\n"
-        f"Mutation allowed: {state.get('readiness', {}).get('mutation_allowed')}\n"
-        f"Observations collected: {state.get('observations_collected', 0)}\n"
-        f"Planned actions: {len(plan.get('actions', []))}\n"
-        f"Executed: {len(state.get('executed', []))}\n"
-        f"Blocked: {len(state.get('blocked', []))}"
-    )
-
-
 def main() -> None:
     parser = argparse.ArgumentParser()
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -112,7 +98,7 @@ def main() -> None:
     state = run_growth_controller(config, now=now, shadow=not args.execute)
 
     if args.send:
-        state["telegram_sent"] = send_telegram(_digest(state))
+        state["telegram_sent"] = send_telegram(build_growth_digest(state))
 
     print(json.dumps(state, indent=2, sort_keys=True, default=str))
 

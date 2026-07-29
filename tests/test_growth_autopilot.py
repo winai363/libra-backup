@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from business_ledger import growth_evidence, init_ledger, record_growth_evidence
-from growth_autopilot import growth_authority_transferred, run_growth_controller
+from growth_autopilot import build_growth_digest, growth_authority_transferred, run_growth_controller
 from scripts.libra_growth_autopilot import _default_titles, _persisted_started_at
 
 NOW = datetime(2026, 7, 29, 9, 0, tzinfo=timezone.utc)
@@ -516,3 +516,98 @@ def test_default_titles_skips_missing_or_malformed_listing_json(tmp_path, monkey
 
     titles = _default_titles()
     assert [t["slug"] for t in titles] == ["book-ok"]
+
+
+# ---------------------------------------------------------------------------
+# build_growth_digest (Task 10) — plain-language digest, pure state -> text.
+# Moved here from tests/test_growth_dashboard.py per the controller's
+# layering decision: the digest lives in this pure module (not app.py) so
+# the cron-driven CLI never has to import the FastAPI app.
+# ---------------------------------------------------------------------------
+
+_DIGEST_STATE = {
+    "generated_at": "2026-07-29T09:00:00+07:00",
+    "mode": "shadow",
+    "locked": False,
+    "phase": "organic",
+    "started_at": "2026-07-01T09:00:00+07:00",
+    "readiness": {"mutation_allowed": True, "reason": "ready", "open_incidents": 0, "blocked_slugs": []},
+    "observations_collected": 4,
+    "scored_titles": [],
+    "plan": {
+        "action_key": "abc123", "phase": "organic_test",
+        "portfolio": {"active": []},
+        "actions": [{"slug": "book-b", "kind": "organic_test", "variable": "price"}],
+    },
+    "executed": [
+        {"slug": "book-a", "kind": "free_promo", "status": "executed", "reason": "verified_after_state",
+         "evidence": {"confirmation_id": "conf-1", "verified_state_change": {"before": "off", "after": "on"}}},
+    ],
+    "blocked": [
+        {"slug": "book-c", "kind": "price_update", "reason": "title_incident_blocked"},
+    ],
+}
+
+
+def test_growth_digest_separates_planned_from_executed_in_plain_language():
+    text = build_growth_digest(_DIGEST_STATE)
+
+    assert "Planned" in text
+    assert "Executed with evidence" in text
+    assert "book-b" in text  # the planned action's slug
+    assert "book-a" in text  # the executed action's slug
+    assert text.index("Planned") < text.index("book-b")
+    assert text.index("Executed with evidence") < text.index("book-a")
+
+
+def test_growth_digest_handles_no_run_yet():
+    text = build_growth_digest({})
+    assert "No" in text
+    assert "run" in text.lower()
+
+
+def test_growth_digest_flags_blocked_mutation_plainly():
+    state = {
+        **_DIGEST_STATE,
+        "readiness": {
+            "mutation_allowed": False, "reason": "account_critical_incident",
+            "open_incidents": 1, "blocked_slugs": ["book-a"],
+        },
+    }
+    text = build_growth_digest(state)
+    assert "account_critical_incident" in text
+    assert "book-c" in text  # still reports the blocked action
+
+
+# ---------------------------------------------------------------------------
+# scripts/libra_growth_autopilot.py --send wiring (Task 10) — the CLI's
+# send path must hand the transport build_growth_digest's own output for
+# the state it just wrote, not some other/older format.
+# ---------------------------------------------------------------------------
+
+def test_cli_send_path_uses_build_growth_digest_output(tmp_path, monkeypatch):
+    import sys
+
+    import scripts.libra_growth_autopilot as cli
+
+    ledger_path = tmp_path / "libra-business.db"
+    kdp_dir = tmp_path / "kdp"
+    kdp_dir.mkdir()
+    monkeypatch.setattr(cli, "LEDGER_FILE", ledger_path)
+    monkeypatch.setattr(cli, "STATE_FILE", ledger_path.with_name("growth-autopilot-state.json"))
+    monkeypatch.setattr(cli, "LOCK_FILE", ledger_path.with_name("growth-autopilot.lock"))
+    monkeypatch.setattr(cli, "KDP_DIR", kdp_dir)
+
+    sent = {}
+    monkeypatch.setattr(cli, "send_telegram", lambda text: sent.setdefault("text", text) or True)
+    monkeypatch.setattr(sys, "argv", ["libra_growth_autopilot.py", "--shadow", "--send"])
+
+    cli.main()
+
+    assert "text" in sent
+    written_state = json.loads(cli.STATE_FILE.read_text())
+    # Prove the transport received build_growth_digest's own output for the
+    # state this run actually wrote -- not a stale/alternate format.
+    assert sent["text"] == build_growth_digest(written_state)
+    assert "Planned (not yet done):" in sent["text"]
+    assert "Executed with evidence:" in sent["text"]

@@ -29,7 +29,14 @@ LIBRA_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(LIBRA_DIR))
 
 from distribution_report import send_telegram  # noqa: E402
-from growth_autopilot import build_growth_digest, run_growth_controller  # noqa: E402
+from growth_autopilot import (  # noqa: E402
+    build_growth_digest,
+    build_growth_gate_report,
+    collect_growth_observations,
+    format_growth_gate_report,
+    run_growth_controller,
+    verify_growth_state,
+)
 
 # LIBRA_LEDGER lets a verification run point at a copied ledger (see the
 # plan's Task 11 dry-run step) without touching the real production
@@ -90,10 +97,45 @@ def main() -> None:
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--shadow", action="store_true", help="plan only, never authorize or execute (safe default)")
     mode.add_argument("--execute", action="store_true", help="authorize and execute planned actions")
-    parser.add_argument("--send", action="store_true", help="send a Telegram digest")
+    mode.add_argument("--collect", action="store_true",
+                       help="ingest observations only (09:30, before planning); no planning/authorization/execution")
+    mode.add_argument("--verify", action="store_true",
+                       help="reconcile the day's executed actions against verifiable evidence (20:30, after the day's run); read-only externally")
+    mode.add_argument("--growth-gate-report", action="store_true",
+                       help="read-only per-title Growth Gate status report (day-30 gate check); no state mutation")
+    parser.add_argument("--send", action="store_true", help="send a Telegram digest (only valid with --shadow/--execute)")
     args = parser.parse_args()
 
+    # --send composes only with --shadow/--execute -- the only pairing the
+    # plan's own Task 11 Step 5 cron lines ever use (`--shadow --send` at
+    # 10:00). --collect and --verify run unattended at 09:30/20:30 with no
+    # --send in the plan, and --growth-gate-report is a manual, read-only
+    # check with nothing "digest-worthy" to send (build_growth_digest's
+    # shape assumes a run_growth_controller state dict, which none of these
+    # three new modes produce).
+    if args.send and not (args.shadow or args.execute):
+        parser.error("--send may only be combined with --shadow or --execute")
+
     now = datetime.now(timezone.utc)
+
+    if args.collect:
+        config = _default_config(now)
+        result = collect_growth_observations(config, now)
+        print(json.dumps(result, indent=2, sort_keys=True, default=str))
+        return
+
+    if args.verify:
+        config = _default_config(now)
+        result = verify_growth_state(config, now)
+        print(json.dumps(result, indent=2, sort_keys=True, default=str))
+        return
+
+    if args.growth_gate_report:
+        config = _default_config(now)
+        report = build_growth_gate_report(config["titles"], config["started_at"], now)
+        print(format_growth_gate_report(report))
+        return
+
     config = _default_config(now)
     state = run_growth_controller(config, now=now, shadow=not args.execute)
 

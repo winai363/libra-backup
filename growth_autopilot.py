@@ -101,7 +101,7 @@ from pathlib import Path
 from amazon_ads_controller import ads_decision, reconcile_ads_action
 from business_ledger import growth_evidence, init_ledger, record_growth_evidence, record_growth_plan
 from growth_planner import build_growth_plan
-from growth_policy import growth_phase
+from growth_policy import ads_eligibility, growth_phase
 from kdp_promotion_controller import propose_promotion, reconcile_promotion
 from portfolio_scorer import score_portfolio
 from profit_agent import check_policy
@@ -639,3 +639,265 @@ def growth_authority_transferred(marker_path: Path) -> bool:
     authority transferred must never be read as transferred — today, with
     no such marker ever created, legacy behavior is provably unchanged."""
     return Path(marker_path).is_file()
+
+
+# ---------------------------------------------------------------------------
+# Task 11a: --collect, --verify, --growth-gate-report — the three CLI modes
+# the plan's Task 11 cron lines (Step 5) and Growth Gate check (Step 10)
+# already reference but no prior task built. All three are additional
+# entrypoints alongside run_growth_controller, not replacements for it.
+# ---------------------------------------------------------------------------
+
+def _day_start(now: datetime) -> datetime:
+    """Truncate `now` to its CALENDAR DATE at midnight, same tzinfo — the
+    exact technique run_growth_controller already uses for `planned_at` (see
+    its own comment): a value derived from the date only, never from a call's
+    exact wall-clock time, so two same-day invocations produce byte-identical
+    ledger rows and record_growth_evidence's content-hash idempotency (Task
+    1) naturally no-ops the second call instead of raising "conflicting
+    growth evidence"."""
+    return datetime.combine(now.date(), datetime.min.time(), tzinfo=now.tzinfo)
+
+
+def collect_growth_observations(config: dict, now: datetime) -> dict:
+    """Task 11a --collect (09:30, runs BEFORE planning): ingest available
+    observations into the growth evidence ledger and report what is
+    currently visible. Zero planning, zero authorization, zero external
+    mutation — this never calls score_portfolio, build_growth_plan,
+    check_policy, or any adapter, and never touches growth_plans.
+
+    Evidence source (documented, not invented): no prior task built a
+    collector that turns raw signals into portfolio_scorer's per-title
+    deltas yet (see scripts/libra_growth_autopilot.py's own
+    "Evidence-aggregation gap" docstring) — inventing an ingestion path here
+    would guess at a source the plan never specified. Instead this records
+    one minimal, honest heartbeat evidence row per day — "collection ran on
+    this date" — through the exact same record_growth_evidence every other
+    evidence writer in this project uses, so a downstream operator/dashboard
+    can see the 09:30 cron actually fired and how many observations are on
+    record, without fabricating per-title numbers nobody supplied.
+
+    Idempotent by construction: the heartbeat's source_key and payload are
+    both derived from `now`'s calendar date only (see _day_start) — a second
+    same-day call, even at a different wall-clock time or after unrelated
+    evidence accumulated in between, produces the byte-identical row.
+
+    Still runs during an emergency stop: this function never reads
+    growth_incidents or readiness at all, so there is no gate here to fail
+    closed on — collection is unconditional, exactly as the plan requires
+    ("emergency stop keeps collection").
+
+    Respects the single-writer file lock: contended -> reports itself
+    locked and writes nothing (never blocks, never duplicates a write),
+    mirroring run_growth_controller's own _file_lock contract.
+    """
+    ledger_path = Path(config["ledger_path"])
+    lock_path = Path(config.get("lock_path") or ledger_path.with_name("growth-autopilot.lock"))
+    titles = config.get("titles") or []
+
+    init_ledger(ledger_path)
+    date_key = now.date().isoformat()
+    day_start = _day_start(now)
+
+    with _file_lock(lock_path) as acquired:
+        if not acquired:
+            return {
+                "collected_at": now.isoformat(),
+                "locked": True,
+                "observations_visible": None,
+                "titles_visible": len(titles),
+                "reason": "lock_contention",
+            }
+        record_growth_evidence(ledger_path, {
+            "source_key": f"growth-collect-heartbeat:{date_key}",
+            "kind": "collection_heartbeat",
+            "slug": None,
+            "observed_at": day_start.isoformat(),
+            "fresh_until": (day_start + timedelta(days=1)).isoformat(),
+            "confidence": 1.0,
+            "payload": {"date": date_key},
+        })
+        evidence_rows = growth_evidence(ledger_path)
+
+    return {
+        "collected_at": now.isoformat(),
+        "locked": False,
+        "observations_visible": len(evidence_rows),
+        "titles_visible": len(titles),
+    }
+
+
+def _has_verifiable_proof(evidence: dict) -> bool:
+    """Generic, kind-agnostic proof check reused by verify_growth_state.
+    Recognizes the SAME evidence shapes the project's own executors already
+    produce (never a new, invented shape):
+      - price_update (growth_autopilot._reconcile_price_update) and
+        free_promo (kdp_promotion_controller.reconcile_promotion) both carry
+        "verified_state_change": {"before": ..., "after": ...};
+      - amazon_ads (amazon_ads_controller.reconcile_ads_action) carries
+        "campaign_id" plus a non-empty "after_state" readback;
+      - "confirmation_id" alone (present on both of the above) is also
+        accepted as a third, narrower signal.
+    Anything short of one of these — including an empty dict — is NOT proof.
+    """
+    if not isinstance(evidence, dict) or not evidence:
+        return False
+    change = evidence.get("verified_state_change")
+    if isinstance(change, dict) and change.get("before") is not None and change.get("after") is not None:
+        return True
+    after_state = evidence.get("after_state")
+    if evidence.get("campaign_id") and isinstance(after_state, dict) and after_state:
+        return True
+    if evidence.get("confirmation_id"):
+        return True
+    return False
+
+
+def verify_growth_state(config: dict, now: datetime) -> dict:
+    """Task 11a --verify (20:30, runs AFTER the day's run): reconcile
+    previously planned/executed actions against verifiable state. Reads
+    data/growth-autopilot-state.json (the SAME file run_growth_controller
+    writes) plus the ledger; never invents outcomes and never upgrades an
+    action beyond what it was already recorded as. It can only CONFIRM an
+    "executed" entry that carries real proof (see _has_verifiable_proof) or
+    FLAG one that does not — never mark anything as executed that lacks
+    proof, and never touch the original plan/executed entries themselves.
+
+    Fails closed on a missing or corrupt state file: clean
+    {"status": "nothing_to_verify", ...} exit, not a crash or a ledger/lock
+    touch — there is nothing yet to reconcile.
+
+    Side-effect-free externally: no adapter is ever called here (see
+    test_verify_never_calls_an_adapter_or_authorizes_anything). Findings are
+    written to BOTH the ledger (a verification_run evidence row, mirroring
+    every other evidence writer's idempotent-by-date pattern) AND the state
+    file's own "verification" key — the rest of the state file (generated_at,
+    plan, executed, blocked, ...) is read back byte-for-byte and rewritten
+    unchanged alongside it.
+
+    Still runs during an emergency stop: this function never reads
+    growth_incidents/readiness either — verification is a read-only
+    reconciliation, exactly as the plan allows ("verify may still run").
+
+    Respects the single-writer file lock, same contract as collect/execute.
+    """
+    ledger_path = Path(config["ledger_path"])
+    lock_path = Path(config.get("lock_path") or ledger_path.with_name("growth-autopilot.lock"))
+    state_path = Path(config.get("state_path") or ledger_path.with_name("growth-autopilot-state.json"))
+
+    try:
+        raw_state = state_path.read_text(encoding="utf-8")
+        prior_state = json.loads(raw_state)
+    except (OSError, ValueError):
+        return {
+            "status": "nothing_to_verify", "verified_at": now.isoformat(),
+            "checked": 0, "verified": [], "flagged": [],
+        }
+    if not isinstance(prior_state, dict):
+        return {
+            "status": "nothing_to_verify", "verified_at": now.isoformat(),
+            "checked": 0, "verified": [], "flagged": [],
+        }
+
+    executed_entries = [
+        entry for entry in (prior_state.get("executed") or [])
+        if isinstance(entry, dict) and entry.get("status") == "executed"
+    ]
+    verified, flagged = [], []
+    for entry in executed_entries:
+        row = {"slug": entry.get("slug"), "kind": entry.get("kind")}
+        if _has_verifiable_proof(entry.get("evidence") or {}):
+            verified.append(row)
+        else:
+            flagged.append({**row, "reason": "missing_verifiable_evidence"})
+
+    result = {
+        "status": "verified",
+        "verified_at": now.isoformat(),
+        "source_generated_at": prior_state.get("generated_at"),
+        "checked": len(executed_entries),
+        "verified": verified,
+        "flagged": flagged,
+    }
+
+    date_key = now.date().isoformat()
+    day_start = _day_start(now)
+    init_ledger(ledger_path)
+    with _file_lock(lock_path) as acquired:
+        if not acquired:
+            return {**result, "status": "locked", "reason": "lock_contention"}
+        record_growth_evidence(ledger_path, {
+            "source_key": f"growth-verify:{date_key}",
+            "kind": "verification_run",
+            "slug": None,
+            "observed_at": day_start.isoformat(),
+            "fresh_until": (day_start + timedelta(days=1)).isoformat(),
+            "confidence": 1.0,
+            "payload": {"checked": result["checked"], "verified": len(verified), "flagged": len(flagged)},
+        })
+        _write_atomic(state_path, {**prior_state, "verification": result})
+
+    return result
+
+
+def build_growth_gate_report(titles: list, started_at: datetime, now: datetime) -> dict:
+    """Task 11a --growth-gate-report (day-30 gate check, Task 11 Step 10):
+    read-only, per-title Growth Gate criteria status. Reuses
+    growth_policy.ads_eligibility for the EXACT SAME three-signal test
+    amazon_ads_controller/growth_policy already enforce (paid royalty growth
+    OR incremental KENP >= 100 OR verified tracked clicks >= 20) — this
+    function only maps each title row's fields onto ads_eligibility's
+    expected metrics shape and calls it; it never reimplements or re-derives
+    the thresholds themselves. Pure: no I/O, no ledger, no state mutation,
+    no adapter call.
+    """
+    phase = growth_phase(started_at, now) if isinstance(started_at, datetime) else "organic"
+    rows = []
+    for title in titles or []:
+        if not isinstance(title, dict):
+            continue
+        metrics = {
+            "royalty_growth_usd": title.get("royalty_delta_usd", 0),
+            "kenp_delta": title.get("kenp_delta", 0),
+            "tracked_clicks": title.get("tracked_clicks", 0),
+        }
+        verdict = ads_eligibility(metrics)
+        rows.append({
+            "slug": title.get("slug"),
+            "eligible": verdict["eligible"],
+            "reason": verdict["reason"],
+            "royalty_delta_usd": metrics["royalty_growth_usd"],
+            "kenp_delta": metrics["kenp_delta"],
+            "tracked_clicks": metrics["tracked_clicks"],
+        })
+    return {
+        "generated_at": now.isoformat(),
+        "started_at": started_at.isoformat() if isinstance(started_at, datetime) else None,
+        "phase": phase,
+        "titles": rows,
+        "eligible_count": sum(1 for row in rows if row["eligible"]),
+    }
+
+
+def format_growth_gate_report(report: dict) -> str:
+    """Plain-language stdout rendering of build_growth_gate_report's output
+    — pure text formatting, no I/O, mirrors build_growth_digest's role for
+    the shadow/execute state."""
+    titles = report.get("titles") or []
+    lines = [
+        "Libra Growth Gate report",
+        f"Generated: {report.get('generated_at')}",
+        f"Phase: {report.get('phase')}  (organic window started: {report.get('started_at')})",
+        f"Eligible titles: {report.get('eligible_count', 0)} / {len(titles)}",
+        "",
+    ]
+    if not titles:
+        lines.append("  (no titles to report)")
+    for row in titles:
+        status = "ELIGIBLE" if row["eligible"] else "not eligible"
+        lines.append(
+            f"  - {row['slug']}: {status} ({row['reason']}) "
+            f"royalty_delta_usd={row['royalty_delta_usd']} kenp_delta={row['kenp_delta']} "
+            f"tracked_clicks={row['tracked_clicks']}"
+        )
+    return "\n".join(lines)

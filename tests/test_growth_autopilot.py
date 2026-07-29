@@ -12,8 +12,19 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 from business_ledger import growth_evidence, init_ledger, record_growth_evidence
-from growth_autopilot import build_growth_digest, growth_authority_transferred, run_growth_controller
+from growth_autopilot import (
+    build_growth_digest,
+    build_growth_gate_report,
+    collect_growth_observations,
+    format_growth_gate_report,
+    growth_authority_transferred,
+    run_growth_controller,
+    verify_growth_state,
+)
+from growth_policy import ads_eligibility
 from scripts.libra_growth_autopilot import _default_titles, _persisted_started_at
 
 NOW = datetime(2026, 7, 29, 9, 0, tzinfo=timezone.utc)
@@ -611,3 +622,407 @@ def test_cli_send_path_uses_build_growth_digest_output(tmp_path, monkeypatch):
     assert sent["text"] == build_growth_digest(written_state)
     assert "Planned (not yet done):" in sent["text"]
     assert "Executed with evidence:" in sent["text"]
+
+
+# ---------------------------------------------------------------------------
+# Task 11a: --collect, --verify, --growth-gate-report — the three CLI modes
+# the plan's cron lines and Step 10 already reference but no prior task
+# built. See docs/superpowers/plans/2026-07-28-libra-growth-autopilot.md
+# Task 11 Steps 5 and 10.
+# ---------------------------------------------------------------------------
+
+def _collect_config(tmp_path, *, incidents=None) -> dict:
+    db_path = tmp_path / "ledger.db"
+    init_ledger(db_path)
+    return {
+        "ledger_path": db_path,
+        "lock_path": tmp_path / "growth-autopilot.lock",
+        "state_path": tmp_path / "growth-autopilot-state.json",
+        "titles": [_untested_title()],
+        # A stray account-critical incident in config must NOT stop
+        # collection -- collect_growth_observations never reads this key at
+        # all, which is itself the emergency-stop proof: there is no gate
+        # here to short-circuit.
+        "incidents": incidents or [],
+    }
+
+
+def test_collect_records_heartbeat_evidence_and_reports_visible_counts(tmp_path):
+    cfg = _collect_config(tmp_path)
+    result = collect_growth_observations(cfg, now=NOW)
+
+    assert result["locked"] is False
+    assert result["observations_visible"] >= 1
+    assert result["titles_visible"] == 1
+
+    rows = growth_evidence(cfg["ledger_path"], kind="collection_heartbeat")
+    assert len(rows) == 1
+
+
+def test_collect_does_not_plan_authorize_or_execute(tmp_path):
+    """--collect is observation-only: it must never touch growth_plans."""
+    cfg = _collect_config(tmp_path)
+    collect_growth_observations(cfg, now=NOW)
+
+    with sqlite3.connect(cfg["ledger_path"]) as connection:
+        plan_count = connection.execute("SELECT COUNT(*) FROM growth_plans").fetchone()[0]
+    assert plan_count == 0
+
+
+def test_collect_double_run_same_day_is_idempotent_not_duplicated(tmp_path):
+    cfg = _collect_config(tmp_path)
+    first = collect_growth_observations(cfg, now=NOW)
+    later_same_day = NOW + timedelta(hours=3)
+    second = collect_growth_observations(cfg, now=later_same_day)
+
+    assert first["locked"] is False
+    assert second["locked"] is False
+    rows = growth_evidence(cfg["ledger_path"], kind="collection_heartbeat")
+    assert len(rows) == 1  # not duplicated despite different wall-clock times
+
+
+def test_collect_runs_during_account_critical_incident_emergency_stop(tmp_path):
+    """Plan: 'emergency stop keeps collection.' An open account-critical
+    incident must not prevent --collect from recording evidence."""
+    cfg = _collect_config(tmp_path, incidents=[{"severity": "critical", "scope": "account", "detail": {}}])
+    result = collect_growth_observations(cfg, now=NOW)
+    assert result["locked"] is False
+    assert result["observations_visible"] >= 1
+
+
+def test_collect_reports_locked_when_lock_is_contended(tmp_path):
+    cfg = _collect_config(tmp_path)
+    lock_path = Path(cfg["lock_path"])
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(lock_path, "a+")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = collect_growth_observations(cfg, now=NOW)
+    finally:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        handle.close()
+
+    assert result["locked"] is True
+    rows = growth_evidence(cfg["ledger_path"], kind="collection_heartbeat")
+    assert rows == []  # never wrote while contended
+
+
+# ---------------------------------------------------------------------------
+# --verify
+# ---------------------------------------------------------------------------
+
+def _verify_config(tmp_path) -> dict:
+    db_path = tmp_path / "ledger.db"
+    init_ledger(db_path)
+    return {
+        "ledger_path": db_path,
+        "lock_path": tmp_path / "growth-autopilot.lock",
+        "state_path": tmp_path / "growth-autopilot-state.json",
+    }
+
+
+def _write_prior_state(state_path: Path, executed: list) -> dict:
+    state = {
+        "generated_at": NOW.isoformat(),
+        "mode": "execute",
+        "phase": "organic",
+        "started_at": ORGANIC_STARTED_AT.isoformat(),
+        "readiness": {"mutation_allowed": True, "reason": "ready", "open_incidents": 0, "blocked_slugs": []},
+        "plan": {"action_key": "abc", "phase": "organic_test", "portfolio": {"active": []}, "actions": []},
+        "executed": executed,
+        "blocked": [],
+    }
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    return state
+
+
+def test_verify_with_missing_state_file_is_clean_nothing_to_verify(tmp_path):
+    cfg = _verify_config(tmp_path)
+    result = verify_growth_state(cfg, now=NOW)
+    assert result["status"] == "nothing_to_verify"
+    assert result["checked"] == 0
+    assert result["verified"] == []
+    assert result["flagged"] == []
+
+
+def test_verify_confirms_an_executed_action_that_has_verifiable_evidence(tmp_path):
+    cfg = _verify_config(tmp_path)
+    _write_prior_state(cfg["state_path"], executed=[{
+        "slug": "book-a", "kind": "price_update", "status": "executed", "reason": "verified_after_state",
+        "evidence": {
+            "confirmation_id": "kdp-price-update:book-a:2.99",
+            "verified_state_change": {"before": {"price": 9.99}, "after": {"price": 2.99}},
+        },
+    }])
+
+    result = verify_growth_state(cfg, now=NOW)
+
+    assert result["status"] == "verified"
+    assert result["checked"] == 1
+    assert [row["slug"] for row in result["verified"]] == ["book-a"]
+    assert result["flagged"] == []
+
+
+def test_verify_flags_an_executed_action_that_has_no_verifiable_evidence_never_upgrades(tmp_path):
+    """The action was recorded as 'executed' upstream, but carries no
+    readable before/after proof. Verify must FLAG it, not silently accept
+    it and never invent proof it doesn't have -- it can only downgrade."""
+    cfg = _verify_config(tmp_path)
+    _write_prior_state(cfg["state_path"], executed=[{
+        "slug": "book-b", "kind": "free_promo", "status": "executed", "reason": "verified_after_state",
+        "evidence": {},
+    }])
+
+    result = verify_growth_state(cfg, now=NOW)
+
+    assert result["checked"] == 1
+    assert result["verified"] == []
+    assert [row["slug"] for row in result["flagged"]] == ["book-b"]
+    assert result["flagged"][0]["reason"] == "missing_verifiable_evidence"
+
+    # Verify must never rewrite the original executed entry itself -- only
+    # add findings alongside it.
+    rewritten = json.loads(cfg["state_path"].read_text(encoding="utf-8"))
+    assert rewritten["executed"][0]["status"] == "executed"
+    assert rewritten["executed"][0]["evidence"] == {}
+
+
+def test_verify_writes_findings_into_verification_section_without_disturbing_plan_or_executed(tmp_path):
+    cfg = _verify_config(tmp_path)
+    original = _write_prior_state(cfg["state_path"], executed=[{
+        "slug": "book-a", "kind": "amazon_ads", "status": "executed",
+        "evidence": {"campaign_id": "camp-1", "budget_thb": 50, "status": "active", "after_state": {"budget_thb": 50}},
+    }])
+
+    verify_growth_state(cfg, now=NOW)
+
+    rewritten = json.loads(cfg["state_path"].read_text(encoding="utf-8"))
+    assert rewritten["plan"] == original["plan"]
+    assert rewritten["executed"] == original["executed"]
+    assert "verification" in rewritten
+    assert rewritten["verification"]["checked"] == 1
+
+
+def test_verify_records_ledger_evidence_for_the_run(tmp_path):
+    cfg = _verify_config(tmp_path)
+    _write_prior_state(cfg["state_path"], executed=[])
+    verify_growth_state(cfg, now=NOW)
+    rows = growth_evidence(cfg["ledger_path"], kind="verification_run")
+    assert len(rows) == 1
+
+
+def test_verify_never_calls_an_adapter_or_authorizes_anything(tmp_path):
+    """Side-effect-free externally: verify only reads state/ledger and
+    writes ledger evidence + the state file's verification section. Plant a
+    poisoned adapter in config that raises on any call -- if verify ever
+    dispatched to it, this test would fail with that exception instead of
+    passing normally."""
+    class _PoisonedAdapter:
+        def publish(self, action):
+            raise AssertionError("verify_growth_state must never call an adapter")
+
+    cfg = _verify_config(tmp_path)
+    cfg["adapters"] = {
+        "price_executor": _PoisonedAdapter().publish,
+        "promotion": _PoisonedAdapter(),
+        "ads": _PoisonedAdapter(),
+    }
+    _write_prior_state(cfg["state_path"], executed=[{
+        "slug": "book-a", "kind": "price_update", "status": "executed",
+        "evidence": {"confirmation_id": "x", "verified_state_change": {"before": 1, "after": 2}},
+    }])
+
+    result = verify_growth_state(cfg, now=NOW)
+
+    assert result["status"] == "verified"  # no exception was raised
+
+
+def test_verify_runs_during_account_critical_incident_emergency_stop(tmp_path):
+    """Plan: verification may still run (read-only reconciliation) even
+    during an emergency stop. verify_growth_state never reads incidents at
+    all, so a stray incidents key changes nothing."""
+    cfg = _verify_config(tmp_path)
+    cfg["incidents"] = [{"severity": "critical", "scope": "account", "detail": {}}]
+    _write_prior_state(cfg["state_path"], executed=[])
+    result = verify_growth_state(cfg, now=NOW)
+    assert result["status"] == "verified"
+
+
+def test_verify_reports_locked_when_lock_is_contended(tmp_path):
+    cfg = _verify_config(tmp_path)
+    _write_prior_state(cfg["state_path"], executed=[])
+    lock_path = Path(cfg["lock_path"])
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    handle = open(lock_path, "a+")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        result = verify_growth_state(cfg, now=NOW)
+    finally:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        handle.close()
+    assert result["status"] == "locked"
+
+
+# ---------------------------------------------------------------------------
+# --growth-gate-report
+# ---------------------------------------------------------------------------
+
+def test_growth_gate_report_matches_growth_policy_ads_eligibility_verdicts():
+    titles = [
+        {"slug": "book-royalty", "royalty_delta_usd": 5, "kenp_delta": 0, "tracked_clicks": 0},
+        {"slug": "book-kenp", "royalty_delta_usd": 0, "kenp_delta": 150, "tracked_clicks": 0},
+        {"slug": "book-clicks", "royalty_delta_usd": 0, "kenp_delta": 0, "tracked_clicks": 25},
+        {"slug": "book-none", "royalty_delta_usd": 0, "kenp_delta": 0, "tracked_clicks": 0},
+    ]
+    report = build_growth_gate_report(titles, ORGANIC_STARTED_AT, NOW)
+    rows = {row["slug"]: row for row in report["titles"]}
+
+    for title in titles:
+        expected = ads_eligibility({
+            "royalty_growth_usd": title["royalty_delta_usd"],
+            "kenp_delta": title["kenp_delta"],
+            "tracked_clicks": title["tracked_clicks"],
+        })
+        assert rows[title["slug"]]["eligible"] == expected["eligible"]
+        assert rows[title["slug"]]["reason"] == expected["reason"]
+
+    assert report["eligible_count"] == 3
+
+
+def test_growth_gate_report_includes_phase_from_growth_policy():
+    from growth_policy import growth_phase
+    report = build_growth_gate_report([], ORGANIC_STARTED_AT, NOW)
+    assert report["phase"] == growth_phase(ORGANIC_STARTED_AT, NOW)
+
+    growth_report = build_growth_gate_report([], GROWTH_STARTED_AT, NOW)
+    assert growth_report["phase"] == growth_phase(GROWTH_STARTED_AT, NOW)
+
+
+def test_growth_gate_report_handles_empty_titles():
+    report = build_growth_gate_report([], ORGANIC_STARTED_AT, NOW)
+    assert report["titles"] == []
+    assert report["eligible_count"] == 0
+
+
+def test_format_growth_gate_report_is_human_readable_text():
+    report = build_growth_gate_report(
+        [{"slug": "book-a", "royalty_delta_usd": 5, "kenp_delta": 0, "tracked_clicks": 0}],
+        ORGANIC_STARTED_AT, NOW,
+    )
+    text = format_growth_gate_report(report)
+    assert isinstance(text, str)
+    assert "book-a" in text
+    assert "ELIGIBLE" in text
+
+
+# ---------------------------------------------------------------------------
+# CLI wiring: --collect / --verify / --growth-gate-report, and mutual
+# exclusivity with --shadow/--execute/--send.
+# ---------------------------------------------------------------------------
+
+def _patch_cli_paths(monkeypatch, tmp_path):
+    import scripts.libra_growth_autopilot as cli
+    ledger_path = tmp_path / "libra-business.db"
+    kdp_dir = tmp_path / "kdp"
+    kdp_dir.mkdir()
+    monkeypatch.setattr(cli, "LEDGER_FILE", ledger_path)
+    monkeypatch.setattr(cli, "STATE_FILE", ledger_path.with_name("growth-autopilot-state.json"))
+    monkeypatch.setattr(cli, "LOCK_FILE", ledger_path.with_name("growth-autopilot.lock"))
+    monkeypatch.setattr(cli, "KDP_DIR", kdp_dir)
+    return cli
+
+
+def test_cli_collect_mode_prints_json_and_never_writes_the_shadow_execute_state_file(tmp_path, monkeypatch, capsys):
+    import sys
+    cli = _patch_cli_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(sys, "argv", ["libra_growth_autopilot.py", "--collect"])
+
+    cli.main()
+
+    result = json.loads(capsys.readouterr().out)
+    assert result["locked"] is False
+    assert not cli.STATE_FILE.exists()
+
+
+def test_cli_verify_mode_with_no_prior_run_reports_nothing_to_verify(tmp_path, monkeypatch, capsys):
+    import sys
+    cli = _patch_cli_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(sys, "argv", ["libra_growth_autopilot.py", "--verify"])
+
+    cli.main()
+
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "nothing_to_verify"
+
+
+def test_cli_growth_gate_report_mode_prints_text_and_mutates_nothing(tmp_path, monkeypatch, capsys):
+    import sys
+    cli = _patch_cli_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(sys, "argv", ["libra_growth_autopilot.py", "--growth-gate-report"])
+
+    cli.main()
+
+    out = capsys.readouterr().out
+    assert "Growth Gate" in out
+    assert not cli.LEDGER_FILE.exists()
+    assert not cli.STATE_FILE.exists()
+
+
+def test_cli_rejects_collect_combined_with_shadow(tmp_path, monkeypatch, capsys):
+    import sys
+    cli = _patch_cli_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(sys, "argv", ["libra_growth_autopilot.py", "--collect", "--shadow"])
+    with pytest.raises(SystemExit):
+        cli.main()
+
+
+def test_cli_rejects_verify_combined_with_execute(tmp_path, monkeypatch, capsys):
+    import sys
+    cli = _patch_cli_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(sys, "argv", ["libra_growth_autopilot.py", "--verify", "--execute"])
+    with pytest.raises(SystemExit):
+        cli.main()
+
+
+def test_cli_rejects_growth_gate_report_combined_with_collect(tmp_path, monkeypatch, capsys):
+    import sys
+    cli = _patch_cli_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(sys, "argv", ["libra_growth_autopilot.py", "--growth-gate-report", "--collect"])
+    with pytest.raises(SystemExit):
+        cli.main()
+
+
+def test_cli_rejects_send_combined_with_collect(tmp_path, monkeypatch, capsys):
+    """--send composes only with --shadow/--execute (the only modes the
+    plan's own cron lines ever pair it with -- see Task 11 Step 5)."""
+    import sys
+    cli = _patch_cli_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(sys, "argv", ["libra_growth_autopilot.py", "--collect", "--send"])
+    with pytest.raises(SystemExit):
+        cli.main()
+
+
+def test_cli_rejects_send_combined_with_verify(tmp_path, monkeypatch, capsys):
+    import sys
+    cli = _patch_cli_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(sys, "argv", ["libra_growth_autopilot.py", "--verify", "--send"])
+    with pytest.raises(SystemExit):
+        cli.main()
+
+
+def test_cli_rejects_send_combined_with_growth_gate_report(tmp_path, monkeypatch, capsys):
+    import sys
+    cli = _patch_cli_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(sys, "argv", ["libra_growth_autopilot.py", "--growth-gate-report", "--send"])
+    with pytest.raises(SystemExit):
+        cli.main()
+
+
+def test_cli_still_accepts_send_combined_with_shadow(tmp_path, monkeypatch):
+    """Regression guard: the new mutual-exclusivity/--send validation must
+    not break the pre-existing, plan-documented `--shadow --send` pairing."""
+    import sys
+    cli = _patch_cli_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "send_telegram", lambda text: True)
+    monkeypatch.setattr(sys, "argv", ["libra_growth_autopilot.py", "--shadow", "--send"])
+    cli.main()  # must not raise

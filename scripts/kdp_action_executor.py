@@ -459,16 +459,36 @@ class KdpPromotionAdapter:
     promotion proposal into a real KDP mutation. Additive only: reuses the
     SAME browser flow and audit-result shape as the free_promo action lane
     above (_execute_free_promo), never a new path, and never touches
-    validate_action or any existing gate."""
+    validate_action or any existing gate.
+
+    publish() itself is a gate, not just a router: it re-expresses the
+    caller's action as a `free_promo` action and runs it through
+    validate_action FIRST — the same production function (and, via it,
+    has_distribution_pairing's file-based check against
+    data/promo_pairings.json / data/reddit_promo_schedule.json) the legacy
+    free_promo action kind is gated by. kdp_promotion_controller's own
+    evidence/freshness/overlap checks in propose_promotion are a second,
+    independent layer in front of this one — neither layer substitutes for
+    the other. A validate_action refusal here is reported as a policy
+    rejection so reconcile_promotion classifies it "blocked", never
+    silently skipped."""
 
     def publish(self, action: dict) -> dict:
-        import asyncio
-
         slug = action.get("slug") or ""
         listing = load_listing(slug)
         if listing is None:
             return {"returncode": 1, "error": f"no listing.json for slug {slug}"}
-        return asyncio.run(_execute_free_promo(action, listing, int(action.get("days") or 1)))
+        days = int(action.get("days") or 1)
+        gate_action = {
+            "kind": "free_promo",
+            "slug": slug,
+            "cost_usd": 0,
+            "proposed_value": f"{days}-day KDP Select free promotion",
+        }
+        ok, reason, _ = validate_action(gate_action, listing, set())
+        if not ok:
+            return {"policy_rejected": True, "reason": reason}
+        return asyncio.run(_execute_free_promo(action, listing, days))
 
 
 def build_executor(*, notify: bool = True):

@@ -107,6 +107,30 @@ def test_propose_promotion_refuses_overlapping_experiment():
     assert blocked["reason"] == "overlapping_experiment_on_slug"
 
 
+def test_propose_promotion_rejects_future_dated_observed_at():
+    # A future timestamp is bad data (clock skew, fabricated read) — must
+    # fail closed exactly like a stale one, not be treated as "even fresher".
+    future = kdp_state(observed_at=(datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat())
+    blocked = propose_promotion("book-a", future, evidence=EVIDENCE_OK)
+    assert blocked["status"] == "blocked"
+    assert blocked["reason"] == "missing_fresh_before_state"
+
+
+def test_propose_promotion_rejects_evidence_for_a_different_slug():
+    # Evidence proving a channel for book B must never authorize a promo
+    # for book A — the whole point of scoping evidence to the slug.
+    evidence = [{"kind": "external_post", "post_url": "https://example.test/p/1", "slug": "book-b"}]
+    blocked = propose_promotion("book-a", kdp_state(), evidence=evidence)
+    assert blocked["status"] == "blocked"
+    assert blocked["reason"] == "missing_verified_distribution_evidence"
+
+
+def test_propose_promotion_accepts_evidence_with_matching_slug():
+    evidence = [{"kind": "external_post", "post_url": "https://example.test/p/1", "slug": "book-a"}]
+    allowed = propose_promotion("book-a", kdp_state(), evidence=evidence)
+    assert allowed["status"] == "allowed"
+
+
 # --- evaluate_promotion --------------------------------------------------
 
 def test_zero_download_result_exhausts_cycle():
@@ -209,11 +233,27 @@ def test_reconcile_promotion_never_invents_success_without_before_state():
 
 # --- KdpPromotionAdapter hook in scripts/kdp_action_executor.py ----------
 
+def _pair_slug(tmp_path, monkeypatch, executor_module, slug):
+    """Same pairing helper as tests/test_kdp_action_executor.py's _pair_slug
+    — stamp a verified reddit_promo_schedule.json entry so validate_action's
+    has_distribution_pairing check passes for `slug`."""
+    import json
+
+    schedule = tmp_path / "reddit_promo_schedule.json"
+    schedule.write_text(json.dumps({"posts": [
+        {"slug": slug, "post_url": f"https://example.com/{slug}"}
+    ]}))
+    monkeypatch.setattr(executor_module, "PAIRINGS_FILE", tmp_path / "missing_pairings.json")
+    monkeypatch.setattr(executor_module, "REDDIT_SCHEDULE_FILE", schedule)
+
+
 def test_kdp_promotion_adapter_reuses_existing_free_promo_browser_flow(tmp_path, monkeypatch):
     """The additive hook (scripts.kdp_action_executor.KdpPromotionAdapter)
     must route through the SAME _execute_free_promo audit flow used by the
     existing free_promo action lane — never a new browser path — and never
-    make a real call in tests (the coroutine itself is monkeypatched)."""
+    make a real call in tests (the coroutine itself is monkeypatched). It
+    must ALSO run validate_action's pairing gate first — this test pairs
+    the slug so that gate passes and the browser flow is reached."""
     import json
 
     import scripts.kdp_action_executor as executor_module
@@ -223,6 +263,7 @@ def test_kdp_promotion_adapter_reuses_existing_free_promo_browser_flow(tmp_path,
     listing = {"kdp_book_id": "B01", "title": "Book A", "free_promo": None}
     (kdp_dir / "listing.json").write_text(json.dumps(listing))
     monkeypatch.setattr(executor_module, "KDP_DIR", tmp_path / "kdp")
+    _pair_slug(tmp_path, monkeypatch, executor_module, "book-a")
 
     captured = {}
 
@@ -253,3 +294,35 @@ def test_kdp_promotion_adapter_missing_listing_fails_closed(monkeypatch, tmp_pat
     result = adapter.publish({"slug": "no-such-book", "days": 1})
     assert result["returncode"] == 1
     assert "no listing.json" in result["error"]
+
+
+def test_kdp_promotion_adapter_blocks_unpaired_promo_via_validate_action(tmp_path, monkeypatch):
+    """IMPORTANT fix: publish() must run validate_action (and therefore
+    has_distribution_pairing, the production file-based pairing gate)
+    BEFORE ever touching the browser. An unpaired slug must be refused here
+    exactly as it would be for the legacy free_promo action kind — never
+    silently bypassed just because this is the new controller's adapter."""
+    import json
+
+    import scripts.kdp_action_executor as executor_module
+
+    kdp_dir = tmp_path / "kdp" / "unpaired-book"
+    kdp_dir.mkdir(parents=True)
+    listing = {"kdp_book_id": "B02", "title": "Unpaired Book", "free_promo": None}
+    (kdp_dir / "listing.json").write_text(json.dumps(listing))
+    monkeypatch.setattr(executor_module, "KDP_DIR", tmp_path / "kdp")
+    # No pairing stamped anywhere for this slug.
+    monkeypatch.setattr(executor_module, "PAIRINGS_FILE", tmp_path / "missing_pairings.json")
+    monkeypatch.setattr(executor_module, "REDDIT_SCHEDULE_FILE", tmp_path / "missing_schedule.json")
+
+    def fail_if_called(*a, **k):
+        pytest.fail("_execute_free_promo must not run when validate_action refuses")
+
+    monkeypatch.setattr(executor_module, "_execute_free_promo", fail_if_called)
+
+    adapter = executor_module.KdpPromotionAdapter()
+    response = adapter.publish({"slug": "unpaired-book", "days": 1})
+    assert response.get("policy_rejected") is True
+
+    result = reconcile_promotion({"slug": "unpaired-book", "days": 1}, adapter=adapter)
+    assert result["status"] == "blocked"

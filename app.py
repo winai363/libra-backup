@@ -44,6 +44,7 @@ KDP_DIR = Path(ENV.get("KDP_DIR", "/root/kdp"))
 PROFIT_LEDGER_FILE = Path(__file__).parent / "data" / "libra-business.db"
 GROWTH_ARTICLES_DIR = Path(__file__).parent / "data" / "growth_articles"
 PROFIT_AGENT_STATE_FILE = Path(__file__).parent / "data" / "profit-agent-state.json"
+GROWTH_AUTOPILOT_STATE_FILE = Path(__file__).parent / "data" / "growth-autopilot-state.json"
 USERNAME = ENV.get("USERNAME", "")
 PASSWORD = ENV.get("PASSWORD", "")
 TOKEN = ENV.get("SESSION_TOKEN", "")
@@ -1383,3 +1384,303 @@ async def growth_summary_api(request: Request):
     clicks) by event kind and slug."""
     check_read(request)
     return growth_summary(PROFIT_LEDGER_FILE)
+
+
+# ── Growth Autopilot dashboard (Task 10) ───────────────────────────────────
+# Read-only operating view over data/growth-autopilot-state.json (written
+# atomically by growth_autopilot.run_growth_controller, Task 9) plus ledger
+# read models (verified revenue, tracked traffic, growth evidence). This
+# page/API exposes no mutation path -- no "run now"/"execute" control ever
+# bypasses the controller. See GET /growth and GET /api/growth/state.
+
+def _load_growth_autopilot_state() -> dict:
+    """Safe read of the Growth Autopilot's latest state. A missing or
+    corrupt file is an honest "no run yet" ({}), never a 500 -- the same
+    fail-closed-to-empty convention as _load_profit_agent_state."""
+    try:
+        payload = json.loads(GROWTH_AUTOPILOT_STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    allowed = (
+        "generated_at", "mode", "locked", "phase", "started_at", "readiness",
+        "observations_collected", "scored_titles", "plan", "executed", "blocked", "reason",
+    )
+    return {key: payload[key] for key in allowed if key in payload}
+
+
+def build_growth_dashboard() -> dict:
+    """Combine the Growth Autopilot's latest persisted state with ledger
+    read models (verified revenue, tracked traffic, growth evidence) into
+    one read-only operating view for Task 10. `plan.actions` (proposed)
+    and `executed` (adapter-verified) are always kept as distinct keys --
+    a planned action is never merged into or mistaken for an executed
+    one."""
+    from business_ledger import growth_evidence as ledger_growth_evidence, portfolio_financials
+    from growth_policy import DAILY_CAP_THB, INITIAL_TITLE_CAP_THB, MONTHLY_CAP_THB
+
+    state = _load_growth_autopilot_state()
+    data_available = bool(state)
+
+    day = None
+    if state.get("generated_at") and state.get("started_at"):
+        try:
+            generated = datetime.fromisoformat(state["generated_at"])
+            started = datetime.fromisoformat(state["started_at"])
+            day = (generated - started).days + 1
+        except ValueError:
+            day = None
+
+    now = _profit_now()
+    month = now.strftime("%Y-%m")
+    financials = portfolio_financials(PROFIT_LEDGER_FILE, month)
+
+    evidence_rows = ledger_growth_evidence(PROFIT_LEDGER_FILE)
+    evidence_by_kind: dict = {}
+    for row in evidence_rows:
+        evidence_by_kind[row["kind"]] = evidence_by_kind.get(row["kind"], 0) + 1
+
+    plan = state.get("plan") or {}
+
+    return {
+        "data_available": data_available,
+        "generated_at": state.get("generated_at"),
+        "mode": state.get("mode"),
+        "phase": state.get("phase"),
+        "day": day,
+        "started_at": state.get("started_at"),
+        "readiness": state.get("readiness") or {},
+        "observations_collected": state.get("observations_collected", 0),
+        "portfolio": state.get("scored_titles") or [],
+        "plan": {"actions": plan.get("actions", []), "phase": plan.get("phase")},
+        "executed": state.get("executed") or [],
+        "blocked": state.get("blocked") or [],
+        "evidence_funnel": {"total": len(evidence_rows), "by_kind": evidence_by_kind},
+        "verified_revenue": {
+            "verified_royalties_usd": financials.get("verified_royalties_usd", 0.0),
+            "month": month,
+            "snapshot_count": financials.get("snapshot_count", 0),
+        },
+        "traffic": growth_summary(PROFIT_LEDGER_FILE),
+        "caps_thb": {"daily": DAILY_CAP_THB, "monthly": MONTHLY_CAP_THB, "initial_title": INITIAL_TITLE_CAP_THB},
+        "contribution_profit_usd": financials.get("contribution_profit_usd"),
+        "paid_spend_allowed": state.get("phase") == "growth",
+    }
+
+
+def build_growth_digest(state: dict) -> str:
+    """Plain-language Telegram digest for one Growth Autopilot state
+    snapshot -- the SAME dict shape growth_autopilot.run_growth_controller
+    writes to data/growth-autopilot-state.json. Pure function: state dict
+    in, text out, no I/O. Mirrors GET /growth's own separation rule so an
+    operator reading this on a phone can tell "Planned" (proposed, nothing
+    happened) from "Executed with evidence" (adapter proof + verified
+    before/after state) in one glance. Sending stays behind the project's
+    existing Telegram transport (distribution_report.send_telegram) --
+    this function only ever builds the text."""
+    if not state:
+        return "Libra Growth Autopilot\nNo run recorded yet."
+
+    plan = state.get("plan") or {}
+    planned = plan.get("actions") or []
+    executed = state.get("executed") or []
+    blocked = state.get("blocked") or []
+    readiness = state.get("readiness") or {}
+
+    lines = [
+        "Libra Growth Autopilot -- daily digest",
+        f"Mode: {state.get('mode', 'unknown')}"
+        + (" (LOCKED -- another run in progress)" if state.get("locked") else ""),
+        f"Phase: {state.get('phase', 'unknown')}",
+    ]
+    if readiness.get("mutation_allowed"):
+        lines.append("Readiness: OK, mutations allowed")
+    else:
+        lines.append(f"Readiness: BLOCKED -- {readiness.get('reason', 'unknown')}")
+    if readiness.get("blocked_slugs"):
+        lines.append(f"Blocked titles: {', '.join(readiness['blocked_slugs'])}")
+
+    lines.append(f"Planned (not yet done): {len(planned)}")
+    for item in planned[:10]:
+        lines.append(f"  - {item.get('slug')} / {item.get('variable')}")
+
+    lines.append(f"Executed with evidence: {len(executed)}")
+    for item in executed[:10]:
+        lines.append(f"  - {item.get('slug')} / {item.get('kind')}: {item.get('reason', 'executed')}")
+
+    lines.append(f"Blocked actions: {len(blocked)}")
+    for item in blocked[:10]:
+        lines.append(f"  - {item.get('slug')} / {item.get('kind')}: {item.get('reason', 'unknown')}")
+
+    return "\n".join(lines)
+
+
+def _growth_portfolio_table_html(portfolio: list) -> str:
+    if not portfolio:
+        return '<p class="text-slate-400">No scored titles yet.</p>'
+    rows = "".join(
+        '<tr class="border-t border-slate-700">'
+        f'<td class="py-2 pr-4 font-medium text-white">{escape_text(row.get("slug"))}</td>'
+        f'<td class="py-2 pr-4">{escape_text(row.get("classification"))}</td>'
+        f'<td class="py-2 pr-4">{escape_text(row.get("score"))}</td>'
+        f'<td class="py-2">{"fresh" if row.get("evidence_fresh") else "stale"}</td>'
+        "</tr>"
+        for row in portfolio
+    )
+    return (
+        '<table class="w-full text-left"><thead><tr class="text-slate-500">'
+        '<th class="py-2 pr-4">Title</th><th class="py-2 pr-4">Classification</th>'
+        '<th class="py-2 pr-4">Score</th><th class="py-2">Evidence</th></tr></thead>'
+        f"<tbody>{rows}</tbody></table>"
+    )
+
+
+def _growth_evidence_funnel_html(funnel: dict) -> str:
+    total = funnel.get("total", 0)
+    if not total:
+        return '<p class="text-slate-400">No growth evidence recorded yet.</p>'
+    items = "".join(
+        f"<li>{escape_text(kind)}: {escape_text(count)}</li>"
+        for kind, count in sorted((funnel.get("by_kind") or {}).items())
+    )
+    return f'<p>{escape_text(total)} evidence row(s) on record.</p><ul class="mt-1 list-disc list-inside">{items}</ul>'
+
+
+def _growth_traffic_html(traffic: dict) -> str:
+    total = (traffic or {}).get("total_events", 0)
+    if not total:
+        return '<p class="text-slate-400">No tracked traffic yet.</p>'
+    items = "".join(
+        f"<li>{escape_text(kind)}: {escape_text(count)}</li>"
+        for kind, count in sorted((traffic.get("by_event_kind") or {}).items())
+    )
+    return f'<p>{escape_text(total)} tracked event(s).</p><ul class="mt-1 list-disc list-inside">{items}</ul>'
+
+
+def _growth_planned_html(actions: list) -> str:
+    if not actions:
+        return '<p class="text-slate-400">No organic tests proposed this cycle.</p>'
+    items = "".join(
+        f'<li><span class="font-medium text-white">{escape_text(a.get("slug"))}</span>'
+        f" &middot; {escape_text(a.get('variable'))}</li>"
+        for a in actions
+    )
+    return f'<ul class="list-disc list-inside space-y-1">{items}</ul>'
+
+
+def _growth_executed_html(executed: list) -> str:
+    if not executed:
+        return '<p class="text-slate-400">No verified actions yet.</p>'
+    items = []
+    for entry in executed:
+        evidence = entry.get("evidence") or {}
+        change = evidence.get("verified_state_change") or {}
+        detail = ""
+        if change:
+            detail = f' (before: {escape_text(change.get("before"))} &rarr; after: {escape_text(change.get("after"))})'
+        confirmation = evidence.get("confirmation_id")
+        conf_text = f" &middot; confirmation {escape_text(confirmation)}" if confirmation else ""
+        items.append(
+            f'<li><span class="font-medium text-white">{escape_text(entry.get("slug"))}</span>'
+            f' &middot; {escape_text(entry.get("kind"))}{conf_text}{detail}</li>'
+        )
+    return f'<ul class="list-disc list-inside space-y-1">{"".join(items)}</ul>'
+
+
+def _growth_blocked_html(blocked: list) -> str:
+    if not blocked:
+        return '<p class="text-slate-400">Nothing blocked this cycle.</p>'
+    items = "".join(
+        f'<li><span class="font-medium text-white">{escape_text(entry.get("slug"))}</span>'
+        f' &middot; {escape_text(entry.get("kind"))}: {escape_text(entry.get("reason"))}</li>'
+        for entry in blocked
+    )
+    return f'<ul class="list-disc list-inside space-y-1">{items}</ul>'
+
+
+def _growth_verified_revenue_html(revenue: dict) -> str:
+    amount = revenue.get("verified_royalties_usd")
+    amount_text = f"${float(amount):.2f}" if amount is not None else "—"
+    return (
+        f'<p><span class="text-2xl font-bold text-white">{escape_text(amount_text)}</span> '
+        f'verified KDP royalties for {escape_text(revenue.get("month"))} '
+        f'({escape_text(revenue.get("snapshot_count", 0))} snapshot(s)).</p>'
+    )
+
+
+def _growth_spend_html(view: dict) -> str:
+    caps = view.get("caps_thb") or {}
+    contribution = view.get("contribution_profit_usd")
+    contribution_text = f"${float(contribution):.2f}" if contribution is not None else "—"
+    return (
+        f'<p>Amazon Ads: <span class="font-medium">{"open" if view.get("paid_spend_allowed") else "closed"}</span> '
+        f'&middot; caps THB {float(caps.get("daily", 0)):.2f}/day, '
+        f'THB {float(caps.get("monthly", 0)):.2f}/month, '
+        f'THB {float(caps.get("initial_title", 0)):.2f}/title (initial).</p>'
+        f'<p class="mt-2">Verified contribution profit (lifetime): '
+        f'<span class="font-medium">{escape_text(contribution_text)}</span></p>'
+    )
+
+
+@app.get("/growth", response_class=HTMLResponse)
+async def growth_dashboard_page(request: Request):
+    """Read-only Growth Autopilot operating dashboard -- Task 10. Renders
+    data/growth-autopilot-state.json plus ledger read models, with
+    "Planned" always visually distinct from "Executed with evidence". No
+    control surface: this page cannot start, stop, or execute anything --
+    see the Growth Autopilot CLI (scripts/libra_growth_autopilot.py) for
+    the only way to actually run the controller."""
+    check_read(request)
+    view = build_growth_dashboard()
+    readiness = view["readiness"]
+
+    if not view["data_available"]:
+        readiness_label, readiness_tone, readiness_detail = "No run yet", "text-slate-400", ""
+    elif readiness.get("mutation_allowed"):
+        readiness_label, readiness_tone = "Ready", "text-emerald-300"
+        readiness_detail = f"{readiness.get('open_incidents', 0)} open incident(s)."
+    else:
+        readiness_label, readiness_tone = "Blocked", "text-red-300"
+        readiness_detail = f"Reason: {readiness.get('reason', 'unknown')}."
+        if readiness.get("blocked_slugs"):
+            readiness_detail += f" Blocked titles: {', '.join(readiness['blocked_slugs'])}."
+
+    no_run_banner = ""
+    if not view["data_available"]:
+        no_run_banner = (
+            '<div class="mt-6 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 '
+            'text-amber-200 text-sm">No Growth Autopilot run recorded yet. Run '
+            "<code>scripts/libra_growth_autopilot.py --shadow</code> to generate the first state.</div>"
+        )
+
+    phase_day = view["phase"] or "—"
+    if view["day"]:
+        phase_day = f"{phase_day} / day {view['day']}"
+
+    context = {
+        "NO_RUN_BANNER": no_run_banner,
+        "PHASE_DAY": escape_text(phase_day),
+        "MODE": escape_text(view["mode"] or "—"),
+        "READINESS_LABEL": escape_text(readiness_label),
+        "READINESS_TONE": readiness_tone,
+        "READINESS_DETAIL": escape_text(readiness_detail),
+        "FRESHNESS": escape_text(view["generated_at"] or "no data yet"),
+        "VERIFIED_REVENUE_BODY": _growth_verified_revenue_html(view["verified_revenue"]),
+        "PORTFOLIO_TABLE": _growth_portfolio_table_html(view["portfolio"]),
+        "EVIDENCE_FUNNEL": _growth_evidence_funnel_html(view["evidence_funnel"]),
+        "TRAFFIC_BODY": _growth_traffic_html(view["traffic"]),
+        "PLANNED_BODY": _growth_planned_html(view["plan"]["actions"]),
+        "EXECUTED_BODY": _growth_executed_html(view["executed"]),
+        "BLOCKED_BODY": _growth_blocked_html(view["blocked"]),
+        "SPEND_BODY": _growth_spend_html(view),
+    }
+    html_path = Path(__file__).parent / "templates" / "growth.html"
+    return HTMLResponse(render_hub_page(html_path.read_text(), context))
+
+
+@app.get("/api/growth/state")
+async def growth_state_api(request: Request):
+    """Read-only JSON view of the Growth Autopilot's latest state plus
+    ledger read models -- Task 10. Mirrors GET /growth's data. A missing
+    state file returns data_available: false rather than a 404/500."""
+    check_read(request)
+    return build_growth_dashboard()

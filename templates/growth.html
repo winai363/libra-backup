@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Libra Growth Operations</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: #0f172a; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
+  :focus-visible { outline: 2px solid #f59e0b; outline-offset: 3px; }
+  table td, table th { vertical-align: top; }
+</style>
+</head>
+<body class="min-h-screen">
+  <main class="max-w-6xl mx-auto p-4 md:p-6">
+    <header class="flex flex-wrap items-end justify-between gap-4 pb-6 border-b border-slate-700">
+      <div>
+        <p class="text-xs font-semibold uppercase text-amber-400">Growth Autopilot · read-only</p>
+        <h1 class="mt-1 text-2xl font-bold text-white">Libra Growth Operations</h1>
+        <p class="mt-1 text-sm text-slate-400">This page only shows what the controller observed, planned, and verified. It cannot start, stop, or change anything.</p>
+      </div>
+      <a href="/libra/profit" aria-label="Profit dashboard" title="Profit dashboard"
+         class="px-3 py-2 rounded-lg bg-slate-800 text-slate-200 text-sm hover:bg-slate-700">&larr; Profit</a>
+    </header>
+
+    {{NO_RUN_BANNER}}
+
+    <section class="py-6 border-b border-slate-700">
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-px bg-slate-700 border border-slate-700 rounded-lg overflow-hidden">
+        <div class="bg-slate-900 p-4"><p class="text-xs text-slate-400">Phase / day</p><p class="mt-1 text-2xl font-bold text-white">{{PHASE_DAY}}</p></div>
+        <div class="bg-slate-900 p-4"><p class="text-xs text-slate-400">Mode</p><p class="mt-1 text-2xl font-bold text-white">{{MODE}}</p></div>
+        <div class="bg-slate-900 p-4"><p class="text-xs text-slate-400">Readiness</p><p class="mt-1 text-lg font-bold {{READINESS_TONE}}">{{READINESS_LABEL}}</p></div>
+        <div class="bg-slate-900 p-4"><p class="text-xs text-slate-400">Data freshness</p><p class="mt-1 text-sm font-medium text-white">{{FRESHNESS}}</p></div>
+      </div>
+      <p class="mt-3 text-xs text-slate-400">{{READINESS_DETAIL}}</p>
+    </section>
+
+    <section class="py-6 border-b border-slate-700">
+      <h2 class="font-bold text-white">Verified revenue</h2>
+      <p class="text-xs text-slate-400 mt-1">KDP royalties actually confirmed — never an estimate.</p>
+      <div class="mt-3 text-sm text-slate-200">{{VERIFIED_REVENUE_BODY}}</div>
+    </section>
+
+    <section class="py-6 border-b border-slate-700">
+      <h2 class="font-bold text-white">Portfolio state</h2>
+      <p class="text-xs text-slate-400 mt-1">Every title's current classification from the scorer.</p>
+      <div class="mt-3">{{PORTFOLIO_TABLE}}</div>
+      <h3 class="mt-6 text-sm font-semibold text-slate-300">Evidence funnel</h3>
+      <div class="mt-2 text-sm text-slate-200">{{EVIDENCE_FUNNEL}}</div>
+    </section>
+
+    <section class="py-6 border-b border-slate-700">
+      <h2 class="font-bold text-white">Traffic sources</h2>
+      <p class="text-xs text-slate-400 mt-1">Tracked Content Hub clicks by source, from first-party events only.</p>
+      <div class="mt-3 text-sm text-slate-200">{{TRAFFIC_BODY}}</div>
+    </section>
+
+    <section class="py-6 border-b border-slate-700">
+      <h2 class="font-bold text-white">Growth experiments</h2>
+
+      <h3 class="mt-4 text-sm font-semibold text-amber-300">Planned</h3>
+      <p class="text-xs text-slate-400 mt-1">Proposed only — nothing below has happened yet. No adapter has been called.</p>
+      <div class="mt-2 text-sm text-slate-200">{{PLANNED_BODY}}</div>
+
+      <h3 class="mt-6 text-sm font-semibold text-emerald-300">Verified actions</h3>
+      <p class="text-xs text-slate-400 mt-1">Executed with evidence — each entry carries adapter proof and a verified before/after state.</p>
+      <div class="mt-2 text-sm text-slate-200">{{EXECUTED_BODY}}</div>
+    </section>
+
+    <section class="py-6 border-b border-slate-700">
+      <h2 class="font-bold text-white">Blocked actions</h2>
+      <p class="text-xs text-slate-400 mt-1">Planned or attempted actions the controller refused to execute, and why.</p>
+      <div class="mt-3 text-sm text-slate-200">{{BLOCKED_BODY}}</div>
+    </section>
+
+    <section class="py-6">
+      <h2 class="font-bold text-white">Spend and contribution</h2>
+      <p class="text-xs text-slate-400 mt-1">Amazon Ads caps and verified contribution profit.</p>
+      <div class="mt-3 text-sm text-slate-200">{{SPEND_BODY}}</div>
+    </section>
+  </main>
+</body>
+</html>

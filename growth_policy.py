@@ -91,6 +91,16 @@ def authorize_growth_action(policy, action, state) -> dict:
     top of those totals to check the THB 100/day and THB 3,000/month caps —
     if a caller included the title's existing spend in those totals, its
     current budget would be double-counted against the cap.
+
+    ``action["ads_intent"] == "decrease"`` marks a proposed budget as a
+    stop/reduce mutation on an already-advertised title (see
+    ``_authorize_ads``) — the ONLY thing it ever widens is whether a
+    non-increasing budget can proceed despite a bare ``daily_budget_thb <= 0``
+    or a currently-closed growth-signal check; it is independently
+    re-verified against ``state`` and can never raise a budget or skip any
+    cap/cooldown check below. Omit it (or any other value) for every
+    start/increase proposal — the field defaults to the original strict
+    behavior.
     """
     if not isinstance(policy, dict):
         return _deny("missing_policy")
@@ -133,15 +143,12 @@ def _authorize_ads(started_at, action, state, now) -> dict:
     if growth_phase(started_at, now) != "growth":
         return _deny("growth_gate_closed")
 
-    if not ads_eligibility(state)["eligible"]:
-        return _deny("growth_gate_closed")
-
     slug = action["slug"]
     try:
         daily_budget = float(action.get("daily_budget_thb"))
     except (TypeError, ValueError):
         return _deny("invalid_budget")
-    if daily_budget <= 0:
+    if daily_budget < 0:
         return _deny("invalid_budget")
 
     raw_advertised = state.get("advertised_title_slugs")
@@ -152,6 +159,45 @@ def _authorize_ads(started_at, action, state, now) -> dict:
     else:
         return _deny("invalid_advertised_title_slugs")
     is_new_title = slug not in advertised_slugs
+
+    # A stop/decrease mutation (budget going to 0, or down from whatever is
+    # currently running) is RISK-REDUCING and must be able to reach the
+    # adapter even though a bare daily_budget_thb <= 0 is normally invalid
+    # — that is the pipeline's only way to turn OFF a losing campaign (see
+    # amazon_ads_controller._decide_existing_title's no-order-stop and
+    # break-even paths, both of which propose daily_budget_thb == 0/lower).
+    # The caller opts in via action["ads_intent"] == "decrease"; the field
+    # being absent (or anything else) keeps the exact original strict path
+    # unchanged. This label is never trusted on its own — it is only
+    # honored when INDEPENDENTLY VERIFIED against `state`: the title must
+    # already be advertised (a "decrease" on a title that was never
+    # started makes no sense) and the proposed budget must not actually be
+    # higher than its current one. A mislabeled "decrease" that is really
+    # an increase gets verified_decrease=False and falls through to the
+    # exact same check as before.
+    #
+    # The growth-signal eligibility check is deliberately NOT bypassed
+    # here, even for a verified decrease: amazon_ads_controller.ads_decision
+    # itself already requires ads_eligibility(title) before it will ever
+    # dispatch into _decide_existing_title's stop/reduce logic at all (see
+    # its own module docstring/source), using the exact same
+    # growth_policy.ads_eligibility this function calls — so eligibility is
+    # structurally guaranteed to already hold whenever a caller correctly
+    # wires ads_decision's output through to this authorize call. Bypassing
+    # it here too would be an unused, unnecessarily wider gate.
+    verified_decrease = False
+    if action.get("ads_intent") == "decrease" and not is_new_title:
+        try:
+            current_for_decrease_check = float(state.get("title_daily_budget_thb"))
+        except (TypeError, ValueError):
+            current_for_decrease_check = None
+        if current_for_decrease_check is not None and daily_budget <= current_for_decrease_check:
+            verified_decrease = True
+
+    if not ads_eligibility(state)["eligible"]:
+        return _deny("growth_gate_closed")
+    if daily_budget <= 0 and not verified_decrease:
+        return _deny("invalid_budget")
 
     if is_new_title:
         if len(advertised_slugs) >= MAX_AD_TITLES:

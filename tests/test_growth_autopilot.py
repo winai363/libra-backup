@@ -210,6 +210,66 @@ def test_amazon_ads_executes_end_to_end_once_growth_phase_and_gate_signal_are_bo
     assert len(recorded) == 1
 
 
+def test_amazon_ads_stop_decision_executes_end_to_end(tmp_path):
+    """Regression: an earlier review found _authorize_ads unconditionally
+    denied any daily_budget_thb<=0 action with "invalid_budget" — the
+    EXACT decision meant to turn OFF a losing campaign (no-order-stop,
+    always budget 0) could never be authorized, so the adapter was never
+    called and the campaign kept burning its last-authorized budget. The
+    title itself stays Growth-Gate eligible (tracked_clicks=25) — the
+    campaign's OWN numbers (0 verified orders at full spend) are what
+    trigger the stop."""
+    calls = []
+    cfg = config(
+        tmp_path,
+        started_at=GROWTH_STARTED_AT,
+        titles=[_scale_title()],
+        ads_metrics={"book-scale": {"royalty_growth_usd": 0, "kenp_delta": 0, "tracked_clicks": 25}},
+        ads_campaigns={"book-scale": {
+            "campaign_id": "camp-1", "daily_budget_thb": 50, "orders": 0, "direct_cost_thb": 50,
+            "net_royalty_thb": 0,
+        }},
+        advertised_title_slugs=["book-scale"],
+        adapters={"ads": _fake_ads_adapter(calls)},
+    )
+    state = run_growth_controller(cfg, now=NOW, shadow=False)
+    ads_entries = [item for item in state["executed"] if item["kind"] == "amazon_ads"]
+    assert len(ads_entries) == 1
+    assert ads_entries[0]["slug"] == "book-scale"
+    assert ads_entries[0]["status"] == "executed"
+    assert calls and calls[0]["action"] == "stop" and calls[0]["daily_budget_thb"] == 0.0
+
+    recorded = growth_evidence(cfg["ledger_path"], slug="book-scale", kind="amazon_ads_executed")
+    assert len(recorded) == 1
+
+
+def test_amazon_ads_reduce_decision_executes_end_to_end(tmp_path):
+    """Companion coverage for the "reduce" branch (a partial, still-positive
+    budget cut on an unprofitable-ACOS campaign) flowing through the same
+    pipeline to a fake adapter."""
+    calls = []
+    cfg = config(
+        tmp_path,
+        started_at=GROWTH_STARTED_AT,
+        titles=[_scale_title()],
+        ads_metrics={"book-scale": {"royalty_growth_usd": 0, "kenp_delta": 0, "tracked_clicks": 25}},
+        ads_campaigns={"book-scale": {
+            "campaign_id": "camp-1", "daily_budget_thb": 50, "net_royalty_thb": 10, "direct_cost_thb": 20,
+        }},
+        advertised_title_slugs=["book-scale"],
+        adapters={"ads": _fake_ads_adapter(calls)},
+    )
+    state = run_growth_controller(cfg, now=NOW, shadow=False)
+    ads_entries = [item for item in state["executed"] if item["kind"] == "amazon_ads"]
+    assert len(ads_entries) == 1
+    assert ads_entries[0]["slug"] == "book-scale"
+    assert ads_entries[0]["status"] == "executed"
+    assert calls and calls[0]["action"] == "reduce" and calls[0]["daily_budget_thb"] == 25.0
+
+    recorded = growth_evidence(cfg["ledger_path"], slug="book-scale", kind="amazon_ads_executed")
+    assert len(recorded) == 1
+
+
 def test_amazon_ads_title_scoped_incident_blocks_ads_too(tmp_path):
     """Regression: an earlier review found _run_ads_decisions ignored
     readiness["blocked_slugs"] entirely, so a title-scoped critical

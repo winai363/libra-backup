@@ -16,7 +16,6 @@ sys.path.insert(0, str(LIBRA_DIR))
 
 from business_ledger import ingest_uploaded_title_costs, portfolio_financials  # noqa: E402
 from distribution_report import send_telegram  # noqa: E402
-from growth_autopilot import growth_authority_transferred  # noqa: E402
 from profit_agent import (  # noqa: E402
     ACTIVE_STATUSES,
     APPROVED_EXPERIMENTS,
@@ -550,6 +549,14 @@ def main() -> None:
         return
     executor = None
     if args.execute_actions and not args.dry_run:
+        # Lazy import, same convention as build_executor() one line below:
+        # the legacy script's default path (no --execute-actions, or
+        # --dry-run) must never import growth_autopilot — and transitively
+        # amazon_ads_controller/growth_planner/kdp_promotion_controller/
+        # portfolio_scorer — so an import-time failure in any of those
+        # growth modules can never break this script's default/dry-run
+        # behavior.
+        from growth_autopilot import growth_authority_transferred
         if growth_authority_transferred(GROWTH_AUTHORITY_TRANSFER_MARKER):
             # The Growth Autopilot has already run in execute mode (Task 11
             # authority transfer) — this legacy agent stays read-only even

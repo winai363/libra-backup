@@ -357,12 +357,16 @@ def _run_organic_actions(plan: dict, readiness: dict, started_at: datetime, now:
     executed, blocked = [], []
     for action in plan["actions"]:
         slug = action["slug"]
-        if slug in readiness["blocked_slugs"]:
-            blocked.append({"slug": slug, "reason": "title_incident_blocked"})
-            continue
+        # Computed up front (before the incident check) so every blocked
+        # entry below uniformly carries "kind" — a downstream consumer
+        # (e.g. Task 10's dashboard) should never need to special-case one
+        # blocked-entry shape over another.
         kind = VARIABLE_ACTION_KIND.get(action.get("variable"))
+        if slug in readiness["blocked_slugs"]:
+            blocked.append({"slug": slug, "kind": kind, "reason": "title_incident_blocked"})
+            continue
         if kind is None:
-            blocked.append({"slug": slug, "variable": action.get("variable"), "reason": "unsupported_growth_action_variable"})
+            blocked.append({"slug": slug, "kind": None, "variable": action.get("variable"), "reason": "unsupported_growth_action_variable"})
             continue
         allowed, reason = _authorize(kind, slug, started_at, {"now": now})
         if not allowed:
@@ -420,9 +424,22 @@ def _run_ads_decisions(plan: dict, readiness: dict, policy_phase: str, started_a
             "title_daily_budget_thb": (campaign or {}).get("daily_budget_thb", 0),
             "last_budget_increase_at": (campaign or {}).get("last_increase_at"),
         }
+        # "stop"/"reduce" are risk-REDUCING mutations (amazon_ads_controller's
+        # no-order-stop and break-even-ACOS paths) — they must be able to
+        # turn off/down a losing campaign even when its growth signal has
+        # gone cold (which is often WHY it's being stopped) or its proposed
+        # budget is exactly 0. growth_policy.authorize_growth_action only
+        # honors this when it's independently verifiable against
+        # growth_state (title already advertised, proposed budget not
+        # actually higher than current) — see its own docstring. "start"/
+        # "increase" never set this, so every existing cap/eligibility/
+        # cooldown check stays exactly as strict as before.
+        extra_action = {"daily_budget_thb": decision["budget_thb"]}
+        if decision["action"] in ("stop", "reduce"):
+            extra_action["ads_intent"] = "decrease"
         allowed, reason = _authorize(
             "amazon_ads", slug, started_at, growth_state,
-            extra_action={"daily_budget_thb": decision["budget_thb"]},
+            extra_action=extra_action,
         )
         if not allowed:
             blocked.append({"slug": slug, "kind": "amazon_ads", "reason": reason})

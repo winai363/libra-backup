@@ -460,6 +460,149 @@ def test_malformed_budget_is_denied():
 
 
 # ---------------------------------------------------------------------------
+# ads_intent="decrease" — the stop-loss escape hatch. A risk-REDUCING
+# mutation (stop = budget 0, or a reduce below the current budget) must
+# reach the adapter even though a bare daily_budget_thb <= 0 is normally
+# invalid — that is the pipeline's only way to turn OFF a losing campaign.
+# The Growth Gate eligibility check is intentionally left fully in force
+# even for a verified decrease (see growth_policy.py's _authorize_ads
+# docstring: amazon_ads_controller.ads_decision already requires
+# eligibility before it will ever propose stop/reduce at all, using the
+# same growth_policy.ads_eligibility this function calls, so a real caller
+# following that wiring always has eligibility already holding by the time
+# it gets here) — every test below therefore supplies an eligible signal
+# (clicks=20) and isolates the ONE thing this fix actually changes: the
+# bare daily_budget_thb <= 0 check. The label is independently re-verified
+# against `state`, never trusted alone.
+# ---------------------------------------------------------------------------
+
+
+def test_ads_stop_at_zero_budget_is_authorized_when_decrease_is_verified():
+    """The exact bug this closes: a "stop" decision (budget 0) on an
+    already-advertised, currently-eligible title is authorized so a losing
+    campaign can actually be turned off — the bare daily_budget_thb<=0
+    check no longer unconditionally blocks it."""
+    started = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    now = _growth_window(started)
+    result = authorize_growth_action(
+        policy_for(started),
+        {"kind": "amazon_ads", "slug": "book-a", "daily_budget_thb": 0, "ads_intent": "decrease"},
+        state_at(now, clicks=20, advertised_title_slugs=["book-a"], title_daily_budget_thb=50),
+    )
+    assert result == {"allowed": True, "reason": "growth_gate_open"}
+
+
+def test_ads_reduce_to_a_lower_positive_budget_is_authorized():
+    started = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    now = _growth_window(started)
+    result = authorize_growth_action(
+        policy_for(started),
+        {"kind": "amazon_ads", "slug": "book-a", "daily_budget_thb": 25, "ads_intent": "decrease"},
+        state_at(now, clicks=20, advertised_title_slugs=["book-a"], title_daily_budget_thb=50),
+    )
+    assert result == {"allowed": True, "reason": "growth_gate_open"}
+
+
+def test_ads_intent_decrease_absent_still_denies_zero_budget():
+    """Absent-marker fail-closed check: WITHOUT ads_intent="decrease", a
+    bare daily_budget_thb=0 stays denied "invalid_budget" exactly as
+    before, even with an otherwise-eligible signal — the escape hatch
+    never applies unless explicitly requested."""
+    started = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    now = _growth_window(started)
+    result = authorize_growth_action(
+        policy_for(started),
+        {"kind": "amazon_ads", "slug": "book-a", "daily_budget_thb": 0},
+        state_at(now, clicks=20, advertised_title_slugs=["book-a"], title_daily_budget_thb=50),
+    )
+    assert result == {"allowed": False, "reason": "invalid_budget"}
+
+
+def test_ads_intent_decrease_does_not_bypass_the_eligibility_check():
+    """The eligibility check is deliberately NOT bypassed even for a
+    verified decrease (see the module-level comment above) — with no
+    growth signal at all, a "stop" proposal is still denied
+    "growth_gate_closed", same as any other amazon_ads action."""
+    started = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    now = _growth_window(started)
+    result = authorize_growth_action(
+        policy_for(started),
+        {"kind": "amazon_ads", "slug": "book-a", "daily_budget_thb": 0, "ads_intent": "decrease"},
+        state_at(now, clicks=0, advertised_title_slugs=["book-a"], title_daily_budget_thb=50),
+    )
+    assert result == {"allowed": False, "reason": "growth_gate_closed"}
+
+
+def test_ads_intent_decrease_never_bypasses_start_caps_for_a_new_title():
+    """A "decrease" label on a title that was never advertised is not a
+    real decrease at all — is_new_title is always True, so the label is
+    never honored (there's nothing to decrease from), and the normal
+    new-title budget-positivity check still applies. Here daily_budget_thb
+    is 0 on a title that was never advertised, so it must still be denied
+    "invalid_budget", never silently allowed as a "start" at 0."""
+    started = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    now = _growth_window(started)
+    result = authorize_growth_action(
+        policy_for(started),
+        {"kind": "amazon_ads", "slug": "book-a", "daily_budget_thb": 0, "ads_intent": "decrease"},
+        state_at(now, clicks=20),  # never advertised
+    )
+    assert result == {"allowed": False, "reason": "invalid_budget"}
+
+
+def test_ads_intent_decrease_mislabeled_as_an_actual_increase_is_not_honored():
+    """A mislabeled "decrease" that is really an INCREASE (proposed budget
+    higher than the current one) must never skip the 15%/cooldown checks —
+    verified_decrease only holds when the proposed budget is <= the
+    current one. Here the "increase" exceeds the 15% cap, so it must still
+    be denied on the ordinary cap path, never silently allowed."""
+    started = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    now = _growth_window(started)
+    result = authorize_growth_action(
+        policy_for(started),
+        {"kind": "amazon_ads", "slug": "book-a", "daily_budget_thb": 80, "ads_intent": "decrease"},
+        state_at(
+            now, clicks=20, advertised_title_slugs=["book-a"], title_daily_budget_thb=50,
+            last_budget_increase_at=now - timedelta(hours=80),
+        ),
+    )
+    assert result == {"allowed": False, "reason": "budget_increase_exceeds_15_percent_cap"}
+
+
+def test_ads_intent_decrease_still_respects_negative_budget_guard():
+    started = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    now = _growth_window(started)
+    result = authorize_growth_action(
+        policy_for(started),
+        {"kind": "amazon_ads", "slug": "book-a", "daily_budget_thb": -5, "ads_intent": "decrease"},
+        state_at(now, clicks=0, advertised_title_slugs=["book-a"], title_daily_budget_thb=50),
+    )
+    assert result == {"allowed": False, "reason": "invalid_budget"}
+
+
+@pytest.mark.parametrize("kind", ["start", "increase"])
+def test_start_and_increase_caps_are_completely_unchanged_by_the_decrease_escape_hatch(kind):
+    """Regression guard: every existing start/increase test above already
+    covers this, but pin it explicitly here too — a start/increase
+    proposal (ads_intent absent, as every real start/increase decision
+    sends it) must go through the exact same eligibility/cap/cooldown path
+    as before this fix, with no behavior difference at all."""
+    started = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    now = _growth_window(started)
+    if kind == "start":
+        action = {"kind": "amazon_ads", "slug": "book-new", "daily_budget_thb": 51}
+        state = state_at(now, clicks=20)
+    else:
+        action = {"kind": "amazon_ads", "slug": "book-a", "daily_budget_thb": 58}
+        state = state_at(
+            now, clicks=20, advertised_title_slugs=["book-a"], title_daily_budget_thb=50,
+            last_budget_increase_at=now - timedelta(hours=80),
+        )
+    result = authorize_growth_action(policy_for(started), action, state)
+    assert result["allowed"] is False
+
+
+# ---------------------------------------------------------------------------
 # profit_agent.check_policy delegates the four growth kinds to growth_policy
 # ---------------------------------------------------------------------------
 

@@ -1,9 +1,11 @@
 import sqlite3
 import json
+import sys
 from datetime import datetime, timedelta, timezone
 
 from business_ledger import record_kdp_snapshot
 from profit_agent import create_initial_experiments
+import scripts.libra_profit_agent_daily as libra_profit_agent_daily
 from scripts.libra_profit_agent_daily import run_controller, run_daily
 
 
@@ -264,3 +266,47 @@ def test_controller_persists_proposer_and_sends_critical_next_action(tmp_path):
     assert "blocked_missing_distribution=8" in sent[0]
     assert "book-a" in sent[0]
     assert "post_url or post_id" in sent[0]
+
+
+# ---------------------------------------------------------------------------
+# main()'s default/dry-run path must never import growth_autopilot (and
+# transitively amazon_ads_controller/growth_planner/kdp_promotion_controller/
+# portfolio_scorer) — an import-time failure in any of those growth modules
+# must never be able to break this legacy script's default behavior. The
+# lazy import lives inside the `--execute-actions and not --dry-run` branch
+# only.
+# ---------------------------------------------------------------------------
+
+def test_dry_run_via_main_never_imports_growth_autopilot(tmp_path, monkeypatch):
+    monkeypatch.setattr(libra_profit_agent_daily, "LEDGER_FILE", tmp_path / "ledger.db")
+    monkeypatch.setattr(libra_profit_agent_daily, "STATE_FILE", tmp_path / "state.json")
+    monkeypatch.delitem(sys.modules, "growth_autopilot", raising=False)
+    monkeypatch.setattr(sys, "argv", ["libra_profit_agent_daily.py", "--dry-run"])
+
+    libra_profit_agent_daily.main()
+
+    assert "growth_autopilot" not in sys.modules
+
+
+def test_execute_actions_with_authority_marker_present_stays_read_only(tmp_path, monkeypatch, capsys):
+    """Sanity companion, kept deliberately on the SAFE branch: when the
+    authority marker is present, main() takes the guard's True branch —
+    which imports growth_autopilot to run the check, prints the read-only
+    notice, and never touches kdp_action_executor/experiment_proposer at
+    all (those only get imported in the opposite branch). This proves the
+    lazy-import fix didn't just delete the check, without needing to
+    exercise the real browser-automation executor path in a test."""
+    monkeypatch.setattr(libra_profit_agent_daily, "LEDGER_FILE", tmp_path / "ledger.db")
+    monkeypatch.setattr(libra_profit_agent_daily, "STATE_FILE", tmp_path / "state.json")
+    marker = tmp_path / "growth-autopilot-authority-transferred"
+    marker.write_text("", encoding="utf-8")
+    monkeypatch.setattr(libra_profit_agent_daily, "GROWTH_AUTHORITY_TRANSFER_MARKER", marker)
+    monkeypatch.delitem(sys.modules, "growth_autopilot", raising=False)
+    monkeypatch.delitem(sys.modules, "kdp_action_executor", raising=False)
+    monkeypatch.setattr(sys, "argv", ["libra_profit_agent_daily.py", "--execute-actions"])
+
+    libra_profit_agent_daily.main()
+
+    assert "growth_autopilot" in sys.modules
+    assert "kdp_action_executor" not in sys.modules
+    assert "staying read-only" in capsys.readouterr().err

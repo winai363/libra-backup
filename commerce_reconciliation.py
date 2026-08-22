@@ -435,9 +435,12 @@ def retry_pending(path: Path, *, limit: int = 100) -> dict:
     if not path.exists():
         return {"revisited": 0, "reconciled": 0}
     with _connect(path) as connection:
+        # 'received' is included deliberately: an event whose projection never
+        # ran (a crash after the inbox write) is exactly what this sweep is for.
         rows = connection.execute(
             "SELECT provider, event_id FROM commerce_events"
-            " WHERE processing_state='pending_reconciliation' ORDER BY id LIMIT ?",
+            " WHERE processing_state IN ('pending_reconciliation', 'received')"
+            " ORDER BY id LIMIT ?",
             (limit,),
         ).fetchall()
 

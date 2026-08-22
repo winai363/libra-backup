@@ -517,3 +517,17 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - **ข้อค้นพบที่ 2**: ทุกเล่มมีภาพ 0 รูป รวมเล่มสอนวาดสีน้ำที่โดนบล็อก → ตรงกับเหตุผล disappointing customer experience
 - `product_opportunities()` จัดอันดับด้วย **รายได้ต่อเล่ม LIVE** ไม่ใช่รายได้รวม (ไม่งั้น ai_productivity 20 เล่มจะดูดีทั้งที่ $0.50/เล่ม); ตัดธีมที่หลักฐานมาจากเล่ม blocked ล้วน และตัด diet/meal-plan ถาวร
 - ยังไม่ได้ตัดสินใจ: ธีมสินค้าใหม่ / ปลายทางขาย (KDP บัญชีเดิม = เสี่ยงบล็อกครั้งที่ 5 ปิดบัญชี vs Payhip = ปลอดภัย) / ช่องทางการตลาดที่ audience ตรงภาษา — รอบุ๋ยตัดสิน
+
+## 2026-08-22 (เย็น) — ปั้นเล่มแรกที่มีภาพจริงสำเร็จใน staging: aquarelle-botanique-debutants-fr
+- บุ๋ยสั่ง: ทำตามข้อเสนอ (เชื่อมระบบภาพ + ปั้นเล่มจริงใน staging), ใช้มาตรฐานคุณภาพ/ขั้นตอนอัปโหลดที่เคยกำหนด, เลือกนิชที่คุ้มที่สุดเอง
+- **นิชที่เลือก: aquarelle botanique ภาษาฝรั่งเศส** — เหตุผลจากข้อมูล: art_craft = ธีมเดียวที่ทำเงิน 2 เดือนติด ($5.70, 162 KENP) × ตลาด FR = ตลาดที่ทำเงินสูงสุดเดือน ส.ค. ($5.06) และ **ไม่มีเล่ม art/craft ภาษาฝรั่งเศสในบัญชีเลย**
+- ⛔ **ห้ามทำสีน้ำภาษาสเปนเพิ่ม**: `acuarela-para-principiantes-guia-paso-a-paso` (BLOCKED) กับ `beginner-watercolor-spanish` (LIVE) **ใช้ชื่อเรื่องเดียวกันเป๊ะ** = duplicate content ในบัญชีเดียว น่าจะเป็นเหตุผลจริงที่เล่มหนึ่งโดนตีตก
+- **รากปัญหา "ทุกเล่มไม่มีภาพ" เจอแล้ว 2 ชั้น**: (1) `step2c_generate_images` เป็น dead code ไม่มีใครเรียก (2) `kdp-writing-guidelines.md` เขียนไว้เองว่า "Do not insert image tags" → ขัดกับกฎนิช visual ใน CLAUDE.md. แก้ guidelines แล้วให้ visual niche = บังคับมีภาพ + ระบุ provenance ต่อ source_kind + ต้อง disclose AI ตอนอัปโหลด
+- โมดูลใหม่ `illustrations.py`: วางแผนภาพจาก **หัวข้อจริงในต้นฉบับ** (LLM เลือกได้เฉพาะ heading ที่มีจริง, validate ปฏิเสธหัวข้อที่ไม่มี/back matter), เรนเดอร์ด้วย gpt-image-1, แทรกภาพในหัวข้อของตัวเอง, เขียน image-provenance.json. **ภาพพลาด 1 รูป = abort ทั้งชุด** (ห้ามปล่อยเล่มมีรูโหว่เงียบ ๆ)
+- `quality_gate` รองรับ provenance 4 แบบ: ai_generated (model/prompt/generated_at), screenshot (device/os/app), photo, licensed_stock
+- **บั๊กที่เจอระหว่าง QA**: `category_resolver` เลือกหมวดมั่วเมื่อคะแนนเสมอ — หนังสือสีน้ำได้หมวด "Art > Techniques > **Basketry** (จักสาน)" เพราะ Basketry/Beadwork/Quillwork/Composition ได้ 7.17 เท่ากันหมด (แมตช์แค่ parent path). แก้แล้ว: เสมอ = ปฏิเสธ คงหมวดที่เสนอไว้เดิม ดีกว่าเดา
+- **บั๊กลำดับ**: seo_optimizer เดิมรัน**หลัง** editorial ทั้งที่ editorial ให้คะแนน seo_quality → คะแนน SEO ถูกตัดสินบน keywords ที่ยังไม่ปรับเสมอ (รอบแรกได้ 7/8 ตก). แก้เป็น SEO ก่อน + เขียน `editorial-review.json` ให้ quality_gate อ่านเจอ
+- โหมดใหม่ `--finalize`: รันด่านซ้ำบนเล่มที่ staged แล้ว ไม่เขียนใหม่ (เขียนเล่มแพงกว่ามาก) — รอบสองผ่าน `staged_quality_passed`
+- **ผล QA เปิดดูของจริง**: 11,488 คำ / 73 หน้า / ภาพ 12 รูปอยู่ในหน้าที่ถูกต้องพร้อม caption ฝรั่งเศส / EPUB มี 13 ภาพ / ปกเป็นภาพวาดสีน้ำจริงไม่ใช่ gradient / references 13 รายการมี URL / editorial 8 ทุกมิติ ไม่มี critical issue / fact checks supported
+- ต้นทุนที่บันทึกได้ $0.14 (editorial+seo) — ยังไม่รวมค่าเขียน+ภาพ 12 รูป (~$0.5-1) เพราะ writer ไม่ได้เซฟ cost report ในสาย staging; แก้แล้วให้เซฟ (เล่มถัดไปจะครบ)
+- **ยังไม่แตะ KDP เลย**: /root/kdp ยังมี 78 โฟลเดอร์เท่าเดิม ไม่มี queue.txt ไม่มี Playwright ไม่มี freeze ถูกปลด

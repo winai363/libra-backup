@@ -628,3 +628,14 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
   4. Gumroad / Lemon Squeezy (merchant of record) — ต้องตรวจว่ารองรับผู้ขายไทยไหม
 - **ยังไม่ได้ซื้อทดสอบ** — หยุดบุ๋ยไว้ก่อนกด Buy Now; คูปอง TESTRUN95 ยังไม่ถูกใช้ (คำนวณถูก €12.90→€0.64)
 - Payhip pricing: ฟรี 5% · Plus $29/ด. 2% · Pro $99/ด. 0%
+
+## 2026-08-22 (ค่ำ-4) — ตัดสินใจย้ายไป Lemon Squeezy (merchant of record)
+- ตัดทางเลือกทีละอัน: PayPal ไทยใช้ไม่ได้แล้ว (บุ๋ยยืนยัน) · Payhip Pro $99/ด. ไม่คุ้มเมื่อยอด $25/6สัปดาห์ · Xendit ใน Payhip เน้นผู้ซื้อ SEA ไม่เหมาะลูกค้าฝรั่งเศส
+- **บุ๋ยเปิดหน้า docs ให้แล้ว: Lemon Squeezy รองรับผู้ขายไทย ✓** (เว็บเขาบล็อก 403 ทุก path จากเซิร์ฟเวอร์เรา — ต้องให้บุ๋ยเปิดดูแทน)
+- เหตุผลที่ MoR สำคัญ ไม่ใช่แค่เรื่องค่าคอม: **ขายอีบุ๊คให้ผู้บริโภค EU ต้องเก็บ+นำส่ง VAT ตั้งแต่ยูโรแรก ไม่มีขั้นต่ำ** — ที่ผ่านมา Amazon เป็นผู้ขายตามกฎหมายจึงจัดการให้ ถ้าขายตรงเองภาระตกที่บุ๋ย; Lemon Squeezy เป็น MoR = รับผิดชอบ VAT แทนทั้งหมด
+- ค่าธรรมเนียมเทียบที่ €12.90: LS 5%+$0.50 ≈ €1.11 (รวม payment processing + VAT compliance) vs Payhip+Stripe ≈ €1.40 (ยังต้องจัดการ VAT เอง) ⇒ LS ถูกกว่าและปลอดภัยกว่า
+- **LS มี test mode จริง** (ต่างจาก Payhip) → ทดสอบครบวงจรได้โดยไม่เสียเงิน
+- webhook LS: header `X-Signature` = HMAC-SHA256 hex ของ raw body ด้วย signing secret; payload มี `meta.event_name`, `meta.test_mode`, `meta.custom_data`, `data.attributes` (identifier UUID, subtotal, tax, total, total_usd, currency, status/status_formatted, user_email, first_order_item)
+- Stripe ซื้อ Lemon Squeezy ปี 2024 → กำลังรวมเป็น Stripe Managed Payments
+- **ที่ต้องเขียนใหม่**: `lemonsqueezy_webhook.py` + catalog adapter (~20% ของงาน); **ที่ใช้ต่อได้ทั้งหมด**: commerce_ledger, reconciliation, reporting, growth, routes, CLI (~80%)
+- Payhip: ไม่ลบทิ้ง เก็บสินค้า GDRi5 ไว้ก่อน (ยังไม่มีใครซื้อ) — คูปอง TESTRUN95 ยังไม่ถูกใช้

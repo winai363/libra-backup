@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from playwright.async_api import async_playwright
 
 from kdp_categories import set_categories
+from kdp_freeze import KDPFrozenError, assert_kdp_mutation_allowed
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -431,6 +432,7 @@ def _get_book_price(slug: str) -> str:
 
 async def upload_to_kdp(slug: str):
     """Upload ebook to KDP"""
+    assert_kdp_mutation_allowed("new_title")
     if not require_quality_gate(slug):
         return False
     book_dir = KDP_DIR / slug
@@ -1206,6 +1208,7 @@ async def update_ebook_content(slug: str) -> bool:
     Finds the book on the bookshelf by title, navigates to its content
     editing page, re-uploads the EPUB, and saves.
     """
+    assert_kdp_mutation_allowed("update_ebook_content")
     if not require_quality_gate(slug):
         return False
     book_dir = KDP_DIR / slug
@@ -1452,7 +1455,9 @@ async def update_cover(slug: str) -> bool:
     Navigates to the book's content edit page, re-uploads cover.jpg,
     handles the accessibility checkbox + AI disclosure, and republishes.
     Mirrors update_ebook_content() but swaps the EPUB step for the cover step.
+    NOTE: republishing is blocked by the TOTAL KDP FREEZE guard below.
     """
+    assert_kdp_mutation_allowed("cover")
     book_dir = KDP_DIR / slug
     listing_file = book_dir / "listing.json"
     if not listing_file.exists():
@@ -1670,6 +1675,7 @@ async def update_metadata(slug: str, skip_categories: bool = False) -> bool:
     gates. Navigates details → content → pricing → publish, changing nothing on
     the content page beyond the required confirmations.
     """
+    assert_kdp_mutation_allowed("metadata")
     book_dir = KDP_DIR / slug
     listing_file = book_dir / "listing.json"
     if not listing_file.exists():
@@ -1894,6 +1900,26 @@ if __name__ == "__main__":
     meta_mode = "--meta" in sys.argv
     preflight_mode = "--preflight-update" in sys.argv
     inspect_mode = "--inspect-title" in sys.argv
+
+    # TOTAL KDP FREEZE: every CLI mode below either mutates KDP or opens the
+    # authenticated session/browser, so the guard runs before any dispatch.
+    if inspect_mode:
+        action = "inspect_title"
+    elif preflight_mode:
+        action = "preflight_update"
+    elif cover_mode:
+        action = "cover"
+    elif meta_mode:
+        action = "metadata"
+    elif update_mode:
+        action = "update_ebook_content"
+    else:
+        action = "new_title"
+    try:
+        assert_kdp_mutation_allowed(action)
+    except KDPFrozenError as exc:
+        print(f"{exc.code}: {exc.action}: {exc}", file=sys.stderr)
+        sys.exit(73)
 
     if inspect_mode:
         matches = asyncio.run(inspect_bookshelf_title(slug))

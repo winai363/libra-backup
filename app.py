@@ -7,6 +7,7 @@ import secrets
 import time
 import re
 import sqlite3
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -14,6 +15,7 @@ from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 
 from business_ledger import record_hub_event
+from kdp_freeze import KDPFrozenError, assert_kdp_mutation_allowed
 from content_hub import (
     TrackingConfigError,
     build_outbound_event,
@@ -628,6 +630,18 @@ def check_auth(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+def reject_frozen_kdp_mutation(action: str) -> None:
+    """TOTAL KDP FREEZE: refuse before reading or writing any listing state."""
+    try:
+        assert_kdp_mutation_allowed(action)
+    except KDPFrozenError as exc:
+        raise HTTPException(status_code=423, detail={
+            "code": exc.code,
+            "action": exc.action,
+            "reason": str(exc),
+        }) from exc
+
+
 def get_book_dir(slug: str) -> Path:
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,100}", slug):
         raise HTTPException(status_code=400, detail="Invalid book slug")
@@ -754,6 +768,8 @@ async def update_status(slug: str, request: Request):
     if new_status not in {"ready", "archived"}:
         raise HTTPException(status_code=400, detail="Status can only be changed to ready or archived manually")
     if new_status == "ready":
+        # "ready" is the publish queue's entry state — archived stays local.
+        reject_frozen_kdp_mutation("mark_ready")
         from quality_gate import validate_book, write_report
         quality = validate_book(slug, require_pdf=True)
         write_report(quality)
@@ -808,6 +824,7 @@ async def create_book(request: Request):
 async def request_approval(slug: str, request: Request):
     """Send approval request to Telegram before uploading to KDP"""
     check_auth(request)
+    reject_frozen_kdp_mutation("request_approval")
     book_dir = get_book_dir(slug)
     listing_file = book_dir / "listing.json"
     if not listing_file.exists():
@@ -844,6 +861,7 @@ async def request_approval(slug: str, request: Request):
 async def approve_kdp(slug: str, request: Request):
     """Approve KDP upload and trigger the upload process"""
     check_auth(request)
+    reject_frozen_kdp_mutation("approve_kdp")
     book_dir = get_book_dir(slug)
     listing_file = book_dir / "listing.json"
     if not listing_file.exists():
@@ -883,7 +901,6 @@ async def approve_kdp(slug: str, request: Request):
             pass
 
     # Trigger KDP upload in background
-    import subprocess
     upload_log = open(KDP_DIR / "logs" / f"upload-{slug}.log", "a")
     subprocess.Popen(
         ["python3", str(Path(__file__).parent / "kdp_upload.py"), slug],

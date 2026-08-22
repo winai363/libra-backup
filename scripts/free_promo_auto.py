@@ -32,6 +32,8 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from playwright.async_api import async_playwright
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from kdp_freeze import assert_kdp_mutation_allowed  # noqa: E402
 
 KDP = Path("/root/kdp")
 SESSION = "/root/libra/kdp_session.json"
@@ -135,6 +137,7 @@ async def shot(pg, name):
 
 async def schedule_one(slug: str, bid: str, title: str, dry_run: bool,
                        start=None, days=None) -> bool:
+    assert_kdp_mutation_allowed("free_promo")
     # start/days let us place a promo on an explicit future window (e.g. align a
     # hero book's free days with a Pinterest/LovelyBooks push) instead of the
     # default "tomorrow, PROMO_DAYS long". The datepicker below already navigates

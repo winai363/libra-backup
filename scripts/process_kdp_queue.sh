@@ -18,6 +18,17 @@ UPLOAD_TIMEOUT="${UPLOAD_TIMEOUT:-25m}"
 # auto-paused. Raise this once the account has more publishing history.
 DAILY_NEW_TITLE_CAP="${DAILY_NEW_TITLE_CAP:-1}"
 NEW_TITLE_LOG="${NEW_TITLE_LOG:-$LIBRA_DIR/data/new-title-submissions.log}"
+
+# ── TOTAL KDP FREEZE ────────────────────────────────────────────────
+# Runs before cd, lock, queue read, .env read, or any write. The policy module
+# is always the production one next to this script — never a fixture copy.
+POLICY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if ! PYTHONPATH="$POLICY_DIR${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON_BIN" -c \
+    'from kdp_freeze import assert_kdp_mutation_allowed; assert_kdp_mutation_allowed("queue_publish")' 2>/dev/null; then
+    echo "total_kdp_freeze: KDP queue processing disabled" >&2
+    exit 73
+fi
+
 cd "$LIBRA_DIR"
 
 # Send the book cover to Telegram (used on successful publish, so manual/recovery

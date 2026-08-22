@@ -1,6 +1,7 @@
 from scripts.kdp_action_executor import (
     _execute_price,
     validate_action,
+    validate_action_rules,
     validate_category_action,
     verify_chips,
 )
@@ -91,7 +92,7 @@ def test_category_update_refused_on_published_book():
     for published in ({"live_status": "LIVE"},          # normal live book
                       {"asin": "B0TEST12345"},          # stale/missing live_status
                       {"asin": "B0TEST12345", "live_status": "BLOCKED"}):
-        ok, reason, _ = validate_action(action, {**LISTING, **published}, LEAVES)
+        ok, reason, _ = validate_action_rules(action, {**LISTING, **published}, LEAVES)
         assert ok is False
         assert "republishing a published book" in reason
 
@@ -101,7 +102,7 @@ def test_category_update_allowed_on_true_draft():
     action = {"kind": "category_update", "cost_usd": 0,
               "proposed_value": "Crafts, Hobbies & Home > Crafts & Hobbies > Painting",
               "replaces": LISTING["categories"][2]}
-    ok, reason, extra = validate_action(action, LISTING, LEAVES)
+    ok, reason, extra = validate_action_rules(action, LISTING, LEAVES)
     assert ok is True
     assert extra["targets"]
 
@@ -116,25 +117,25 @@ LIVE_PRICED = {**LISTING, "live_status": "LIVE", "price": 5.99}
 def test_price_update_gates():
     # outside the 70% band — both ends
     for bad in ("2.98", "10.00", "0", "abc", None):
-        ok, reason, _ = validate_action(_price_action(bad), LIVE_PRICED, LEAVES)
+        ok, reason, _ = validate_action_rules(_price_action(bad), LIVE_PRICED, LEAVES)
         assert ok is False, bad
     # LIVE books only (BLOCKED/None/UNKNOWN all refused)
-    ok, reason, _ = validate_action(_price_action(), {**LIVE_PRICED, "live_status": "BLOCKED"}, LEAVES)
+    ok, reason, _ = validate_action_rules(_price_action(), {**LIVE_PRICED, "live_status": "BLOCKED"}, LEAVES)
     assert ok is False and "LIVE" in reason
     # no-op change refused
-    ok, reason, _ = validate_action(_price_action("5.99"), LIVE_PRICED, LEAVES)
+    ok, reason, _ = validate_action_rules(_price_action("5.99"), LIVE_PRICED, LEAVES)
     assert ok is False and "already" in reason
     # free promo covering today → royalty binding locked → refused
     from datetime import date, timedelta
     today = date.today()
     promo = {"status": "Scheduled", "start": (today - timedelta(days=1)).isoformat(),
              "end": (today + timedelta(days=1)).isoformat()}
-    ok, reason, _ = validate_action(_price_action(), {**LIVE_PRICED, "free_promo": promo}, LEAVES)
+    ok, reason, _ = validate_action_rules(_price_action(), {**LIVE_PRICED, "free_promo": promo}, LEAVES)
     assert ok is False and "promo" in reason
 
 
 def test_price_update_allowed_within_band_on_live_book():
-    ok, reason, extra = validate_action(_price_action("2.99"), LIVE_PRICED, LEAVES)
+    ok, reason, extra = validate_action_rules(_price_action("2.99"), LIVE_PRICED, LEAVES)
     assert ok is True
     assert extra == {"price": "2.99"}
     # a future (non-overlapping) promo does not block a price change
@@ -142,14 +143,14 @@ def test_price_update_allowed_within_band_on_live_book():
     future = {"status": "Scheduled",
               "start": (date.today() + timedelta(days=7)).isoformat(),
               "end": (date.today() + timedelta(days=9)).isoformat()}
-    ok, _, extra = validate_action(_price_action("4.49"), {**LIVE_PRICED, "free_promo": future}, LEAVES)
+    ok, _, extra = validate_action_rules(_price_action("4.49"), {**LIVE_PRICED, "free_promo": future}, LEAVES)
     assert ok is True and extra == {"price": "4.49"}
 
 
 def test_title_changes_are_permanently_refused():
     action = {"kind": "metadata_update", "field": "title",
               "proposed_value": "New Title", "cost_usd": 0}
-    ok, reason, _ = validate_action(action, LISTING, LEAVES)
+    ok, reason, _ = validate_action_rules(action, LISTING, LEAVES)
     assert ok is False
     assert "refused" in reason
 
@@ -157,13 +158,13 @@ def test_title_changes_are_permanently_refused():
 def test_paid_actions_are_refused():
     action = {"kind": "category_update", "cost_usd": 5,
               "proposed_value": "Crafts, Hobbies & Home > Crafts & Hobbies > Painting"}
-    ok, reason, _ = validate_action(action, LISTING, LEAVES)
+    ok, reason, _ = validate_action_rules(action, LISTING, LEAVES)
     assert ok is False
     assert "zero-cost" in reason
 
 
 def test_unknown_kinds_stay_manual():
-    ok, reason, _ = validate_action({"kind": "cover_update", "cost_usd": 0}, LISTING, LEAVES)
+    ok, reason, _ = validate_action_rules({"kind": "cover_update", "cost_usd": 0}, LISTING, LEAVES)
     assert ok is False
     assert "unsupported" in reason
 
@@ -185,12 +186,12 @@ def _pair_slug(tmp_path, monkeypatch, slug):
 
 def test_free_promo_days_parsed_and_bounded(tmp_path, monkeypatch):
     _pair_slug(tmp_path, monkeypatch, "acuarela")
-    ok, _, extra = validate_action(
+    ok, _, extra = validate_action_rules(
         {"kind": "free_promo", "slug": "acuarela", "cost_usd": 0,
          "proposed_value": "2-day KDP Select free promotion"},
         LISTING, LEAVES)
     assert ok is True and extra == {"days": 2}
-    ok, reason, _ = validate_action(
+    ok, reason, _ = validate_action_rules(
         {"kind": "free_promo", "slug": "acuarela", "cost_usd": 0,
          "proposed_value": "9-day free promotion"},
         LISTING, LEAVES)
@@ -201,7 +202,7 @@ def test_free_promo_without_distribution_pairing_is_refused(tmp_path, monkeypatc
     # 13 of 17 naked promos measured 0 downloads — a free promo without a
     # paired external channel burns the 5-free-days/term quota for nothing.
     _pair_slug(tmp_path, monkeypatch, "some-other-slug")
-    ok, reason, _ = validate_action(
+    ok, reason, _ = validate_action_rules(
         {"kind": "free_promo", "slug": "unpaired-book", "cost_usd": 0,
          "proposed_value": "2-day KDP Select free promotion"},
         LISTING, LEAVES)
@@ -218,7 +219,7 @@ def test_free_promo_pairing_accepts_verified_reddit_post(tmp_path, monkeypatch):
     schedule.write_text(json.dumps({"posts": [{"date": "2026-07-16", "slug": "reddit-book",
                                                 "post_url": "https://example.com/post/1"}]}))
     monkeypatch.setattr(executor_module, "REDDIT_SCHEDULE_FILE", schedule)
-    ok, _, extra = validate_action(
+    ok, _, extra = validate_action_rules(
         {"kind": "free_promo", "slug": "reddit-book", "cost_usd": 0,
          "proposed_value": "2-day KDP Select free promotion"},
         LISTING, LEAVES)
@@ -238,7 +239,7 @@ def test_free_promo_pairing_rejects_placeholder_proof(tmp_path, monkeypatch):
     ]}))
     monkeypatch.setattr(executor_module, "REDDIT_SCHEDULE_FILE", schedule)
 
-    ok, reason, _ = validate_action(
+    ok, reason, _ = validate_action_rules(
         {"kind": "free_promo", "slug": "reddit-book", "cost_usd": 0,
          "proposed_value": "2-day KDP Select free promotion"},
         LISTING, LEAVES,
@@ -275,3 +276,17 @@ def test_verify_chips_rejects_wrong_subtree():
     ok, missing = verify_chips(
         ["Arts & Photography > Art > Painting > Portraits"], chips)
     assert ok is False and missing == "Arts & Photography > Art > Painting > Portraits"
+
+
+def test_total_freeze_refuses_every_action_before_action_rules():
+    """The public gate must deny before any per-action rule can allow."""
+    for action in (
+        {"kind": "price_update", "cost_usd": 0, "slug": "x", "proposed_value": "$2.99"},
+        {"kind": "free_promo", "cost_usd": 0, "slug": "x", "proposed_value": "2-day"},
+        {"kind": "category_update", "cost_usd": 0, "slug": "x"},
+        {"kind": "metadata_update", "cost_usd": 0, "slug": "x"},
+    ):
+        ok, reason, evidence = validate_action(action, LISTING, LEAVES)
+        assert ok is False
+        assert reason == "total_kdp_freeze"
+        assert evidence["freeze"]["code"] == "total_kdp_freeze"

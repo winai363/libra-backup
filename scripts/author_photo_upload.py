@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from kdp_freeze import assert_kdp_mutation_allowed  # noqa: E402
 from playwright.async_api import async_playwright  # noqa: E402
 from kdp_upload import SESSION_FILE, logger  # noqa: E402
 
@@ -30,6 +31,7 @@ async def _shot(page, name):
 
 
 async def run(photo: str | None, inspect: bool):
+    assert_kdp_mutation_allowed("author_photo")
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         ctx = await browser.new_context(storage_state=str(SESSION_FILE), user_agent=UA)

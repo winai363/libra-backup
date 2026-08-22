@@ -15,12 +15,14 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, "/root/libra")
+from kdp_freeze import assert_kdp_mutation_allowed  # noqa: E402
 from aplus_upload import (SESSION, SESSION_APLUS, KDP, marketplace_login,
                           shot, _is_signin)
 from playwright.async_api import async_playwright
 
 
 async def run(slug: str, do_submit: bool):
+    assert_kdp_mutation_allowed("aplus_submit")
     content = json.loads((KDP / slug / "aplus" / "content.json").read_text())
     name = content["content_name"]
     domain = content.get("marketplace", "amazon.com")

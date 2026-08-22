@@ -20,6 +20,7 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from kdp_freeze import assert_kdp_mutation_allowed  # noqa: E402
 from playwright.async_api import async_playwright  # noqa: E402
 
 from kdp_upload import (  # noqa: E402 — module import is side-effect free
@@ -203,6 +204,7 @@ async def _click_first(page, selectors, desc, timeout=15000):
 
 
 async def create_paperback(slug, price_usd, publish=True, paths_override=None, reupload=False):
+    assert_kdp_mutation_allowed("paperback_upload")
     book_dir = KDP_DIR / slug
     listing = json.loads((book_dir / "listing.json").read_text())
     if listing.get("paperback", {}).get("submitted_at"):

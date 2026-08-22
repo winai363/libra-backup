@@ -36,6 +36,7 @@ sys.path.insert(0, str(LIBRA_DIR))
 sys.path.insert(0, str(LIBRA_DIR / "scripts"))
 
 from distribution_report import send_telegram  # noqa: E402
+from kdp_freeze import freeze_state  # noqa: E402
 
 KDP_DIR = Path("/root/kdp")
 LEDGER_FILE = LIBRA_DIR / "data" / "libra-business.db"
@@ -162,6 +163,19 @@ def has_distribution_pairing(slug: str) -> bool:
 
 
 def validate_action(action: dict, listing: dict | None, leaves: set) -> tuple[bool, str, dict]:
+    """Public gate. TOTAL KDP FREEZE outranks every action-specific rule."""
+    state = freeze_state()
+    if state["active"]:
+        return False, "total_kdp_freeze", {"freeze": state}
+    return validate_action_rules(action, listing, leaves)
+
+
+def validate_action_rules(action: dict, listing: dict | None, leaves: set) -> tuple[bool, str, dict]:
+    """Action-specific policy, reachable only through validate_action().
+
+    Kept as a separate function so the per-action rules (category/ASIN gate,
+    price band, promo pairing) stay under test while the freeze is in force.
+    """
     kind = action.get("kind")
     if float(action.get("cost_usd") or 0) != 0:
         return False, "executor only runs zero-cost actions", {}

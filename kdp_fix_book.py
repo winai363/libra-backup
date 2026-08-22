@@ -10,6 +10,8 @@ import sys
 import json
 from pathlib import Path
 from playwright.async_api import async_playwright
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from kdp_freeze import assert_kdp_mutation_allowed  # noqa: E402
 
 ENV = {}
 _env_path = Path(__file__).parent / ".env"
@@ -25,6 +27,7 @@ KDP_DIR = Path(ENV.get("KDP_DIR", "/root/kdp"))
 
 
 async def fix_book(asin: str):
+    assert_kdp_mutation_allowed("fix_book")
     # Find the book directory by ASIN or slug
     book_dir = None
     for d in KDP_DIR.iterdir():

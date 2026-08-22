@@ -13,12 +13,16 @@ from pathlib import Path
 
 from playwright.async_api import async_playwright
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from kdp_freeze import KDPFrozenError, assert_kdp_mutation_allowed
+
 KDP_DIR = Path("/root/kdp")
 SESSION_FILE = Path("/root/libra/kdp_session.json")
 LOGIN_SCRIPT = Path("/root/libra/kdp_login_full.py")
 
 
 async def finish_publish(slug: str, price: str = "2.99") -> bool:
+    assert_kdp_mutation_allowed("publish")
     book_dir = KDP_DIR / slug
     listing_file = book_dir / "listing.json"
     if not listing_file.exists():
@@ -194,5 +198,9 @@ if __name__ == "__main__":
         sys.exit(1)
     slug = sys.argv[1]
     price = sys.argv[2] if len(sys.argv) > 2 else "2.99"
-    ok = asyncio.run(finish_publish(slug, price))
+    try:
+        ok = asyncio.run(finish_publish(slug, price))
+    except KDPFrozenError as exc:
+        print(f"{exc.code}: {exc.action}: {exc}", file=sys.stderr)
+        sys.exit(73)
     sys.exit(0 if ok else 1)

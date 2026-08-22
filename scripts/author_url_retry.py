@@ -16,6 +16,7 @@ from pathlib import Path
 
 LIBRA = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(LIBRA))
+from kdp_freeze import assert_kdp_mutation_allowed  # noqa: E402
 
 from kdp_upload import SESSION_FILE, logger  # noqa: E402
 
@@ -69,6 +70,7 @@ async def count_books(pg) -> str:
 
 
 async def main() -> None:
+    assert_kdp_mutation_allowed("author_url")
     from playwright.async_api import async_playwright
     async with async_playwright() as p:
         b = await p.chromium.launch(headless=True)

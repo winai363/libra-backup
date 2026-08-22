@@ -61,9 +61,12 @@ for listing_file in KDP_DIR.glob("*/listing.json"):
     mtime = listing_file.stat().st_mtime
     if (now - mtime) > TWO_HOURS:
         slug = listing_file.parent.name
+        # TOTAL KDP FREEZE: clearing the stuck flag is fine, but the book must
+        # never be handed back to the publish queue as "ready".
         data["kdp_uploading"] = False
-        data["status"] = "ready"  # reset to ready so it can be re-triggered
+        data["status"] = "staged_freeze"
+        data["publish_blocked"] = "total_kdp_freeze"
         listing_file.write_text(json.dumps(data, ensure_ascii=False, indent=2))
         with open(LOG, "a") as f:
-            f.write(f"[{ts()}] RESET: {slug} stuck kdp_uploading → reset to ready\n")
+            f.write(f"[{ts()}] RESET: {slug} stuck kdp_uploading → staged_freeze (total_kdp_freeze)\n")
 PYEOF

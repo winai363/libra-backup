@@ -32,6 +32,7 @@ from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+from kdp_freeze import assert_kdp_mutation_allowed  # noqa: E402
 from dotenv import load_dotenv
 load_dotenv("/root/libra/.env")
 
@@ -140,6 +141,7 @@ def prompt_approval(book_result):
 
 async def replace_on_kdp(book_result):
     """Upload corrected EPUB to KDP for an approved book. Returns bool."""
+    assert_kdp_mutation_allowed("live_replace")
     from playwright.async_api import async_playwright
 
     slug     = book_result["slug"]

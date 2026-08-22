@@ -24,6 +24,8 @@ import sys
 from pathlib import Path
 
 from playwright.async_api import async_playwright
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from kdp_freeze import assert_kdp_mutation_allowed  # noqa: E402
 
 SESSION = "/root/libra/kdp_session.json"
 # A+ hub lives on per-marketplace KDP domains (kdp.amazon.es etc.) that need
@@ -127,6 +129,7 @@ async def shot(page, slug, name):
 
 
 async def run(slug: str, dry_run: bool, stop_after: int):
+    assert_kdp_mutation_allowed("aplus_upload")
     bdir = KDP / slug
     listing = json.loads((bdir / "listing.json").read_text())
     content = json.loads((bdir / "aplus" / "content.json").read_text())

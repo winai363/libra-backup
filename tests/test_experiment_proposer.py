@@ -10,6 +10,12 @@ from scripts.experiment_proposer import (
     strip_store_prefix,
 )
 
+import pytest
+
+FROZEN = pytest.mark.skip(
+    reason="pre-freeze proposer behaviour; TOTAL KDP FREEZE now refuses every KDP action"
+)
+
 LEAVES = {
     "Business & Money > Taxation > Small Business",
     "Business & Money > Taxation > Personal",
@@ -141,6 +147,7 @@ def _pair_slugs(tmp_path, monkeypatch, slugs):
     monkeypatch.setattr(executor_module, "REDDIT_SCHEDULE_FILE", schedule)
 
 
+@FROZEN
 def test_gather_skips_active_slugs_and_validates(tmp_path, monkeypatch):
     import sqlite3
 
@@ -223,6 +230,7 @@ def test_unproved_promos_become_distribution_recovery_without_kdp_actions(tmp_pa
     assert all(item["kdp_mutation"] is False for item in analysis["distribution_required"])
 
 
+@FROZEN
 def test_verified_distribution_promotes_exactly_to_safe_proposal(tmp_path, monkeypatch):
     from business_ledger import init_ledger
     from profit_agent import _init_schema
@@ -335,3 +343,28 @@ def test_distribution_evidence_rejects_placeholders_and_blank_values():
             "book", {}, {"posts": [{"slug": "book", "post_url": proof}]}
         )
         assert evidence["usable_for_promo"] is False
+
+
+def test_freeze_refuses_every_kdp_proposal(tmp_path, monkeypatch):
+    """No KDP experiment may be proposed while TOTAL KDP FREEZE is active."""
+    import json as _json
+
+    from business_ledger import init_ledger
+    from profit_agent import _init_schema
+
+    db = tmp_path / "ledger.db"
+    init_ledger(db)
+    _init_schema(db)
+    kdp = tmp_path / "kdp"
+    folder = kdp / "proved"
+    folder.mkdir(parents=True)
+    (folder / "listing.json").write_text(_json.dumps({
+        "status": "uploaded",
+        "live_status": "LIVE",
+        "asin": "A1",
+        "kdp_select": {"status": "Enrolled"},
+    }))
+    _pair_slugs(tmp_path, monkeypatch, ["proved"])
+
+    assert gather_proposals(kdp, db, LEAVES) == []
+    assert analyze_proposals(kdp, db, LEAVES)["proposals"] == []

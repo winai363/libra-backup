@@ -25,6 +25,8 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from kdp_freeze import assert_kdp_mutation_allowed  # noqa: E402
 
 LIBRA_DIR = Path(__file__).parent
 KDP_DIR = LIBRA_DIR.parent / "kdp"
@@ -133,6 +135,7 @@ async def _click_modal_confirm(page, label: str) -> bool:
 
 
 async def run(confirm: bool) -> None:
+    assert_kdp_mutation_allowed("unpublish")
     from playwright.async_api import async_playwright
 
     SHOTS.mkdir(parents=True, exist_ok=True)

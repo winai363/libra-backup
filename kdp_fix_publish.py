@@ -5,6 +5,8 @@ Usage: python3 kdp_fix_publish.py
 import asyncio, json, sys
 from pathlib import Path
 from playwright.async_api import async_playwright
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from kdp_freeze import assert_kdp_mutation_allowed  # noqa: E402
 
 BOOK_ID  = "A3M1PU96JJ0H1T"
 LISTING  = Path("/root/kdp/anxiety-workbook-young-women-de/listing.json")
@@ -12,6 +14,7 @@ SESSION  = Path("/root/libra/kdp_session.json")
 LOGIN_SC = Path("/root/libra/kdp_login_full.py")
 
 async def main():
+    assert_kdp_mutation_allowed("fix_publish")
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         ctx = await browser.new_context(

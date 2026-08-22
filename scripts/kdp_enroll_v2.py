@@ -9,6 +9,8 @@ Usage: kdp_enroll_v2.py <BOOK_ID> <TITLE_SUBSTR> <SHOT_PREFIX>
 import asyncio, os, sys
 from pathlib import Path
 from playwright.async_api import async_playwright
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from kdp_freeze import assert_kdp_mutation_allowed  # noqa: E402
 
 SESSION = "/root/libra/kdp_session.json"
 SHOT_DIR = Path(os.getenv("KDP_ENROLL_SHOT_DIR", "/root/libra/logs/kdp-enroll-shots"))
@@ -29,6 +31,7 @@ async def first_enabled_button(page, labels):
     return None, None, None
 
 async def main():
+    assert_kdp_mutation_allowed("kdp_select_enroll")
     if len(sys.argv) != 4:
         usage()
         sys.exit(2)

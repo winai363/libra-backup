@@ -247,7 +247,7 @@ def _pair_slug(tmp_path, monkeypatch, executor_module, slug):
     monkeypatch.setattr(executor_module, "REDDIT_SCHEDULE_FILE", schedule)
 
 
-def test_kdp_promotion_adapter_reuses_existing_free_promo_browser_flow(tmp_path, monkeypatch):
+def test_kdp_promotion_adapter_refuses_paired_promo_under_freeze(tmp_path, monkeypatch):
     """The additive hook (scripts.kdp_action_executor.KdpPromotionAdapter)
     must route through the SAME _execute_free_promo audit flow used by the
     existing free_promo action lane — never a new browser path — and never
@@ -282,8 +282,10 @@ def test_kdp_promotion_adapter_reuses_existing_free_promo_browser_flow(tmp_path,
     adapter = executor_module.KdpPromotionAdapter()
     result = adapter.publish({"slug": "book-a", "days": 1})
 
-    assert result["verified_state_change"]["after"]["status"] == "Scheduled"
-    assert captured["days"] == 1
+    # TOTAL KDP FREEZE: a fully paired, otherwise-valid promo is still refused,
+    # and the browser flow is never reached.
+    assert result == {"policy_rejected": True, "reason": "total_kdp_freeze"}
+    assert captured == {}
 
 
 def test_kdp_promotion_adapter_missing_listing_fails_closed(monkeypatch, tmp_path):

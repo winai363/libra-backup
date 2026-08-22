@@ -19,6 +19,7 @@ from pathlib import Path
 
 LIBRA = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(LIBRA))
+from kdp_freeze import assert_kdp_mutation_allowed  # noqa: E402
 
 from kdp_upload import (  # noqa: E402
     KDP_DIR, SESSION_FILE, logger, wait_for_publish_confirmation,
@@ -68,6 +69,7 @@ def _is_signin(url: str) -> bool:
 async def set_price(
     slug: str, price: str, dry_run: bool, evidence_out: dict | None = None
 ) -> bool:
+    assert_kdp_mutation_allowed("price")
     from playwright.async_api import async_playwright
 
     listing_file = KDP_DIR / slug / "listing.json"

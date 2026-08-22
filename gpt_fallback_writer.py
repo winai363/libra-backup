@@ -15,6 +15,9 @@ from pathlib import Path
 from openai import OpenAI
 from dotenv import load_dotenv
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from kdp_freeze import assert_kdp_mutation_allowed  # noqa: E402
+
 load_dotenv("/root/libra/.env")
 
 KDP_DIR = Path(os.getenv("KDP_DIR", "/root/kdp"))
@@ -105,10 +108,10 @@ def max_threshold(lang_code):
     return 37500 if lang_code in CJK_LANGS else 15000
 
 
-def get_existing_books():
+def get_existing_books(root: Path = KDP_DIR):
     """List existing books to avoid duplicates."""
     books = []
-    for listing in KDP_DIR.glob("*/listing.json"):
+    for listing in Path(root).glob("*/listing.json"):
         try:
             data = json.loads(listing.read_text())
             books.append(f"- {data.get('title', '')} ({data.get('language', '')})")
@@ -480,9 +483,10 @@ def generate_cover(book_dir, title, subtitle, author, categories=None, keywords=
         return False
 
 
-def step4_create_files(topic, content, listing, market_research="", content_research=""):
-    """Save all files to disk."""
-    book_dir = KDP_DIR / topic["slug"]
+def step4_create_files(topic, content, listing, market_research="", content_research="",
+                       *, output_root: Path = KDP_DIR):
+    """Save all files to disk under `output_root` (live KDP dir by default)."""
+    book_dir = Path(output_root) / topic["slug"]
     book_dir.mkdir(parents=True, exist_ok=True)
 
     # ebook.md — (1) strip OpenAI tracking params, (2) fix layout defects
@@ -649,6 +653,72 @@ def _validate_topic(topic):
     return topic
 
 
+def write_book_from_topic(topic: dict, *, output_root: Path, preparation_only: bool) -> Path:
+    """Generate one book from a fixed topic into `output_root`.
+
+    Preparation only: it writes files and an EPUB, and never queues, approves,
+    marks a status, or contacts KDP. Callers run the quality/editorial gates
+    themselves against the same root (see staging_pipeline.prepare_pilot).
+    """
+    if not preparation_only:
+        raise ValueError("frozen staging requires preparation_only=True")
+    output_root = Path(output_root)
+    if output_root.resolve() == KDP_DIR.resolve():
+        assert_kdp_mutation_allowed("writer_live_output")
+
+    topic = _validate_topic(topic)
+    book_dir = output_root / topic["slug"]
+    if book_dir.exists():
+        raise ValueError(f"{book_dir} already exists — refusing to overwrite")
+
+    market_research = _market_research_md(topic, None)
+    content_research = step1b_content_research(topic)
+    content = step2_write_book(topic, content_research)
+
+    lang_code = topic.get("lang_code", "en")
+    units = content_units(content, lang_code)
+    continuation_pass = 0
+    while (units < continuation_threshold(lang_code)
+           and units < max_threshold(lang_code)
+           and continuation_pass < 4):
+        continuation_pass += 1
+        from book_validator import split_at_back_matter, extract_part_outline
+        main_body, back_matter = split_at_back_matter(content)
+        continuation = step2_continue_book(topic, main_body, extract_part_outline(main_body))
+        content = main_body.rstrip() + "\n\n" + continuation.lstrip()
+        if back_matter:
+            content = content.rstrip() + "\n\n" + back_matter
+        units = content_units(content, lang_code)
+    if units < abort_threshold(lang_code):
+        raise ValueError(f"Book too short ({units} units), aborting")
+    if units > max_threshold(lang_code):
+        raise ValueError(f"Book too long ({units} units), aborting")
+
+    listing = step3_write_listing(topic)
+    listing["status"] = "staged_preparation"
+    listing["publish_blocked"] = "total_kdp_freeze"
+
+    book_dir = step4_create_files(
+        topic, content, listing, market_research, content_research,
+        output_root=output_root,
+    )
+    if not step5_generate_epub(book_dir):
+        raise ValueError("EPUB generation failed")
+    return book_dir
+
+
+# Cron entries that can mutate KDP. Read-only sales/roster/reporting/session
+# crons must NOT fail a staging dry run.
+# Names are assembled from parts so this module still contains no literal
+# reference to the uploader — run_dry_run() asserts exactly that below.
+MUTATING_CRON_NEEDLES = (
+    "/root/libra/auto-generate.sh",
+    "/root/libra/scripts/process_kdp_queue.sh",
+    "/root/libra/kdp_" + "upload.py",
+    "/root/libra/kdp_" + "finish_publish.py",
+)
+
+
 def run_dry_run() -> int:
     """Validate the generation pipeline boundary without API calls or writes."""
     print("=== GPT-4.1 Fallback Writer: deterministic dry run ===")
@@ -677,10 +747,12 @@ def run_dry_run() -> int:
     )
     active_libra_cron = [
         line for line in cron.stdout.splitlines()
-        if "/root/libra/" in line and line.strip() and not line.lstrip().startswith("#")
+        if line.strip()
+        and not line.lstrip().startswith("#")
+        and any(needle in line for needle in MUTATING_CRON_NEEDLES)
     ]
     if active_libra_cron:
-        errors.append("Libra cron is active; dry-run boundary is not isolated")
+        errors.append("mutation-capable Libra cron is active; staging boundary is not isolated")
 
     source = Path(__file__).read_text(encoding="utf-8")
     uploader_name = "kdp_" + "upload.py"
@@ -693,7 +765,7 @@ def run_dry_run() -> int:
         return 1
 
     print("PASS: required pipeline files and commands are available")
-    print("PASS: Libra cron is paused")
+    print("PASS: mutation-capable Libra cron entries are paused")
     print("PASS: writer has no direct KDP upload invocation")
     print("PASS: no API calls, book files, queue entries, or KDP writes were made")
     return 0

@@ -23,13 +23,15 @@ from book_validator import validate_and_fix
 KDP_DIR = Path("/root/kdp")
 
 
-def build_paperback_pdf(slug: str, force: bool = False) -> Path:
+def build_paperback_pdf(slug: str, force: bool = False, root: Path | None = None) -> Path:
     """Build (or reuse) the paperback PDF. Returns the PDF path.
+
+    `root` lets frozen staging build inside its own tree instead of live KDP.
 
     Raises ValueError if the book is missing required files or the structural
     validator finds issues it cannot auto-fix; RuntimeError if pandoc fails.
     """
-    book_dir = KDP_DIR / slug
+    book_dir = (root if root is not None else KDP_DIR) / slug
     listing_file = book_dir / "listing.json"
     md_file = book_dir / "ebook.md"
     if not listing_file.exists():

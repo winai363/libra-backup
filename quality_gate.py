@@ -405,13 +405,18 @@ def validate_book(
     require_pdf: bool = False,
     check_urls: bool = False,
     require_editorial: bool = False,
+    *,
+    root: Path | None = None,
+    require_visuals: bool = False,
 ) -> GateReport:
     report = GateReport(slug=slug)
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,100}", slug):
         report.error("Invalid slug format.")
         return report
 
-    book_dir = KDP_DIR / slug
+    # `root` lets frozen staging validate a book outside the live KDP tree.
+    source_root = root if root is not None else KDP_DIR
+    book_dir = source_root / slug
     required = {
         "listing.json": book_dir / "listing.json",
         "ebook.md": book_dir / "ebook.md",
@@ -671,7 +676,103 @@ def validate_book(
                     report.error("AI editorial board did not approve this book.")
             except (OSError, json.JSONDecodeError) as exc:
                 report.error(f"Invalid editorial-review.json: {exc}")
+
+    if require_visuals:
+        errors, count = _validate_visual_assets(book_dir)
+        report.metrics["instructional_images"] = count
+        for error in errors:
+            report.error(error)
     return report
+
+
+VISUAL_PROVENANCE_FIELDS = (
+    "file",
+    "source_kind",
+    "source",
+    "captured_at",
+    "device",
+    "os_version",
+    "app_version",
+    "license",
+    "contains_personal_data",
+    "alt_text",
+)
+
+
+def _validate_visual_assets(book_dir: Path, minimum: int = 12) -> tuple[list[str], int]:
+    """A visual guide must ship real instructional images with full provenance.
+
+    Text-only books in a visual niche are exactly what Amazon rejects as a
+    "disappointing customer experience" — so this gate is structural, never
+    inferred from the prose.
+    """
+    errors: list[str] = []
+    images_dir = book_dir / "images"
+    files = sorted(
+        p.name
+        for p in images_dir.glob("*")
+        if p.is_file() and p.suffix.lower() in {".png", ".jpg", ".jpeg"}
+    ) if images_dir.is_dir() else []
+
+    if len(files) < minimum:
+        errors.append(
+            f"Visual guide needs at least {minimum} instructional images in images/; found {len(files)}."
+        )
+
+    for name in files:
+        try:
+            with Image.open(images_dir / name) as image:
+                image.verify()
+        except Exception as exc:
+            errors.append(f"Instructional image is unreadable: images/{name} ({exc})")
+
+    provenance_file = book_dir / "image-provenance.json"
+    if not provenance_file.exists():
+        errors.append("Missing image-provenance.json for the instructional images.")
+        return errors, len(files)
+
+    try:
+        rows = json.loads(provenance_file.read_text(encoding="utf-8")).get("images")
+    except (OSError, json.JSONDecodeError) as exc:
+        errors.append(f"Invalid image-provenance.json: {exc}")
+        return errors, len(files)
+    if not isinstance(rows, list):
+        errors.append("image-provenance.json must contain an 'images' list.")
+        return errors, len(files)
+
+    documented = []
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            errors.append(f"image-provenance.json row {index} is not an object.")
+            continue
+        missing = [field for field in VISUAL_PROVENANCE_FIELDS if field not in row]
+        if missing:
+            errors.append(
+                f"image-provenance.json row {index} is missing provenance field(s): {', '.join(missing)}."
+            )
+            continue
+        path = str(row["file"])
+        if not path.startswith("images/") or "/" in path[len("images/"):] or ".." in path:
+            errors.append(f"Provenance row {index} must reference a file inside images/: {path}")
+            continue
+        if row["contains_personal_data"] is not False:
+            errors.append(f"Instructional image {path} is marked as containing personal data.")
+        if not str(row.get("alt_text") or "").strip():
+            errors.append(f"Instructional image {path} has no alt text.")
+        documented.append(path[len("images/"):])
+
+    if sorted(documented) != files:
+        undocumented = sorted(set(files) - set(documented))
+        orphaned = sorted(set(documented) - set(files))
+        if undocumented:
+            errors.append(
+                "Instructional image(s) without provenance: " + ", ".join(undocumented)
+            )
+        if orphaned:
+            errors.append(
+                "Provenance rows with no matching image file: " + ", ".join(orphaned)
+            )
+    return errors, len(files)
 
 
 def write_report(report: GateReport) -> Path:

@@ -59,6 +59,108 @@ CREATE TABLE IF NOT EXISTS growth_incidents (
 """
 
 
+COMMERCE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS commerce_events (
+  id INTEGER PRIMARY KEY,
+  provider TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  occurred_at TEXT NOT NULL,
+  received_at TEXT NOT NULL,
+  mode TEXT NOT NULL CHECK(mode IN ('test','live')),
+  verification_state TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  processing_state TEXT NOT NULL DEFAULT 'received',
+  error_code TEXT,
+  sanitized_payload_json TEXT NOT NULL,
+  UNIQUE(provider, event_id)
+);
+CREATE TABLE IF NOT EXISTS commerce_event_conflicts (
+  id INTEGER PRIMARY KEY,
+  provider TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  original_event_id INTEGER NOT NULL,
+  conflicting_hash TEXT NOT NULL,
+  recorded_at TEXT NOT NULL,
+  UNIQUE(provider, event_id, conflicting_hash)
+);
+CREATE TABLE IF NOT EXISTS commerce_products (
+  slug TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  provider_product_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  currency TEXT NOT NULL,
+  price_minor INTEGER NOT NULL CHECK(price_minor >= 0),
+  updated_at TEXT NOT NULL,
+  UNIQUE(provider, provider_product_id)
+);
+CREATE TABLE IF NOT EXISTS commerce_orders (
+  provider TEXT NOT NULL,
+  provider_order_id TEXT NOT NULL,
+  slug TEXT,
+  status TEXT NOT NULL,
+  currency TEXT NOT NULL,
+  gross_minor INTEGER NOT NULL CHECK(gross_minor >= 0),
+  discount_minor INTEGER NOT NULL DEFAULT 0 CHECK(discount_minor >= 0),
+  tax_minor INTEGER NOT NULL DEFAULT 0 CHECK(tax_minor >= 0),
+  payhip_fee_minor INTEGER,
+  stripe_fee_minor INTEGER,
+  net_minor INTEGER,
+  provider_payment_id TEXT,
+  customer_country TEXT,
+  attribution_key TEXT,
+  ordered_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(provider, provider_order_id)
+);
+CREATE TABLE IF NOT EXISTS commerce_refunds (
+  provider TEXT NOT NULL,
+  provider_refund_id TEXT NOT NULL,
+  provider_order_id TEXT,
+  provider_payment_id TEXT,
+  amount_minor INTEGER NOT NULL CHECK(amount_minor > 0),
+  currency TEXT NOT NULL,
+  status TEXT NOT NULL,
+  reason_code TEXT,
+  occurred_at TEXT NOT NULL,
+  PRIMARY KEY(provider, provider_refund_id)
+);
+CREATE TABLE IF NOT EXISTS stripe_balance_transactions (
+  balance_transaction_id TEXT PRIMARY KEY,
+  source_id TEXT,
+  type TEXT NOT NULL,
+  amount_minor INTEGER NOT NULL,
+  fee_minor INTEGER NOT NULL,
+  net_minor INTEGER NOT NULL,
+  currency TEXT NOT NULL,
+  available_on TEXT
+);
+CREATE TABLE IF NOT EXISTS commerce_payouts (
+  provider_payout_id TEXT PRIMARY KEY,
+  status TEXT NOT NULL,
+  currency TEXT NOT NULL,
+  amount_minor INTEGER NOT NULL,
+  arrival_date TEXT,
+  error_code TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS commerce_payout_items (
+  provider_payout_id TEXT NOT NULL,
+  balance_transaction_id TEXT NOT NULL,
+  PRIMARY KEY(provider_payout_id, balance_transaction_id)
+);
+CREATE TABLE IF NOT EXISTS commerce_incidents (
+  incident_key TEXT PRIMARY KEY,
+  opened_at TEXT NOT NULL,
+  severity TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  error_code TEXT NOT NULL,
+  detail_json TEXT NOT NULL,
+  resolved_at TEXT
+);
+"""
+
+
 def _canonical(value: dict) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
@@ -72,6 +174,7 @@ def init_ledger(path: Path) -> None:
     with sqlite3.connect(path) as connection:
         connection.executescript(SCHEMA)
         connection.executescript(GROWTH_SCHEMA)
+        connection.executescript(COMMERCE_SCHEMA)
         columns = {r[1] for r in connection.execute("PRAGMA table_info(kdp_snapshots)")}
         for name in ("source_key", "content_hash"):
             if name not in columns:

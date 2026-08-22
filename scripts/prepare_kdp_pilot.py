@@ -11,6 +11,7 @@ successful `--execute` run writes only under the staging root and ends at
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -24,7 +25,19 @@ from pdf_builder import build_paperback_pdf  # noqa: E402
 from quality_gate import validate_book  # noqa: E402
 from staging_pipeline import StageDependencies, prepare_pilot  # noqa: E402
 
-SPEC = LIBRA_DIR / "data" / "pilots" / "senior-smartphone-fr.json"
+PILOTS_DIR = LIBRA_DIR / "data" / "pilots"
+DEFAULT_PILOT = "aquarelle-botanique-fr"
+
+
+def spec_path(name: str) -> Path:
+    """Resolve a pilot name to its checked-in spec. Names only — no paths."""
+    if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,60}", name):
+        raise SystemExit(f"invalid pilot name: {name}")
+    path = PILOTS_DIR / f"{name}.json"
+    if not path.is_file():
+        available = ", ".join(sorted(p.stem for p in PILOTS_DIR.glob("*.json")))
+        raise SystemExit(f"unknown pilot '{name}'; available: {available}")
+    return path
 
 
 def production_dependencies(staging_root: Path) -> StageDependencies:
@@ -40,8 +53,11 @@ def production_dependencies(staging_root: Path) -> StageDependencies:
             "lang_code": spec["lang_code"],
             "audience": spec["audience"],
             "niche": spec["niche"],
-            "description": spec["description_en"],
+            "description_en": spec["description_en"],
             "required_sections": spec["required_sections"],
+            "visual_required": bool(spec.get("visual_required")),
+            "minimum_instructional_images": spec.get("minimum_instructional_images", 12),
+            "prohibited_claims": spec.get("prohibited_claims", []),
         }
         return write_book_from_topic(
             topic, output_root=staging_root, preparation_only=True
@@ -74,27 +90,30 @@ def production_dependencies(staging_root: Path) -> StageDependencies:
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
-        description="Prepare the frozen French KDP pilot locally (no publishing)"
+        description="Prepare a frozen KDP pilot book locally (no publishing)"
     )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="check the boundary only")
     mode.add_argument("--execute", action="store_true", help="run the staging pipeline")
+    parser.add_argument("--pilot", default=DEFAULT_PILOT,
+                        help=f"pilot spec name in data/pilots (default: {DEFAULT_PILOT})")
     return parser.parse_args(argv)
 
 
 def main(argv=None) -> int:
     args = parse_args(argv)
     state = freeze_state()
+    spec = spec_path(args.pilot)
 
     if args.dry_run:
         print(f"PASS: {state['code']} active; staging only; no writes or external calls")
-        print(f"PASS: pilot spec {SPEC.name} present: {SPEC.is_file()}")
+        print(f"PASS: pilot spec {spec.name} present: {spec.is_file()}")
         return 0
 
     staging_root = Path(os.getenv("KDP_STAGING_ROOT", "/root/kdp-staging"))
     live_root = Path(os.getenv("KDP_DIR", "/root/kdp"))
     result = prepare_pilot(
-        spec_path=SPEC,
+        spec_path=spec,
         staging_root=staging_root,
         live_root=live_root,
         queue_path=LIBRA_DIR / "queue.txt",

@@ -653,6 +653,96 @@ def _validate_topic(topic):
     return topic
 
 
+def plan_illustration_briefs(topic: dict, content: str, count: int) -> list:
+    """Ask for image briefs tied to headings that actually exist in the draft.
+
+    The model chooses which steps deserve a picture; the headings it may target
+    are supplied verbatim, and illustrations.validate_briefs rejects anything
+    that does not match — so a hallucinated chapter cannot slip through.
+    """
+    import illustrations
+
+    headings = [
+        heading for heading in illustrations._headings(content)
+        if not illustrations._is_back_matter(heading)
+    ]
+    if len(headings) < 3:
+        raise ValueError("manuscript has too few teaching sections to illustrate")
+
+    listing = "\n".join(f"- {heading}" for heading in headings)
+    prompt = f"""You are the illustration editor for a printed how-to book about {topic['niche']}
+in {topic['language']}, written for complete beginners.
+
+Choose exactly {count} moments in the book where a picture teaches something words cannot,
+and describe what each picture must show.
+
+You may ONLY use these section headings, copied EXACTLY as written:
+{listing}
+
+Rules:
+- Spread the images across different sections; at most 2 per section.
+- Each brief describes a TECHNIQUE IN PROGRESS that a beginner would copy —
+  the hand position, the stage of the wash, the comparison of right vs wrong.
+- Never describe text, labels, numbers, logos, brands, or people's faces in the image.
+- alt_text is written in {topic['language']} and describes the picture for a reader who cannot see it.
+- brief is written in English (it drives an image model).
+
+Return ONLY a JSON array, no prose:
+[{{"heading": "exact heading", "alt_text": "...", "brief": "..."}}]"""
+
+    raw = call_gpt([{"role": "user", "content": prompt}], max_tokens=4000)
+    start, end = raw.find("["), raw.rfind("]")
+    if start < 0 or end < 0:
+        raise ValueError("illustration planner did not return a JSON array")
+    plan = json.loads(raw[start:end + 1])
+
+    briefs = []
+    for index, item in enumerate(plan[:count]):
+        briefs.append({
+            "heading": str(item["heading"]).strip(),
+            "filename": f"step-{index:02}.png",
+            "alt_text": str(item["alt_text"]).strip(),
+            "prompt": illustrations.build_image_prompt(
+                str(item["brief"]).strip(), niche=topic["niche"]
+            ),
+        })
+    return briefs
+
+
+def openai_image_renderer(prompt: str, destination: Path) -> dict:
+    """Render one illustration with gpt-image-1."""
+    import base64
+    import io
+
+    from PIL import Image as PILImage
+
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    response = client.images.generate(
+        model="gpt-image-1", prompt=prompt, size="1024x1024", n=1
+    )
+    data = base64.b64decode(response.data[0].b64_json)
+    PILImage.open(io.BytesIO(data)).save(str(destination), "PNG")
+    _USAGE["images"] = _USAGE.get("images", 0) + 1
+    return {"model": "gpt-image-1"}
+
+
+def illustrate_manuscript(topic: dict, content: str, book_dir: Path, *,
+                          count: int, renderer=None) -> str:
+    """Plan, render, place, and document the instructional images."""
+    import illustrations
+
+    briefs = plan_illustration_briefs(topic, content, count)
+    illustrations.validate_briefs(briefs, content)
+    rows = illustrations.render_illustrations(
+        book_dir,
+        briefs,
+        renderer=renderer or openai_image_renderer,
+        now=time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    )
+    illustrations.write_provenance(book_dir, rows)
+    return illustrations.insert_into_manuscript(content, briefs)
+
+
 def write_book_from_topic(topic: dict, *, output_root: Path, preparation_only: bool) -> Path:
     """Generate one book from a fixed topic into `output_root`.
 
@@ -694,9 +784,20 @@ def write_book_from_topic(topic: dict, *, output_root: Path, preparation_only: b
     if units > max_threshold(lang_code):
         raise ValueError(f"Book too long ({units} units), aborting")
 
+    # A visual niche gets its pictures BEFORE the files are written, so the
+    # manuscript that becomes ebook.md/EPUB/PDF already carries the image tags.
+    if topic.get("visual_required"):
+        book_dir.mkdir(parents=True, exist_ok=True)
+        content = illustrate_manuscript(
+            topic, content, book_dir,
+            count=int(topic.get("minimum_instructional_images") or 12),
+        )
+
     listing = step3_write_listing(topic)
     listing["status"] = "staged_preparation"
     listing["publish_blocked"] = "total_kdp_freeze"
+    if topic.get("visual_required"):
+        listing["ai_generated_images"] = True
 
     book_dir = step4_create_files(
         topic, content, listing, market_research, content_research,

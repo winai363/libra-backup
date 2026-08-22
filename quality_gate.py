@@ -685,18 +685,25 @@ def validate_book(
     return report
 
 
+# Required of every instructional image, whatever its origin.
 VISUAL_PROVENANCE_FIELDS = (
     "file",
     "source_kind",
     "source",
-    "captured_at",
-    "device",
-    "os_version",
-    "app_version",
     "license",
     "contains_personal_data",
     "alt_text",
 )
+
+# A screenshot and a generated illustration need different proof: one is a
+# capture of a real device, the other is a model output that KDP requires us to
+# disclose. Each kind must carry the fields that make it auditable.
+VISUAL_SOURCE_KINDS = {
+    "screenshot": ("captured_at", "device", "os_version", "app_version"),
+    "photo": ("captured_at", "device"),
+    "ai_generated": ("model", "prompt", "generated_at"),
+    "licensed_stock": ("source_url",),
+}
 
 
 def _validate_visual_assets(book_dir: Path, minimum: int = 12) -> tuple[list[str], int]:
@@ -749,6 +756,22 @@ def _validate_visual_assets(book_dir: Path, minimum: int = 12) -> tuple[list[str
         if missing:
             errors.append(
                 f"image-provenance.json row {index} is missing provenance field(s): {', '.join(missing)}."
+            )
+            continue
+        source_kind = str(row["source_kind"])
+        if source_kind not in VISUAL_SOURCE_KINDS:
+            errors.append(
+                f"image-provenance.json row {index} has an unknown source_kind "
+                f"'{source_kind}'; allowed: {', '.join(sorted(VISUAL_SOURCE_KINDS))}."
+            )
+            continue
+        kind_missing = [
+            field for field in VISUAL_SOURCE_KINDS[source_kind] if not str(row.get(field) or "").strip()
+        ]
+        if kind_missing:
+            errors.append(
+                f"image-provenance.json row {index} ({source_kind}) is missing "
+                f"required field(s): {', '.join(kind_missing)}."
             )
             continue
         path = str(row["file"])

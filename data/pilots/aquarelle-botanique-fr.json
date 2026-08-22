@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "pilot_id": "aquarelle-botanique-fr-v1",
+  "slug": "aquarelle-botanique-debutants-fr",
+  "title": "Aquarelle Botanique pour Débutants",
+  "subtitle": "Peindre fleurs et feuillages étape par étape : matériel, lavis, dégradés et 12 démonstrations illustrées",
+  "language": "French",
+  "lang_code": "fr",
+  "marketplace": "amazon.fr",
+  "audience": "French-speaking absolute beginners who want to paint flowers and foliage",
+  "niche": "aquarelle botanique pour débutants",
+  "description_en": "A step-by-step beginner's guide to botanical watercolour in French: materials, water control, washes, gradients, petals, leaves and full flower projects, with illustrated demonstrations of each technique.",
+  "required_sections": [
+    "matériel et papier",
+    "contrôle de l'eau",
+    "lavis humide sur humide",
+    "dégradés",
+    "peindre une pétale",
+    "peindre une feuille et ses nervures",
+    "composition florale simple",
+    "erreurs courantes et corrections"
+  ],
+  "visual_required": true,
+  "minimum_instructional_images": 12,
+  "prohibited_claims": [
+    "devenez artiste professionnel en 30 jours",
+    "méthode officielle",
+    "résultats garantis"
+  ],
+  "publish_target": "kdp",
+  "publish_blocked": "total_kdp_freeze",
+  "evidence": {
+    "chosen_because": "botanical watercolour joins our only theme that earned in two consecutive months with the only market that bought in the most recent month",
+    "theme": "art_craft",
+    "theme_royalties_per_live_title_usd": 3.19,
+    "supporting_titles": [
+      {"slug": "beginner-watercolor-spanish", "asin": "B0H4FMMP8P", "royalties_usd": 5.7, "kenp": 162, "note": "earned in both July and August 2026"}
+    ],
+    "market_signal": {"language": "French", "evidence": "senior-smartphone-french (B0H7BCJRM3) was the top earner in August 2026 at $5.06"},
+    "duplicate_check": "no art or craft title exists in French on this account; the two Spanish watercolour titles share one title string, which is itself a duplicate-content risk this book must not repeat",
+    "confidence": "low",
+    "caveat": "whole catalogue earned $25.58 over six weeks; this is a directional bet, not a proven demand",
+    "measured_on": "2026-08-22"
+  }
+}

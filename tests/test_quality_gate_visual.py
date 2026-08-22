@@ -122,3 +122,76 @@ def test_visual_checks_are_off_by_default(book):
     book_dir, slug, root = book
     report = validate_book(slug, root=root)
     assert not any("instructional images" in error for error in report.errors)
+
+
+# ── AI-generated illustrations ───────────────────────────────────────────────
+# A screenshot and a generated illustration need different proof. Demanding
+# "device"/"os_version" from a painting is theatre; demanding the model and the
+# prompt is the real audit trail — and KDP requires the AI disclosure anyway.
+
+AI_FIELDS = {
+    "source_kind": "ai_generated",
+    "source": "gpt-image-1",
+    "model": "gpt-image-1",
+    "prompt": "watercolour wet-on-wet wash demonstration, three stages",
+    "generated_at": "2026-08-22T10:00:00+07:00",
+    "license": "generated-for-this-title",
+    "contains_personal_data": False,
+}
+
+
+def _ai_provenance(book_dir: Path, names, **overrides) -> None:
+    rows = []
+    for name in names:
+        row = {"file": f"images/{name}", "alt_text": f"Step {name}", **AI_FIELDS}
+        row.update(overrides)
+        rows.append(row)
+    (book_dir / "image-provenance.json").write_text(json.dumps({"images": rows}))
+
+
+def test_ai_generated_images_pass_with_model_and_prompt(book):
+    book_dir, slug, root = book
+    _ai_provenance(book_dir, _images(book_dir))
+
+    report = validate_book(slug, root=root, require_visuals=True)
+
+    assert report.passed, report.errors
+
+
+def test_ai_generated_row_without_model_or_prompt_is_rejected(book):
+    book_dir, slug, root = book
+    names = _images(book_dir)
+
+    for dropped in ("model", "prompt", "generated_at"):
+        rows = json.loads(json.dumps({"images": []}))
+        _ai_provenance(book_dir, names)
+        data = json.loads((book_dir / "image-provenance.json").read_text())
+        for row in data["images"]:
+            del row[dropped]
+        (book_dir / "image-provenance.json").write_text(json.dumps(data))
+
+        report = validate_book(slug, root=root, require_visuals=True)
+        assert any(dropped in error for error in report.errors), dropped
+
+
+def test_screenshot_row_still_needs_device_details(book):
+    book_dir, slug, root = book
+    names = _images(book_dir)
+    _provenance(book_dir, names)
+    data = json.loads((book_dir / "image-provenance.json").read_text())
+    for row in data["images"]:
+        del row["device"]
+    (book_dir / "image-provenance.json").write_text(json.dumps(data))
+
+    report = validate_book(slug, root=root, require_visuals=True)
+
+    assert any("device" in error for error in report.errors)
+
+
+def test_unknown_source_kind_is_refused(book):
+    book_dir, slug, root = book
+    _ai_provenance(book_dir, _images(book_dir), source_kind="vibes")
+
+    report = validate_book(slug, root=root, require_visuals=True)
+
+    assert any("source_kind" in error for error in report.errors)

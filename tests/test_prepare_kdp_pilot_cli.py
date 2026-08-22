@@ -122,3 +122,104 @@ def test_writer_refuses_live_output_root_in_preparation_mode(tmp_path):
         gpt_fallback_writer.write_book_from_topic(
             {"slug": "x"}, output_root=gpt_fallback_writer.KDP_DIR, preparation_only=True
         )
+
+
+def test_visual_topic_illustrates_before_writing_files(monkeypatch, tmp_path):
+    """The manuscript that becomes the EPUB must already contain the images."""
+    import gpt_fallback_writer as writer
+    from PIL import Image
+
+    manuscript = (
+        "## Préface\n\nBienvenue.\n\n"
+        "# Partie 1\n\n## Chapitre 1 : Le lavis\n\nTexte un.\n\n"
+        "## Chapitre 2 : Les dégradés\n\nTexte deux.\n\n"
+        "## Références\n\n1. Source\n"
+    )
+    captured = {}
+
+    def fake_plan(topic, content, count):
+        assert count == 2
+        return [
+            {"heading": "Chapitre 1 : Le lavis", "filename": "step-00.png",
+             "alt_text": "Lavis", "prompt": "p0"},
+            {"heading": "Chapitre 2 : Les dégradés", "filename": "step-01.png",
+             "alt_text": "Dégradé", "prompt": "p1"},
+        ]
+
+    def fake_render(prompt, destination):
+        Image.new("RGB", (32, 32), color="white").save(destination)
+        return {"model": "test-image-1"}
+
+    def fake_create_files(topic, content, listing, market="", research="", *, output_root):
+        captured["content"] = content
+        captured["listing"] = listing
+        book = Path(output_root) / topic["slug"]
+        book.mkdir(parents=True, exist_ok=True)
+        return book
+
+    monkeypatch.setattr(writer, "plan_illustration_briefs", fake_plan)
+    monkeypatch.setattr(writer, "openai_image_renderer", fake_render)
+    monkeypatch.setattr(writer, "_validate_topic", lambda topic: topic)
+    monkeypatch.setattr(writer, "_market_research_md", lambda topic, score: "research")
+    monkeypatch.setattr(writer, "step1b_content_research", lambda topic: "sources")
+    monkeypatch.setattr(writer, "step2_write_book", lambda topic, research: manuscript)
+    monkeypatch.setattr(writer, "content_units", lambda content, lang: 12000)
+    monkeypatch.setattr(writer, "continuation_threshold", lambda lang: 1)
+    monkeypatch.setattr(writer, "abort_threshold", lambda lang: 1)
+    monkeypatch.setattr(writer, "max_threshold", lambda lang: 99999)
+    monkeypatch.setattr(writer, "step3_write_listing", lambda topic: {"title": topic["title"]})
+    monkeypatch.setattr(writer, "step4_create_files", fake_create_files)
+    monkeypatch.setattr(writer, "step5_generate_epub", lambda book_dir: True)
+
+    topic = {
+        "slug": "aquarelle-test", "title": "T", "subtitle": "S", "language": "French",
+        "lang_code": "fr", "niche": "aquarelle", "visual_required": True,
+        "minimum_instructional_images": 2,
+    }
+    book_dir = writer.write_book_from_topic(
+        topic, output_root=tmp_path / "staging", preparation_only=True
+    )
+
+    assert "![Lavis](images/step-00.png)" in captured["content"]
+    assert "![Dégradé](images/step-01.png)" in captured["content"]
+    assert captured["listing"]["ai_generated_images"] is True
+    assert captured["listing"]["publish_blocked"] == "total_kdp_freeze"
+    assert (book_dir / "images" / "step-00.png").exists()
+    assert (book_dir / "image-provenance.json").exists()
+
+
+def test_cli_accepts_a_named_pilot_and_defaults_to_the_current_one():
+    import prepare_kdp_pilot
+
+    assert prepare_kdp_pilot.parse_args(["--dry-run"]).pilot == prepare_kdp_pilot.DEFAULT_PILOT
+    args = prepare_kdp_pilot.parse_args(["--dry-run", "--pilot", "aquarelle-botanique-fr"])
+    assert args.pilot == "aquarelle-botanique-fr"
+
+
+def test_unknown_pilot_name_fails_loudly():
+    result = _run("--dry-run", "--pilot", "no-such-pilot")
+    assert result.returncode != 0
+    assert "no-such-pilot" in (result.stderr + result.stdout)
+
+
+def test_every_checked_in_pilot_spec_is_valid():
+    from staging_pipeline import load_pilot_spec
+
+    specs = sorted((LIBRA / "data" / "pilots").glob("*.json"))
+    assert specs, "no pilot specs checked in"
+    for spec_path in specs:
+        spec, _ = load_pilot_spec(spec_path)
+        assert spec["publish_blocked"] == "total_kdp_freeze"
+        if spec.get("visual_required"):
+            assert spec["minimum_instructional_images"] >= 12
+
+
+def test_the_watercolour_pilot_records_why_it_was_chosen():
+    """A product choice with no evidence trail is a guess wearing a spec file."""
+    spec = json.loads((LIBRA / "data" / "pilots" / "aquarelle-botanique-fr.json").read_text())
+
+    evidence = spec["evidence"]
+    assert evidence["theme"] == "art_craft"
+    assert evidence["supporting_titles"][0]["asin"] == "B0H4FMMP8P"
+    assert evidence["confidence"] == "low"
+    assert "duplicate" in evidence["duplicate_check"]

@@ -58,8 +58,22 @@ These rules prevent the three most common PDF defects: wrong TOC page numbers, b
 - **Each `##` and `###` section must have ≥ 150 words** — a heading with only 1-2 sentences below it creates a near-empty page.
 
 ## Interior Art
-- Default to a professional text-first interior with no generated images
-- Do not insert Markdown or HTML image tags unless a future edition explicitly enables and discloses AI images
+
+**Default (non-visual niches):** a professional text-first interior with no generated images. Do not insert image tags.
+
+**Visual niches are the exception and it is mandatory, not optional.** If the book teaches the reader to DO or USE something — painting, crafts, cooking, operating a device, children's language learning — a text-only interior is precisely what Amazon rejects as a "disappointing customer experience". That is how `acuarela-para-principiantes` was lost on 11 Jul 2026.
+
+For a visual niche:
+- At least **12 instructional images** in `images/`, referenced from the manuscript where the step actually happens — not decoration clustered at the front
+- Each image must **show the step being described** (stages of a wash, the brush angle, the finished result). A pretty stock-style photo of the subject is not an instructional image
+- Every image needs a row in `image-provenance.json` — the automated gate refuses the book otherwise. Required of every row: `file`, `source_kind`, `source`, `license`, `contains_personal_data` (must be false), `alt_text`. Then by kind:
+  - `ai_generated` → `model`, `prompt`, `generated_at`
+  - `screenshot` → `captured_at`, `device`, `os_version`, `app_version`
+  - `photo` → `captured_at`, `device`
+  - `licensed_stock` → `source_url`
+- **AI-generated images must be disclosed to KDP** at upload (the AI-content declaration) and named in the book's front matter
+- Never reproduce another company's app interface, logo, or trademarked UI. Draw a generic illustrated device instead
+- Never use an image containing a real identifiable person
 
 ## Formatting for PDF (Prevent Overflow)
 - **Tables:** Keep simple — max 4-5 columns. Use short text in cells. Avoid wide tables with long descriptions

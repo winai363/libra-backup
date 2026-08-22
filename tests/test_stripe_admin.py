@@ -61,17 +61,35 @@ class FakeStripe:
         self.WebhookEndpoint = WebhookEndpoint
 
 
-def test_refuses_a_live_key_or_the_wrong_account():
+def test_a_key_from_the_other_mode_is_always_refused():
+    """Neither direction may pass: mode is declared, never inferred."""
     with pytest.raises(stripe_admin.StripeAdminError, match="test_key_required"):
-        stripe_admin.verify_account(FakeStripe(), api_key="sk_live_abc", expected_account="acct_test_fixture")
+        stripe_admin.verify_account(FakeStripe(), api_key="sk_live_abc",
+                                    expected_account="acct_test_fixture", mode="test")
 
+    with pytest.raises(stripe_admin.StripeAdminError, match="live_key_required"):
+        stripe_admin.verify_account(FakeStripe(livemode=True), api_key="sk_test_abc",
+                                    expected_account="acct_test_fixture", mode="live")
+
+
+def test_the_wrong_account_is_refused():
     with pytest.raises(stripe_admin.StripeAdminError, match="wrong_account"):
         stripe_admin.verify_account(FakeStripe(account_id="acct_other"), api_key="sk_test_abc",
                                     expected_account="acct_test_fixture")
 
-    with pytest.raises(stripe_admin.StripeAdminError, match="live_mode"):
+
+def test_an_account_whose_livemode_disagrees_with_the_mode_is_refused():
+    with pytest.raises(stripe_admin.StripeAdminError, match="mode_mismatch"):
         stripe_admin.verify_account(FakeStripe(livemode=True), api_key="sk_test_abc",
-                                    expected_account="acct_test_fixture")
+                                    expected_account="acct_test_fixture", mode="test")
+
+
+def test_a_live_key_on_a_live_account_is_accepted():
+    result = stripe_admin.verify_account(
+        FakeStripe(account_id="acct_live_x", livemode=True),
+        api_key="sk_live_abc", expected_account="acct_live_x", mode="live",
+    )
+    assert result == {"account": "acct_live_x", "livemode": True}
 
 
 def test_ensure_webhook_creates_once_and_returns_the_secret_only_on_creation():

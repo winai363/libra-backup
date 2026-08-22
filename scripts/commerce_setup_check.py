@@ -24,11 +24,13 @@ from settings import CommerceSettings, load_env_file  # noqa: E402
 ENV_PATH = LIBRA_DIR / ".env"
 PUBLIC_BASE = "https://newton-winai-klinprasom.incomeinclick.in.th/libra"
 
+MODE = "live"  # Payhip has no sandbox; authorised by Bui 22 Aug 2026
+
 HUMAN_ONLY = [
     ("payhip_account", "Create the Payhip account (email + password) and put PAYHIP_EMAIL / PAYHIP_PASSWORD in .env"),
     ("stripe_account", "Create the Stripe account, pass KYC (ID card), link the Thai bank account"),
     ("payhip_stripe_connect", "In Payhip: Account → Settings → Payment Details → Connect Stripe (OAuth + 2FA)"),
-    ("stripe_test_key", "Stripe dashboard (TEST mode) → Developers → API keys → put STRIPE_SECRET_KEY_TEST in .env (the acct_… id is fetched from the key automatically)"),
+    ("stripe_live_key", "Stripe dashboard with Test mode OFF → Developers → API keys → reveal the LIVE secret key (sk_live_…) → put STRIPE_SECRET_KEY_LIVE in .env yourself. Never paste it into chat."),
 ]
 
 
@@ -41,9 +43,9 @@ def report(env: dict) -> dict:
     for key, how in HUMAN_ONLY:
         done = {
             "payhip_account": _present(env, "PAYHIP_EMAIL") and _present(env, "PAYHIP_PASSWORD"),
-            "stripe_account": _present(env, "STRIPE_SECRET_KEY_TEST"),
+            "stripe_account": _present(env, "STRIPE_SECRET_KEY_LIVE") or _present(env, "STRIPE_SECRET_KEY_TEST"),
             "payhip_stripe_connect": _present(env, "PAYHIP_STRIPE_CONNECTED"),
-            "stripe_test_key": _present(env, "STRIPE_SECRET_KEY_TEST"),
+            "stripe_live_key": _present(env, "STRIPE_SECRET_KEY_LIVE"),
         }[key]
         steps.append({"step": key, "state": "ok" if done else "manual", "how": how})
 
@@ -52,15 +54,15 @@ def report(env: dict) -> dict:
         "step": "commerce_settings",
         "state": "ok" if readiness["ready"] else "missing",
         "reasons": readiness["reasons"],
-        "how": "set LIBRA_COMMERCE_MODE=test, STRIPE_WEBHOOK_SECRET_TEST, PAYHIP_WEBHOOK_TOKEN_TEST, PAYHIP_PRODUCT_IDS_TEST",
+        "how": f"set LIBRA_COMMERCE_MODE={MODE} plus the {MODE.upper()}-suffixed secrets, token and product ids",
     })
 
-    token = env.get("PAYHIP_WEBHOOK_TOKEN_TEST", "")
+    token = env.get(f"PAYHIP_WEBHOOK_TOKEN_{MODE.upper()}", "")
     steps.append({
         "step": "callback_urls",
         "state": "ok" if token else "missing",
         "stripe_url": f"{PUBLIC_BASE}/api/webhooks/stripe",
-        "payhip_url": f"{PUBLIC_BASE}/api/webhooks/payhip/<PAYHIP_WEBHOOK_TOKEN_TEST>" if token else None,
+        "payhip_url": f"{PUBLIC_BASE}/api/webhooks/payhip/<PAYHIP_WEBHOOK_TOKEN_{MODE.upper()}>" if token else None,
         "how": "generate with: python3 -c \"import secrets; print(secrets.token_urlsafe(36))\"",
     })
 
@@ -73,23 +75,27 @@ def stripe_setup(env: dict) -> dict:
 
     import stripe_admin
 
-    key = env.get("STRIPE_SECRET_KEY_TEST", "")
+    suffix = MODE.upper()
+    key = env.get(f"STRIPE_SECRET_KEY_{suffix}", "")
     if not key:
-        return {"state": "missing", "reason": "STRIPE_SECRET_KEY_TEST not set"}
-    expected = env.get("STRIPE_EXPECTED_ACCOUNT_TEST", "")
+        return {"state": "missing", "reason": f"STRIPE_SECRET_KEY_{suffix} not set"}
+    prefix = "sk_live_" if MODE == "live" else "sk_test_"
+    if not key.startswith(prefix):
+        return {"state": "failed", "error": f"expected a {MODE} key starting with {prefix}"}
+    expected = env.get(f"STRIPE_EXPECTED_ACCOUNT_{suffix}", "")
     if not expected:
         # One less thing for a human to copy correctly: the key already knows
-        # which account it belongs to. Still verified as a test-mode account.
-        if not key.startswith("sk_test_"):
-            return {"state": "failed", "error": "test_key_required"}
+        # which account it belongs to.
         stripe.api_key = key
-        discovered = stripe.Account.retrieve()
-        expected = discovered.get("id") if hasattr(discovered, "get") else discovered.id
-        stripe_admin.write_env_value(ENV_PATH, "STRIPE_EXPECTED_ACCOUNT_TEST", expected)
-    account = stripe_admin.verify_account(stripe, api_key=key, expected_account=expected)
+        discovered = stripe.Account.retrieve().to_dict()
+        expected = discovered["id"]
+        stripe_admin.write_env_value(ENV_PATH, f"STRIPE_EXPECTED_ACCOUNT_{suffix}", expected)
+    account = stripe_admin.verify_account(
+        stripe, api_key=key, expected_account=expected, mode=MODE
+    )
     endpoint = stripe_admin.ensure_webhook_endpoint(stripe, url=f"{PUBLIC_BASE}/api/webhooks/stripe")
     if endpoint.get("secret"):
-        stripe_admin.write_env_value(ENV_PATH, "STRIPE_WEBHOOK_SECRET_TEST", endpoint["secret"])
+        stripe_admin.write_env_value(ENV_PATH, f"STRIPE_WEBHOOK_SECRET_{suffix}", endpoint["secret"])
         stored = "written_to_env"
     else:
         stored = "not_returned_by_stripe (rotate in dashboard if .env lacks it)"

@@ -42,7 +42,7 @@ def commerce_summary(path: Path, *, start: str | None = None, end: str | None = 
     path = Path(path)
     result = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "mode": "test",
+        "mode": None,  # filled from the ledger below — never assumed
         "window": {"start": start, "end": end},
         "by_currency": {},
         "open_incidents": [],
@@ -169,5 +169,15 @@ def commerce_summary(path: Path, *, start: str | None = None, end: str | None = 
                 "reconciled_payout_minor": reconciled,
             }
 
+    with _connect(path) as connection:
+        try:
+            modes = [r[0] for r in connection.execute(
+                "SELECT DISTINCT mode FROM commerce_events ORDER BY mode")]
+        except sqlite3.OperationalError:
+            modes = []
+    # If both appear, say so rather than picking one: a ledger holding test and
+    # live rows together is a fact the reader needs, not a detail to smooth over.
+    result["mode"] = modes[0] if len(modes) == 1 else ("mixed" if modes else "no_events")
+    result["modes_present"] = modes
     result["open_incidents"] = open_incidents(path)
     return result

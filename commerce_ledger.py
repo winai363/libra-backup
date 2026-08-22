@@ -1,7 +1,7 @@
 """Durable, append-only inbox for provider commerce events.
 
 Rules this module enforces:
-- Test mode only. A `live` event is refused outright.
+- Mode is recorded per event ('test' or 'live'); anything else is refused.
 - Same provider event ID + identical content = no-op (`duplicate`).
 - Same ID + different content = `conflict`: a conflict row plus a critical
   incident, and the original event is never rewritten.
@@ -38,8 +38,8 @@ def _validate(event: dict) -> None:
     missing = [field for field in REQUIRED_EVENT_FIELDS if field not in event]
     if missing:
         raise ValueError("missing event field(s): " + ",".join(missing))
-    if event["mode"] != "test":
-        raise ValueError("refused: commerce mode must be 'test'")
+    if event["mode"] not in ("test", "live"):
+        raise ValueError(f"refused: unknown commerce mode {event['mode']!r}")
 
 
 def record_provider_event(path: Path, event: dict) -> dict:

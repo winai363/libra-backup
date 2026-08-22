@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Offline commerce reconciliation — replays the durable inbox, calls nobody.
 
-    python3 scripts/libra_commerce_reconcile.py --ledger PATH --mode test --dry-run
-    python3 scripts/libra_commerce_reconcile.py --ledger PATH --mode test --apply
+    python3 scripts/libra_commerce_reconcile.py --ledger PATH --mode live --dry-run
+    python3 scripts/libra_commerce_reconcile.py --ledger PATH --mode live --apply
 
-`--dry-run` opens the database read-only and counts candidates. `--apply` is
-permitted only in test mode. Output is a single JSON object and never contains a
-payload, signature, secret, or customer detail.
+`--dry-run` opens the database read-only and counts candidates. `--mode` must be
+stated explicitly (`test` or `live`) so a live sweep is always a deliberate act.
+Output is a single JSON object and never contains a payload, signature, secret,
+or customer detail.
 
 Exit codes: 0 clean · 2 usage/config refused · 3 attention required
 (conflicts, manual_required, or open incidents).
@@ -61,8 +62,8 @@ def parse_args(argv=None):
 def main(argv=None) -> int:
     args = parse_args(argv)
 
-    if args.mode != "test":
-        print("live_mode_disabled: this lane runs in test mode only", file=sys.stderr)
+    if args.mode not in ("test", "live"):
+        print(f"unknown_mode: {args.mode!r} (expected 'test' or 'live')", file=sys.stderr)
         return 2
 
     ledger = Path(args.ledger)
@@ -83,7 +84,7 @@ def main(argv=None) -> int:
 
     incidents = [i for i in open_incidents(ledger)]
     report = {
-        "mode": "test",
+        "mode": args.mode,
         "events_seen": counts["events_seen"],
         "reconciled": reconciled_now if args.apply else counts["reconciled"],
         "pending": counts["pending"],

@@ -117,3 +117,22 @@ def test_module_can_never_return_verified(settings):
     source = (Path(__file__).resolve().parent.parent / "payhip_webhook.py").read_text()
     assert '"verified"' not in source
     assert "'verified'" not in source
+
+
+def test_payhip_event_mode_follows_configuration_and_stays_unverified():
+    """Live Payhip sales are still financially unverified — only the mode changes."""
+    live = CommerceSettings.from_sources({
+        "LIBRA_COMMERCE_MODE": "live",
+        "STRIPE_WEBHOOK_SECRET_LIVE": "whsec_live_fixture",
+        "STRIPE_EXPECTED_ACCOUNT_LIVE": "acct_live_fixture",
+        "PAYHIP_WEBHOOK_TOKEN_LIVE": "L" * 48,
+        "PAYHIP_ALLOWED_HOSTS": "payhip.com",
+        "PAYHIP_PRODUCT_IDS_LIVE": "kit-fr-test",
+    })
+
+    event = normalize_payhip_event(
+        (FIXTURES / "payhip_paid.json").read_bytes(), live, received_at=RECEIVED_AT
+    )
+
+    assert event["mode"] == "live"
+    assert event["verification_state"] == "unverified"

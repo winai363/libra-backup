@@ -83,17 +83,6 @@ def test_every_commerce_table_exists_after_init(tmp_path):
     } <= names
 
 
-def test_live_mode_events_are_refused(tmp_path):
-    db = tmp_path / "ledger.db"
-    live = {**_event(), "mode": "live"}
-    try:
-        record_provider_event(db, live)
-    except ValueError as exc:
-        assert "mode" in str(exc)
-    else:
-        raise AssertionError("live-mode event must be refused")
-
-
 def test_mark_provider_event_tracks_processing_state(tmp_path):
     db = tmp_path / "ledger.db"
     record_provider_event(db, _event())
@@ -126,3 +115,25 @@ def test_unknown_event_returns_none(tmp_path):
     db = tmp_path / "ledger.db"
     init_ledger(db)
     assert commerce_event(db, "stripe", "missing") is None
+
+
+def test_live_events_are_accepted_and_test_events_stay_separable(tmp_path):
+    """Both modes are storable; the mode column keeps them distinguishable."""
+    db = tmp_path / "ledger.db"
+    live = {**_event(event_id="evt_live_1"), "mode": "live"}
+
+    assert record_provider_event(db, live)["status"] == "inserted"
+    assert commerce_event(db, "stripe", "evt_live_1")["mode"] == "live"
+
+    assert record_provider_event(db, _event(event_id="evt_test_1"))["status"] == "inserted"
+    assert commerce_event(db, "stripe", "evt_test_1")["mode"] == "test"
+
+
+def test_an_unknown_mode_is_still_refused(tmp_path):
+    db = tmp_path / "ledger.db"
+    try:
+        record_provider_event(db, {**_event(), "mode": "sandbox"})
+    except ValueError as exc:
+        assert "mode" in str(exc)
+    else:
+        raise AssertionError("unknown mode must be refused")

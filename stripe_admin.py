@@ -2,9 +2,9 @@
 
 What a human still has to do once: create the Stripe account, pass KYC, link a
 Thai bank account, and click "Connect" inside Payhip. After that, everything
-here is idempotent and test-mode only:
+here is idempotent and mode-explicit:
 
-- verify the key is a TEST key and belongs to the expected account
+- verify the key matches the requested mode and belongs to the expected account
 - create (or complete) the webhook endpoint for our callback URL
 - hand the signing secret straight into `.env` without printing it
 
@@ -37,15 +37,23 @@ class StripeAdminError(RuntimeError):
         super().__init__(f"{code}: {detail}" if detail else code)
 
 
-def verify_account(stripe_module, *, api_key: str, expected_account: str) -> dict:
-    if not str(api_key).startswith("sk_test_"):
-        raise StripeAdminError("test_key_required", "only sk_test_ keys are accepted in this lane")
+def verify_account(stripe_module, *, api_key: str, expected_account: str, mode: str = "test") -> dict:
+    """Confirm the key is for the intended mode AND the intended account.
+
+    Mode is passed in explicitly: inferring it from the key would let a live key
+    quietly satisfy a test-mode setup, or the reverse.
+    """
+    if mode not in ("test", "live"):
+        raise StripeAdminError("unknown_mode", mode)
+    prefix = "sk_live_" if mode == "live" else "sk_test_"
+    if not str(api_key).startswith(prefix):
+        raise StripeAdminError(f"{mode}_key_required", f"expected a key starting with {prefix}")
     stripe_module.api_key = api_key
     account = stripe_module.Account.retrieve()
-    account_id = account.get("id") if hasattr(account, "get") else getattr(account, "id", None)
-    livemode = account.get("livemode") if hasattr(account, "get") else getattr(account, "livemode", None)
-    if livemode:
-        raise StripeAdminError("live_mode", "account reports livemode=true")
+    account_id = _get(account, "id")
+    livemode = _get(account, "livemode")
+    if bool(livemode) is not (mode == "live"):
+        raise StripeAdminError("mode_mismatch", f"account livemode={livemode} but mode={mode}")
     if account_id != expected_account:
         raise StripeAdminError("wrong_account", f"key belongs to {account_id}, expected {expected_account}")
     return {"account": account_id, "livemode": bool(livemode)}
@@ -74,7 +82,7 @@ def ensure_webhook_endpoint(stripe_module, *, url: str) -> dict:
         created = stripe_module.WebhookEndpoint.create(
             url=url,
             enabled_events=list(REQUIRED_EVENTS),
-            description="Libra commerce test-mode webhook",
+            description="Libra commerce webhook",
         )
         return {
             "created": True,

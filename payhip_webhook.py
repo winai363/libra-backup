@@ -110,7 +110,7 @@ def normalize_payhip_event(raw_body: bytes, settings, *, received_at: str) -> di
         "event_type": event_type,
         "occurred_at": occurred_at,
         "received_at": received_at,
-        "mode": "test",
+        "mode": settings.mode,
         # Payhip can never establish money on its own — Stripe is the source of truth.
         "verification_state": "unverified",
         "payload_hash": hashlib.sha256(raw_body).hexdigest(),

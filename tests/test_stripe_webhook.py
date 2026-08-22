@@ -211,3 +211,60 @@ def test_fixtures_and_normalized_output_carry_no_personal_data(settings):
         received_at="2026-08-22T10:00:00+00:00",
     )
     assert "email" not in json.dumps(normalized).lower()
+
+
+# ── live mode ────────────────────────────────────────────────────────────────
+
+@pytest.fixture
+def live_settings():
+    return CommerceSettings.from_sources({
+        "LIBRA_COMMERCE_MODE": "live",
+        "STRIPE_WEBHOOK_SECRET_LIVE": "whsec_live_fixture",
+        "STRIPE_EXPECTED_ACCOUNT_LIVE": "acct_live_fixture",
+        "PAYHIP_WEBHOOK_TOKEN_LIVE": "L" * 48,
+        "PAYHIP_ALLOWED_HOSTS": "payhip.com",
+        "PAYHIP_PRODUCT_IDS_LIVE": "GDRi5",
+    })
+
+
+def _live_raw(settings):
+    payload = json.loads(_raw("stripe_payment_intent_succeeded.json"))
+    payload["livemode"] = True
+    payload["account"] = settings.stripe_expected_account
+    raw = json.dumps(payload).encode()
+    ts = int(time.time())
+    return raw, _signature(raw, settings.stripe_webhook_secret, ts), ts
+
+
+def test_live_settings_accept_a_live_event(live_settings):
+    raw, header, ts = _live_raw(live_settings)
+
+    event = verify_stripe_event(raw, header, live_settings, now=ts + 5)
+
+    assert event["livemode"] is True
+    normalized = normalize_stripe_event(event, raw, received_at="2026-08-22T10:00:00+00:00")
+    assert normalized["mode"] == "live"
+    assert normalized["verification_state"] == "verified"
+
+
+def test_a_test_event_is_refused_while_configured_live(live_settings):
+    payload = json.loads(_raw("stripe_payment_intent_succeeded.json"))
+    payload["livemode"] = False
+    payload["account"] = live_settings.stripe_expected_account
+    raw = json.dumps(payload).encode()
+    ts = int(time.time())
+    header = _signature(raw, live_settings.stripe_webhook_secret, ts)
+
+    with pytest.raises(StripeWebhookError, match="wrong_mode"):
+        verify_stripe_event(raw, header, live_settings, now=ts + 5)
+
+
+def test_a_live_event_is_still_refused_while_configured_test(settings):
+    payload = json.loads(_raw("stripe_payment_intent_succeeded.json"))
+    payload["livemode"] = True
+    raw = json.dumps(payload).encode()
+    ts = int(time.time())
+    header = _signature(raw, settings.stripe_webhook_secret, ts)
+
+    with pytest.raises(StripeWebhookError, match="wrong_mode"):
+        verify_stripe_event(raw, header, settings, now=ts + 5)

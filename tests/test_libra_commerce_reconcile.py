@@ -35,7 +35,7 @@ def _pending(db):
     return db
 
 
-def test_dry_run_is_read_only_and_live_mode_is_refused(tmp_path):
+def test_dry_run_is_read_only_and_an_unknown_mode_is_refused(tmp_path):
     db = tmp_path / "ledger.db"
     _ingest(db, payhip_paid())
     _pending(db)
@@ -50,9 +50,15 @@ def test_dry_run_is_read_only_and_live_mode_is_refused(tmp_path):
     assert payload["pending"] == 1
     assert db.read_bytes() == before
 
-    live = _run("--ledger", str(db), "--mode", "live", "--apply")
-    assert live.returncode == 2
-    assert "live_mode_disabled" in live.stderr
+    # live is a permitted mode now (Payhip has no sandbox), but it must be
+    # spelled out — and anything that is not a real mode is still refused.
+    bogus = _run("--ledger", str(db), "--mode", "sandbox", "--apply")
+    assert bogus.returncode == 2
+    assert "unknown_mode" in bogus.stderr
+
+    live = _run("--ledger", str(db), "--mode", "live", "--dry-run")
+    assert live.returncode == 0
+    assert json.loads(live.stdout)["mode"] == "live"
 
 
 def test_apply_reconciles_pending_events_and_is_idempotent(tmp_path):

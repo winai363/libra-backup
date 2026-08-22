@@ -85,7 +85,11 @@ def verify_stripe_event(raw_body: bytes, signature: str, settings, *, now: int) 
     if not isinstance(event, dict):
         raise StripeWebhookError("malformed_event")
 
-    if event.get("livemode") is not False:
+    # The event's mode must equal the mode we are configured for. Accepting a
+    # test event while live would let anyone with the test secret manufacture
+    # revenue; accepting a live event while test would book real money into a
+    # ledger that believes it is a rehearsal.
+    if event.get("livemode") is not settings.expect_livemode:
         raise StripeWebhookError("wrong_mode")
     if event.get("account") != settings.stripe_expected_account:
         raise StripeWebhookError("wrong_account")
@@ -181,6 +185,7 @@ _PROJECTIONS = {
 
 
 def normalize_stripe_event(event, raw_body: bytes, *, received_at: str) -> dict:
+    """The stored `mode` comes from the event itself, never from configuration."""
     event = dict(event)
     event_type = str(event.get("type") or "")
     projection = _PROJECTIONS.get(event_type)
@@ -205,7 +210,7 @@ def normalize_stripe_event(event, raw_body: bytes, *, received_at: str) -> dict:
         "event_type": event_type,
         "occurred_at": occurred_at,
         "received_at": received_at,
-        "mode": "test",
+        "mode": "live" if event.get("livemode") else "test",
         "verification_state": "verified",
         "payload_hash": hashlib.sha256(raw_body).hexdigest(),
         "sanitized_payload": projection(obj),

@@ -42,8 +42,8 @@ def test_missing_secret_fails_closed(missing):
         CommerceSettings.from_sources(env)
 
 
-@pytest.mark.parametrize("mode", ["live", "Test", "", "production"])
-def test_only_lowercase_test_mode_is_accepted(mode):
+@pytest.mark.parametrize("mode", ["Test", "", "production", "sandbox"])
+def test_only_exact_lowercase_mode_names_are_accepted(mode):
     with pytest.raises(CommerceConfigError, match="commerce_mode"):
         CommerceSettings.from_sources({**VALID_ENV, "LIBRA_COMMERCE_MODE": mode})
 
@@ -86,3 +86,52 @@ def test_env_file_parser_does_not_write_process_environment(tmp_path, monkeypatc
 
 def test_env_file_missing_returns_empty_mapping(tmp_path):
     assert load_env_file(tmp_path / "nope.env") == {}
+
+
+# ── live mode (authorised by Bui 2026-08-22) ─────────────────────────────────
+# Payhip has no test mode: every real sale is a live Stripe event. Live is now
+# a permitted value — but it is never a default, and never silently inferred.
+
+LIVE_ENV = {
+    "LIBRA_COMMERCE_MODE": "live",
+    "STRIPE_WEBHOOK_SECRET_LIVE": "whsec_live_fixture",
+    "STRIPE_EXPECTED_ACCOUNT_LIVE": "acct_live_fixture",
+    "PAYHIP_WEBHOOK_TOKEN_LIVE": "L" * 48,
+    "PAYHIP_ALLOWED_HOSTS": "payhip.com,www.payhip.com",
+    "PAYHIP_PRODUCT_IDS_LIVE": "GDRi5",
+}
+
+
+def test_live_mode_reads_its_own_keys_never_the_test_ones():
+    settings = CommerceSettings.from_sources(LIVE_ENV)
+
+    assert settings.mode == "live"
+    assert settings.stripe_webhook_secret == "whsec_live_fixture"
+    assert settings.stripe_expected_account == "acct_live_fixture"
+    assert settings.payhip_product_ids == frozenset({"GDRi5"})
+
+
+def test_a_test_secret_can_never_satisfy_live_mode():
+    """Mixing the two would let a test-mode forgery approve real revenue."""
+    mixed = {**LIVE_ENV}
+    del mixed["STRIPE_WEBHOOK_SECRET_LIVE"]
+    mixed["STRIPE_WEBHOOK_SECRET_TEST"] = "whsec_test_fixture"
+
+    with pytest.raises(CommerceConfigError, match="missing"):
+        CommerceSettings.from_sources(mixed)
+
+
+@pytest.mark.parametrize("mode", ["Live", "LIVE", "production", "prod", ""])
+def test_only_exact_lowercase_modes_are_accepted(mode):
+    with pytest.raises(CommerceConfigError, match="commerce_mode"):
+        CommerceSettings.from_sources({**LIVE_ENV, "LIBRA_COMMERCE_MODE": mode})
+
+
+def test_expected_livemode_flag_matches_the_configured_mode():
+    assert CommerceSettings.from_sources(VALID_ENV).expect_livemode is False
+    assert CommerceSettings.from_sources(LIVE_ENV).expect_livemode is True
+
+
+def test_readiness_reports_the_mode_it_is_actually_in():
+    assert CommerceSettings.readiness(LIVE_ENV)["mode"] == "live"
+    assert CommerceSettings.readiness(LIVE_ENV)["ready"] is True

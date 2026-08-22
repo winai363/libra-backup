@@ -595,3 +595,13 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - สถานะ: `commerce_setup_check` = ready True ทุกข้อ; pytest 820 passed / 8 skipped / 2 failed เดิม
 - ⚠️ ยังไม่ได้ทำ **controlled test purchase** (ซื้อจริงด้วยบัตรทดสอบ Stripe 4242…) — เป็นด่านสุดท้ายก่อนขายจริงตาม runbook; ต้องพิสูจน์ delivery → Payhip event → Stripe match → refund → payout
 - ⚠️ Payhip อาจใช้ Stripe test mode ไม่ได้ (Payhip ใช้ live checkout ของตัวเอง) — ต้องตรวจว่าจะทดสอบยังไงโดยไม่เสียเงินจริง ก่อนแนะนำบุ๋ยซื้อทดสอบ
+
+## 2026-08-22 (ค่ำ) — เปิด LIVE MODE ตามคำสั่งบุ๋ย + เตรียมทดสอบซื้อจริง
+- **ผลตรวจที่ทำให้ต้องเปิด live**: Payhip **ไม่มี test/sandbox mode เลย** (เอกสาร + หน้าเว็บจริงไม่มีร่องรอย) ทุกการซื้อคือเงินจริง ⇒ webhook test-mode ที่ตั้งไว้จะไม่มีวันได้รับ event จากการขายจริง (Stripe แยก test/live เด็ดขาด)
+- Stripe account จริง `acct_1U76cEJUy2UX3wWt`: charges_enabled ✓ payouts_enabled ✓ details_submitted ✓ · TH/THB · capabilities: card_payments, **promptpay_payments**, transfers
+- **สิ่งที่แก้ให้รองรับ live** (TDD ทุกจุด): `settings.py` อ่านคีย์ตามโหมด (`*_TEST`/`*_LIVE`) + `expect_livemode` · `stripe_webhook` ตรวจ `livemode` ต้องตรงโหมด **ทั้งสองทาง** (test event ตอน live ก็ถูกปฏิเสธ) และ `mode` ที่บันทึกมาจาก event ไม่ใช่ config · `payhip_webhook` mode ตามคอนฟิก แต่ยัง `unverified` เสมอ · ledger รับทั้ง 2 โหมด ปฏิเสธโหมดแปลก · reporting รายงานโหมดที่อยู่ใน ledger จริง (มีทั้งคู่ = `mixed`) · reconcile CLI ต้องระบุ `--mode` ชัดเจน · `verify_account(mode=…)` ประกาศโหมดชัด ไม่เดาจากคีย์
+- **Payhip coupon API ใช้ได้**: `scripts/payhip_coupon.py` — กับดัก 2 อัน (1) Cloudflare 403 error 1010 ถ้าไม่มี browser User-Agent (2) API เป็น **form-encoded** ไม่ใช่ JSON (ส่ง JSON = `required_parameters` ทุกช่องหาย)
+- สร้างโค้ด **TESTRUN95** (ลด 95%, จำกัด 1 ครั้ง, ผูก GDRi5) เรียบร้อย → ซื้อทดสอบ ~€0.65 (~25฿)
+- seed live config ฝั่ง Payhip แล้ว: `PAYHIP_PRODUCT_IDS_LIVE`, `PAYHIP_WEBHOOK_TOKEN_LIVE` (URL ใหม่ ต้องเปลี่ยนใน Payhip Developer tab)
+- ⛔ **ยังขาดอย่างเดียว**: `STRIPE_SECRET_KEY_LIVE` (`sk_live_…`) — บุ๋ยต้องใส่ .env เอง ห้ามส่งผ่านแชท; หลังใส่แล้วรัน `scripts/commerce_setup_check.py --stripe` จะสร้าง live webhook + เขียน `STRIPE_WEBHOOK_SECRET_LIVE` ให้เอง
+- pytest 837 passed / 8 skipped / 2 failed เดิม

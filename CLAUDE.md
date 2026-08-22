@@ -35,7 +35,14 @@ Amazon บล็อก ebook อีก 2 เล่มวันเดียว (T
 - staging ห้ามเติม `queue.txt`, ห้ามตั้ง `ready/uploaded/live`, ห้ามเปิด Playwright, ห้ามคุย KDP (มีเทสต์กันไว้)
 - นิช visual: ไม่ผ่านด่านถ้าไม่มีภาพสาธิต ≥12 รูป + `image-provenance.json` ครบทุกรูป (`validate_book(..., require_visuals=True)`)
 
-## 🛒 เลนขายตรง Payhip + Stripe (test mode, 22 ส.ค. 2026)
+## 🛒 เลนขายตรง Payhip + Stripe (**LIVE MODE** — บุ๋ยอนุมัติ 22 ส.ค. 2026)
+- ⚠️ **Payhip ไม่มี sandbox** ทุกการซื้อคือเงินจริง → ระบบรันโหมด `live` (เดิม test)
+- คีย์แยกตามโหมดเด็ดขาด: `*_TEST` / `*_LIVE` — คีย์ test ใช้แทน live ไม่ได้ และ event ที่ `livemode` ไม่ตรงโหมดถูกปฏิเสธ `wrong_mode` ทั้งสองทาง
+- ⛔ **live secret key (`sk_live_…`) บุ๋ยต้องใส่ใน .env เองเท่านั้น ห้ามส่งผ่านแชท**
+- ทดสอบด้วยโค้ดส่วนลด: `scripts/payhip_coupon.py --create CODE --percent-off 95 --product-key GDRi5` (Payhip API เป็น form-encoded + ต้องมี browser UA ไม่งั้น Cloudflare 403)
+- สินค้าแรก: `payhip.com/b/GDRi5` €12.90 · หน้าขายเรา `/libra/growth/products/aquarelle-botanique-debutants-fr`
+
+## 🛒 กฎเดิมของเลนนี้ (ยังใช้ได้)
 - **Payhip สังเกต / Stripe พิสูจน์** — event จาก Payhip สร้างรายได้เองไม่ได้ ต้องมี Stripe verified ตรง id+จำนวน+สกุล
 - ⛔ **ห้ามขาย EPUB ของเล่มที่อยู่ใน KDP Select** (`payhip_catalog.guard_book_for_payhip` บล็อกไว้) — เล่มเก่า 39/64 อยู่ใน Select ห้ามเอาไป Payhip; เฉพาะเล่มใหม่ที่ไม่ enroll เท่านั้น
 - Payhip ไม่มี API สร้างสินค้า/webhook → ใช้ `payhip_admin.py` (Playwright) ต้องมี before/after evidence; ครั้งแรกรัน `scripts/payhip_publish.py --inspect` ยืนยัน SELECTORS ก่อน `--execute`

@@ -13,6 +13,12 @@ from typing import Mapping
 MAX_WEBHOOK_BYTES = 256 * 1024
 MIN_PAYHIP_TOKEN_LENGTH = 32
 
+# Payhip has no test mode: a real sale is always a live Stripe event, so live
+# is a permitted mode (authorised 22 Aug 2026). It is never a default and never
+# inferred — each mode reads its own suffixed keys so a test secret can never
+# stand in for a live one.
+VALID_MODES = ("test", "live")
+
 
 class CommerceConfigError(RuntimeError):
     """Raised when commerce configuration is absent or unusable."""
@@ -53,12 +59,13 @@ class CommerceSettings:
     @classmethod
     def from_sources(cls, env: Mapping) -> "CommerceSettings":
         mode = env.get("LIBRA_COMMERCE_MODE", "")
-        if mode != "test":
-            raise CommerceConfigError("commerce_mode_missing_or_not_test")
+        if mode not in VALID_MODES:
+            raise CommerceConfigError("commerce_mode_missing_or_invalid")
+        suffix = mode.upper()
         required = {
-            "stripe_webhook_secret": env.get("STRIPE_WEBHOOK_SECRET_TEST", ""),
-            "stripe_expected_account": env.get("STRIPE_EXPECTED_ACCOUNT_TEST", ""),
-            "payhip_webhook_token": env.get("PAYHIP_WEBHOOK_TOKEN_TEST", ""),
+            "stripe_webhook_secret": env.get(f"STRIPE_WEBHOOK_SECRET_{suffix}", ""),
+            "stripe_expected_account": env.get(f"STRIPE_EXPECTED_ACCOUNT_{suffix}", ""),
+            "payhip_webhook_token": env.get(f"PAYHIP_WEBHOOK_TOKEN_{suffix}", ""),
         }
         missing = sorted(name for name, value in required.items() if not value)
         if missing:
@@ -68,9 +75,14 @@ class CommerceSettings:
         return cls(
             mode=mode,
             payhip_allowed_hosts=_csv(env.get("PAYHIP_ALLOWED_HOSTS", "")),
-            payhip_product_ids=_csv(env.get("PAYHIP_PRODUCT_IDS_TEST", "")),
+            payhip_product_ids=_csv(env.get(f"PAYHIP_PRODUCT_IDS_{suffix}", "")),
             **required,
         )
+
+    @property
+    def expect_livemode(self) -> bool:
+        """What Stripe's `livemode` flag must equal for this configuration."""
+        return self.mode == "live"
 
     @staticmethod
     def readiness(env: Mapping) -> dict:
@@ -87,6 +99,6 @@ class CommerceSettings:
         return {"ready": not reasons, "mode": settings.mode, "reasons": reasons}
 
     def __repr__(self) -> str:
-        return "CommerceSettings(mode='test', secrets='<redacted>')"
+        return f"CommerceSettings(mode={self.mode!r}, secrets='<redacted>')"
 
     __str__ = __repr__

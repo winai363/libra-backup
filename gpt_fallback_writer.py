@@ -754,7 +754,7 @@ def write_book_from_topic(topic: dict, *, output_root: Path, preparation_only: b
         raise ValueError("frozen staging requires preparation_only=True")
     output_root = Path(output_root)
     if output_root.resolve() == KDP_DIR.resolve():
-        assert_kdp_mutation_allowed("writer_live_output")
+        assert_kdp_mutation_allowed("writer_live_output", topic.get("slug"))
 
     topic = _validate_topic(topic)
     book_dir = output_root / topic["slug"]

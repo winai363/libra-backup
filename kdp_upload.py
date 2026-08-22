@@ -432,7 +432,7 @@ def _get_book_price(slug: str) -> str:
 
 async def upload_to_kdp(slug: str):
     """Upload ebook to KDP"""
-    assert_kdp_mutation_allowed("new_title")
+    assert_kdp_mutation_allowed("new_title", slug)
     if not require_quality_gate(slug):
         return False
     book_dir = KDP_DIR / slug
@@ -1916,7 +1916,7 @@ if __name__ == "__main__":
     else:
         action = "new_title"
     try:
-        assert_kdp_mutation_allowed(action)
+        assert_kdp_mutation_allowed(action, slug)
     except KDPFrozenError as exc:
         print(f"{exc.code}: {exc.action}: {exc}", file=sys.stderr)
         sys.exit(73)

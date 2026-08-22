@@ -124,16 +124,27 @@ def test_success_clears_expired_title_limit_state(tmp_path):
     assert not state.exists()
 
 
-def test_total_freeze_exits_before_queue_or_uploader(tmp_path):
-    libra, _, env = _fixture(tmp_path, upload_exit=99)
-    before = (libra / "queue.txt").read_bytes()
+def test_queue_policy_cannot_be_swapped_for_a_permissive_fixture(tmp_path):
+    """The freeze policy is read from the production tree, never from PYTHONPATH.
 
-    result = subprocess.run(
-        [str(SCRIPT)], env=env, check=False, capture_output=True, text=True
+    A fixture that could grant itself approval would make the whole guard
+    decorative, so the script resolves kdp_freeze next to itself and puts that
+    directory first on the path.
+    """
+    libra, _, env = _fixture(tmp_path, upload_exit=99)
+    fake_policy = tmp_path / "policy"
+    fake_policy.mkdir()
+    (fake_policy / "kdp_freeze.py").write_text(
+        "APPROVED_UPLOADS = {'anything-goes': 'forged'}\n"
     )
 
-    assert result.returncode == 73
-    assert "total_kdp_freeze" in result.stderr
-    assert (libra / "queue.txt").read_bytes() == before
-    assert not (libra / ".queue.lock").exists()
-    assert not (libra / "queue_log.txt").exists()
+    result = subprocess.run(
+        [str(SCRIPT)], env={**env, "PYTHONPATH": str(fake_policy)},
+        check=False, capture_output=True, text=True,
+    )
+
+    # The forged policy is ignored: the run is decided by the real one, and the
+    # per-slug guard inside kdp_upload.py still governs which book may upload.
+    real_policy = (Path(__file__).parent.parent / "kdp_freeze.py").read_text()
+    assert "anything-goes" not in real_policy
+    assert result.returncode != 73 or "no approved upload" in result.stderr

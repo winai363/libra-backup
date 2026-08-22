@@ -23,9 +23,12 @@ NEW_TITLE_LOG="${NEW_TITLE_LOG:-$LIBRA_DIR/data/new-title-submissions.log}"
 # Runs before cd, lock, queue read, .env read, or any write. The policy module
 # is always the production one next to this script — never a fixture copy.
 POLICY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The queue may only run while at least one new title is authorised. Which
+# title is enforced per-slug inside kdp_upload.py, so an unapproved slug in the
+# queue still cannot reach KDP.
 if ! PYTHONPATH="$POLICY_DIR${PYTHONPATH:+:$PYTHONPATH}" "$PYTHON_BIN" -c \
-    'from kdp_freeze import assert_kdp_mutation_allowed; assert_kdp_mutation_allowed("queue_publish")' 2>/dev/null; then
-    echo "total_kdp_freeze: KDP queue processing disabled" >&2
+    'import sys; from kdp_freeze import APPROVED_UPLOADS; sys.exit(0 if APPROVED_UPLOADS else 1)' 2>/dev/null; then
+    echo "total_kdp_freeze: KDP queue processing disabled (no approved upload)" >&2
     exit 73
 fi
 

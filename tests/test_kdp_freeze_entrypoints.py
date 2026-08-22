@@ -167,3 +167,31 @@ def test_kdp_select_enroll_script_refuses_on_import():
     )
     assert result.returncode != 0
     assert "total_kdp_freeze" in result.stderr
+
+
+# ── The one authorised new title ─────────────────────────────────────────────
+
+def test_the_approved_book_can_reach_the_uploader(monkeypatch):
+    """The guard must let the authorised NEW title through — and only it."""
+    from kdp_freeze import APPROVED_UPLOADS
+
+    approved = next(iter(APPROVED_UPLOADS))
+    reached = {}
+    monkeypatch.setattr(kdp_upload, "require_quality_gate",
+                        lambda slug: reached.setdefault("slug", slug) and False)
+
+    asyncio.run(kdp_upload.upload_to_kdp(approved))
+
+    assert reached["slug"] == approved
+
+
+def test_existing_live_books_stay_untouchable_even_now(monkeypatch):
+    """A price or cover change is what caused the last two blocks."""
+    monkeypatch.setattr(kdp_upload, "async_playwright", lambda: pytest.fail("browser started"))
+    for slug in ("adhd-adults-workbook-es", "beginner-watercolor-spanish"):
+        with pytest.raises(KDPFrozenError):
+            asyncio.run(kdp_upload.update_cover(slug))
+        with pytest.raises(KDPFrozenError):
+            asyncio.run(kdp_upload.update_metadata(slug))
+        with pytest.raises(KDPFrozenError):
+            asyncio.run(kdp_upload.upload_to_kdp(slug))

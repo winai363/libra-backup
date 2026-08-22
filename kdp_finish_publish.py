@@ -22,7 +22,7 @@ LOGIN_SCRIPT = Path("/root/libra/kdp_login_full.py")
 
 
 async def finish_publish(slug: str, price: str = "2.99") -> bool:
-    assert_kdp_mutation_allowed("publish")
+    assert_kdp_mutation_allowed("publish", slug)
     book_dir = KDP_DIR / slug
     listing_file = book_dir / "listing.json"
     if not listing_file.exists():

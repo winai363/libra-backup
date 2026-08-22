@@ -531,3 +531,14 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - **ผล QA เปิดดูของจริง**: 11,488 คำ / 73 หน้า / ภาพ 12 รูปอยู่ในหน้าที่ถูกต้องพร้อม caption ฝรั่งเศส / EPUB มี 13 ภาพ / ปกเป็นภาพวาดสีน้ำจริงไม่ใช่ gradient / references 13 รายการมี URL / editorial 8 ทุกมิติ ไม่มี critical issue / fact checks supported
 - ต้นทุนที่บันทึกได้ $0.14 (editorial+seo) — ยังไม่รวมค่าเขียน+ภาพ 12 รูป (~$0.5-1) เพราะ writer ไม่ได้เซฟ cost report ในสาย staging; แก้แล้วให้เซฟ (เล่มถัดไปจะครบ)
 - **ยังไม่แตะ KDP เลย**: /root/kdp ยังมี 78 โฟลเดอร์เท่าเดิม ไม่มี queue.txt ไม่มี Playwright ไม่มี freeze ถูกปลด
+
+## 2026-08-22 (คืน) — บุ๋ยอนุมัติอัปโหลดเล่มแรกหลัง freeze: aquarelle-botanique-debutants-fr
+- บุ๋ยตรวจเล่มใน staging แล้วสั่ง "ทำปกตามมาตรฐาน + โพส KDP ตามรอบเวลาได้เลย" (คำยืนยันใหม่หลังผมเตือนความเสี่ยงบล็อกครั้งที่ 5 ไปแล้ว 2 รอบ)
+- ปก: ตรวจแล้วเป็นไปตามมาตรฐาน v2 อยู่แล้ว — `detect_genre` = `creative` → template illustration-led (ภาพวาดสีน้ำ + ชื่อโซนบน), `_thumbnail_ok` = True (อ่านออกที่ 160px), 2 ฟอนต์, ไม่มี drop-shadow/ป้ายปี
+- **วิธีปลด freeze ที่ใช้ (สำคัญ)**: ไม่ได้ปิด freeze ทั้งระบบ แต่เพิ่ม `APPROVED_UPLOADS = {slug: เหตุผล}` + `NEW_TITLE_ACTIONS` ใน `kdp_freeze.py` แล้วส่ง `slug` เข้า `assert_kdp_mutation_allowed(action, slug)` ทุกจุด ⇒ เล่มที่อนุมัติขึ้นชั้นได้ แต่ **38 เล่มเดิมยัง republish/เปลี่ยนราคา/แก้ metadata/เปลี่ยนปกไม่ได้เลย** (มีเทสต์ยืนยันด้วยชื่อ slug จริง)
+- เทสต์กันพลาด: `test_no_live_catalogue_slug_is_ever_on_the_approved_list` อ่าน /root/kdp จริง ถ้าเผลอใส่ slug ที่มี ASIN ลง APPROVED_UPLOADS จะ fail ทันที
+- เชลล์คิว: guard เปลี่ยนจาก "raise เสมอ" เป็น "มี APPROVED_UPLOADS ไหม" (ด่านต่อ slug อยู่ใน kdp_upload.py อีกชั้น); เทสต์ยืนยันว่า policy ปลอมใน PYTHONPATH แทรกไม่ได้
+- คิว: `queue.txt` = 1 slug, cron เปิดที่ **09:00 + 13:00** (ย้ายจาก 02:30/06:30 เพราะ `kdp_session_ensure` รัน 08:30 — รอบเดิมจะใช้ session อายุ 18-22 ชม. แล้วล้ม)
+- เล่มถูกคัดลอกจาก staging → `/root/kdp/aquarelle-botanique-debutants-fr` (staging ยังอยู่เป็นต้นฉบับ), status=ready, ใส่ `ai_content_disclosure={'text':'ai_assisted','images':'ai_generated'}` + marketplace=amazon.fr, หมวดแก้ Basketry ออกแล้ว
+- `python3 quality_gate.py <slug> --require-pdf --require-editorial` = **PASS** บนสำเนาจริง
+- ⚠️ **TODO หลังเล่มขึ้น LIVE**: ลบ slug ออกจาก APPROVED_UPLOADS + ปิด cron คิวกลับ + รอดูผล 2-4 สัปดาห์ก่อนเล่มถัดไป (ไม่มี auto-unlock)

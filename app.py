@@ -625,10 +625,10 @@ def check_auth(request: Request):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
-def reject_frozen_kdp_mutation(action: str) -> None:
+def reject_frozen_kdp_mutation(action: str, slug: str | None = None) -> None:
     """TOTAL KDP FREEZE: refuse before reading or writing any listing state."""
     try:
-        assert_kdp_mutation_allowed(action)
+        assert_kdp_mutation_allowed(action, slug)
     except KDPFrozenError as exc:
         raise HTTPException(status_code=423, detail={
             "code": exc.code,
@@ -764,7 +764,7 @@ async def update_status(slug: str, request: Request):
         raise HTTPException(status_code=400, detail="Status can only be changed to ready or archived manually")
     if new_status == "ready":
         # "ready" is the publish queue's entry state — archived stays local.
-        reject_frozen_kdp_mutation("mark_ready")
+        reject_frozen_kdp_mutation("mark_ready", slug)
         from quality_gate import validate_book, write_report
         quality = validate_book(slug, require_pdf=True)
         write_report(quality)
@@ -819,7 +819,7 @@ async def create_book(request: Request):
 async def request_approval(slug: str, request: Request):
     """Send approval request to Telegram before uploading to KDP"""
     check_auth(request)
-    reject_frozen_kdp_mutation("request_approval")
+    reject_frozen_kdp_mutation("request_approval", slug)
     book_dir = get_book_dir(slug)
     listing_file = book_dir / "listing.json"
     if not listing_file.exists():
@@ -856,7 +856,7 @@ async def request_approval(slug: str, request: Request):
 async def approve_kdp(slug: str, request: Request):
     """Approve KDP upload and trigger the upload process"""
     check_auth(request)
-    reject_frozen_kdp_mutation("approve_kdp")
+    reject_frozen_kdp_mutation("new_title", slug)
     book_dir = get_book_dir(slug)
     listing_file = book_dir / "listing.json"
     if not listing_file.exists():

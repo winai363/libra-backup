@@ -11,6 +11,15 @@ Amazon บล็อก ebook อีก 2 เล่มวันเดียว (T
 5. โหมดปัจจุบัน = **PASSIVE MODE ถาวร**: เล่มที่เหลือ ~38 ขายเอง, งบ/แรง = 0, ห้าม unpublish, cron ที่เหลือ = read-only เท่านั้น (sales sync / bookshelf roster / session ensure / รายงาน). ก่อนเปิด cron ใดๆ คืน เช็ค memory `libra-blocked-adhd-books-20260802` ก่อน
 6. แผน expert review 2 ส.ค. (ส.ค. ammo month / Gate 31 ส.ค. / October Play) **ยกเลิกทั้งหมด** — ห้ามติดตั้ง gate_20260831.py หรือ cron ใหม่ใดๆ ของแผนนั้น; Ebrolis + LovelyBooks push ยกเลิก
 
+### 🟡 ข้อยกเว้นที่บุ๋ยอนุมัติ (22 ส.ค. 2026) — เล่มใหม่ 1 เล่มเท่านั้น
+บุ๋ยตรวจเล่ม staging แล้วสั่งให้อัปโหลด `aquarelle-botanique-debutants-fr` (สีน้ำพฤกษศาสตร์ FR, 73 หน้า, ภาพสาธิต 12 รูป, editorial 8/8)
+- อนุญาตผ่าน `APPROVED_UPLOADS` ใน `kdp_freeze.py` — **ต่อ slug** ไม่ใช่เปิดทั้งระบบ
+- action ที่ปลดให้เฉพาะเล่มนี้: `new_title / queue_publish / publish / writer_live_output` เท่านั้น
+- ⛔ **38 เล่มเดิมยังแตะไม่ได้เลย**: republish / price / metadata / cover / content ยังถูกบล็อกทุก slug (นี่คือสาเหตุบล็อก 2 ครั้งหลัง ไม่ใช่เล่มใหม่)
+- คิว: `queue.txt` มี slug เดียว, cron `process_kdp_queue.sh` เปิดที่ **09:00 + 13:00** (ย้ายจาก 02:30/06:30 เพราะ session refresh คือ 08:30 — รอบเดิมจะใช้ session อายุ 18 ชม.)
+- **หลังเล่มขึ้น LIVE แล้ว ให้ลบ slug ออกจาก `APPROVED_UPLOADS` ทันที** และปิด cron คิวกลับ — ไม่มี auto-unlock เล่มถัดไป ต้องให้บุ๋ยสั่งใหม่ทุกครั้ง
+- รอดูผล 2-4 สัปดาห์ก่อนพิจารณาเล่มถัดไป (บุ๋ยสั่ง: อัปทีละเล่ม)
+
 ### ด่านบังคับใช้ในโค้ด + เลน staging ที่อนุญาต (22 ส.ค. 2026)
 
 `kdp_freeze.py` = **source of truth ที่รันได้จริง** ไม่ใช่แค่ข้อความเตือน. ทุกทางที่ยิง KDP ได้ถูกปิดหมด:

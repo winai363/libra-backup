@@ -21,22 +21,39 @@ _STOP = {"and", "the", "of", "for", "a", "an", "to", "in", "ebooks", "ebook",
 
 
 def _tokens(s: str) -> set:
+    """Tokens for matching a MIDDLE path segment — store noise removed."""
     return set(re.findall(r"[a-z0-9à-ÿ]+", (s or "").lower())) - _STOP
 
 
-def _score(target_tokens: set, option_text: str) -> float:
-    o = _tokens(option_text)
+def _leaf_tokens(s: str) -> set:
+    """Tokens for matching a LEAF placement — stop-words kept.
+
+    A leaf's own name is the category name, even when that name is a word we
+    ignore elsewhere: "Art > Painting > General" ends at a real checkbox
+    labelled "General". Stripping it left an empty target that scored 0 against
+    every option and cancelled the upload.
+    """
+    return set(re.findall(r"[a-z0-9à-ÿ]+", (s or "").lower()))
+
+
+def _score(target_tokens: set, option_text: str, *, leaf: bool = False) -> float:
+    """Jaccard overlap. `leaf=True` keeps stop-words on BOTH sides so a leaf
+    named "General" can match the checkbox labelled "General"."""
+    o = _leaf_tokens(option_text) if leaf else _tokens(option_text)
     if not o or not target_tokens:
         return 0.0
     inter = len(target_tokens & o)
-    return inter / len(target_tokens | o)  # Jaccard
+    return inter / len(target_tokens | o)
 
 
 def _path_segments(path: str) -> list[str]:
     segs = [p.strip() for p in re.split(r"[>›/|]", path) if p.strip()]
-    # Keep only segments with real content tokens — this drops store-root prefixes
-    # like "Kindle eBooks" / "Books" so segment 0 is the real level-0 category.
-    return [s for s in segs if _tokens(s)]
+    # Drop store-root prefixes ("Kindle eBooks", "Books") so segment 0 is the
+    # real level-0 category — but only from the FRONT. A trailing segment is the
+    # leaf and is kept even when its name is a stop-word.
+    while len(segs) > 1 and not _tokens(segs[0]):
+        segs.pop(0)
+    return [s for i, s in enumerate(segs) if _tokens(s) or i == len(segs) - 1]
 
 
 async def _enabled_selects(page):
@@ -141,7 +158,7 @@ async def _check_best_placement(page, target_tokens, logger):
         return None
     best, best_score = boxes[0], -1.0
     for b in boxes:
-        sc = _score(target_tokens, b["label"])
+        sc = _score(target_tokens, b["label"], leaf=True)
         if sc > best_score:
             best, best_score = b, sc
     # Refuse a zero-overlap placement. When the drill-down lands in the wrong
@@ -306,7 +323,7 @@ async def set_categories(page, target_paths, logger=None):
         # the placement leaf; once segments run out we match deeper selects against
         # the leaf tokens, which correctly scores 0 on a wrong subtree and stops.
         mids = segs[1:-1]               # subcategory levels between L0 and the leaf
-        leaf_tokens = _tokens(segs[-1]) or rest_tokens
+        leaf_tokens = _leaf_tokens(segs[-1]) or rest_tokens
         mi = 0
         for _ in range(2):
             s2 = await _pick_select(page, rest_tokens)

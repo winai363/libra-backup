@@ -586,3 +586,12 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - `commerce_setup_check.py` = **ready: True** ทุกข้อ
 - ⚠️ บุ๋ยส่ง secret key มาในแชท (test key) — ควร roll คีย์นี้ใน Stripe หลังใช้งานจริงเริ่ม และห้ามส่ง live key แบบเดียวกันเด็ดขาด
 - เหลือขั้นเดียว: อัปโหลดสินค้าใน Payhip ด้วยชุดที่เตรียมไว้ `/root/downloads/payhip-aquarelle-botanique-debutants-fr/` แล้วส่ง URL `payhip.com/b/xxxx` กลับมา → `scripts/payhip_record_product.py` + เติม `PAYHIP_PRODUCT_IDS_TEST` (ตอนนี้ placeholder `pending-first-product`)
+
+## 2026-08-22 (จบวัน) — สินค้าแรกขึ้นขายจริงบน Payhip: payhip.com/b/GDRi5
+- บุ๋ยอัปโหลดสินค้าเองผ่าน Claude in Chrome (ส่วนขยายในบราวเซอร์บุ๋ย — ผ่าน CAPTCHA เพราะล็อกอินอยู่แล้ว); ผมส่ง prompt สำเร็จรูปให้วางในแผง Claude ด้านขวา
+- `scripts/payhip_record_product.py` **เปิดหน้าสาธารณะตรวจจริง** → `title_found: true` (646KB HTML มีชื่อ "Aquarelle Botanique pour Début…") จึงบันทึก `commerce_products` เป็น live · €12.90
+- `PAYHIP_PRODUCT_IDS_TEST` เปลี่ยนจาก placeholder เป็น `GDRi5,aquarelle-botanique-debutants-fr` (ต้องมี ไม่งั้น webhook Payhip จะปฏิเสธด้วย unknown_product)
+- **ทดสอบครบวงจรจริง**: หน้า `/libra/growth/products/aquarelle-botanique-debutants-fr` → 200 · คลิกลิงก์ติดตาม → 307 ไป payhip.com/b/GDRi5 · บันทึก `payhip_outbound` + click_id 32 หลัก + `attribution_status: unknown` (ลบ event ทดสอบออกแล้ว hub_events=0)
+- สถานะ: `commerce_setup_check` = ready True ทุกข้อ; pytest 820 passed / 8 skipped / 2 failed เดิม
+- ⚠️ ยังไม่ได้ทำ **controlled test purchase** (ซื้อจริงด้วยบัตรทดสอบ Stripe 4242…) — เป็นด่านสุดท้ายก่อนขายจริงตาม runbook; ต้องพิสูจน์ delivery → Payhip event → Stripe match → refund → payout
+- ⚠️ Payhip อาจใช้ Stripe test mode ไม่ได้ (Payhip ใช้ live checkout ของตัวเอง) — ต้องตรวจว่าจะทดสอบยังไงโดยไม่เสียเงินจริง ก่อนแนะนำบุ๋ยซื้อทดสอบ

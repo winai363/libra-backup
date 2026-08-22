@@ -542,3 +542,16 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - เล่มถูกคัดลอกจาก staging → `/root/kdp/aquarelle-botanique-debutants-fr` (staging ยังอยู่เป็นต้นฉบับ), status=ready, ใส่ `ai_content_disclosure={'text':'ai_assisted','images':'ai_generated'}` + marketplace=amazon.fr, หมวดแก้ Basketry ออกแล้ว
 - `python3 quality_gate.py <slug> --require-pdf --require-editorial` = **PASS** บนสำเนาจริง
 - ⚠️ **TODO หลังเล่มขึ้น LIVE**: ลบ slug ออกจาก APPROVED_UPLOADS + ปิด cron คิวกลับ + รอดูผล 2-4 สัปดาห์ก่อนเล่มถัดไป (ไม่มี auto-unlock)
+
+## 2026-08-22 (ดึก) — เลน Payhip/Stripe เสร็จครบ 10/10 tasks (test mode)
+- ติดตั้ง `stripe==15.5.1` ด้วย `pip install --break-system-packages` (เครื่องนี้ใช้ system dist-packages ทั้งหมด ไม่มี venv) + pin ใน requirements.txt
+- **กับดัก SDK ที่เสียเวลาที่สุด**: `stripe.WebhookSignature.verify_header()` ฟอร์แมต payload ด้วย `%s` — ถ้าส่ง **bytes** เข้าไปมันจะเซ็น `repr` (`b'{...}'`) ไม่ใช่ body จริง → ลายเซ็นไม่มีวันตรง **ต้อง `.decode('utf-8')` ก่อนเสมอ**
+- กับดักที่ 2: `construct_event()` คืน StripeObject ที่ไม่ใช่ dict (`.get()` พัง) → ใช้ `verify_header` ตรวจลายเซ็น แล้ว `json.loads(raw)` เอง ทุกอย่างเป็น dict ธรรมดา ตรวจสอบง่าย
+- กับดักที่ 3: ลำดับ error ต้องเป็น **signature ก่อน freshness** — ถ้าเช็ค stale ก่อน ลายเซ็นปลอมที่ใส่ `t=1` จะถูกรายงานเป็น "stale" ทั้งที่มันคือของปลอม
+- โมดูลใหม่: `stripe_webhook.py` · `commerce_reconciliation.py` · `commerce_reporting.py` · `commerce_growth.py` · `scripts/libra_commerce_reconcile.py` + routes ใน app.py + runbook `docs/runbooks/libra-commerce-test-mode.md`
+- **ตรรกะเงินที่บังคับด้วยเทสต์**: Payhip paid = `payment_pending` รายได้ 0 เสมอ · Stripe verified ที่ตรง id+จำนวน+สกุล = `paid_verified` · จำนวนไม่ตรง = `reconciliation_failed` + incident · refund ย้อนรายได้เฉพาะ `succeeded` · terminal refund เปลี่ยนใจไม่ได้ (เปิด incident แทน) · refund > gross ปฏิเสธ · `balance.available` = สังเกตเฉยๆ ห้ามสร้าง fee/payout item · payout = settlement ค้างที่ `pending_reconciliation` เพราะยังไม่มีแหล่ง balance-transaction ที่ได้อนุญาต · dispute = `manual_required`
+- ค่าที่ไม่รู้ = `None` + flag `*_complete: false` **ห้ามใส่ 0** (0 ทำให้กำไรดูดีเกินจริง); สกุลเงินไม่รวมกันเด็ดขาด ไม่มี `converted_total`
+- `commerce_growth.py` เป็น pure function `paid_spend_minor: 0` ทุกเส้นทาง; incident เรื่องเงินตัดหน้าทุกกฎการเติบโต
+- tracking: `make_tracking_token(..., destination_kind, allowed_hosts)` — allowlist แยกต่อ kind, ปฏิเสธ userinfo (`https://payhip.com@evil.example`) และ fragment; **ยังไม่แปะ click_id ต่อท้าย URL** จนกว่าจะพิสูจน์ว่ามันรอดผ่าน checkout จริง; attribution = `unknown` ไม่ใช่ 0
+- Verification: `pytest tests/ -q` = **785 passed / 8 skipped / 2 failed ที่พังอยู่ก่อนแล้ว**; ไม่มีการติดต่อ Payhip/Stripe จริงเลย ไม่มีการลงทะเบียน webhook ไม่มี cron ใหม่
+- สถานะ: `implemented_test_mode` — ขั้นต่อไปเป็นงานมือของบุ๋ย (สร้างสินค้าใน Payhip, KYC+บัญชีธนาคาร Stripe, เชื่อม Payhip↔Stripe, ลงทะเบียน webhook, ใส่ secret ใน .env) แล้วค่อยทำธุรกรรมทดสอบ 1 รายการ

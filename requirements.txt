@@ -5,3 +5,4 @@ openai
 python-dotenv
 pillow
 playwright
+stripe==15.5.1

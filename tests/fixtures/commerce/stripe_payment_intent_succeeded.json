@@ -1,0 +1,21 @@
+{
+  "id": "evt_test_pi_1",
+  "object": "event",
+  "account": "acct_test_fixture",
+  "api_version": "2026-06-30",
+  "created": 1787000000,
+  "livemode": false,
+  "type": "payment_intent.succeeded",
+  "data": {
+    "object": {
+      "id": "pi_test_1",
+      "object": "payment_intent",
+      "amount": 1290,
+      "amount_received": 1290,
+      "currency": "eur",
+      "status": "succeeded",
+      "latest_charge": "ch_test_1",
+      "metadata": {"payhip_sale_id": "sale_test_1"}
+    }
+  }
+}

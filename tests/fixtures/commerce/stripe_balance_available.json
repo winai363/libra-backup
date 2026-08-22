@@ -1,0 +1,19 @@
+{
+  "id": "evt_test_balance",
+  "object": "event",
+  "account": "acct_test_fixture",
+  "created": 1787002000,
+  "livemode": false,
+  "type": "balance.available",
+  "data": {
+    "object": {
+      "object": "balance",
+      "available": [
+        {
+          "amount": 1240,
+          "currency": "eur"
+        }
+      ]
+    }
+  }
+}

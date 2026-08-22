@@ -1,0 +1,19 @@
+{
+  "id": "evt_test_re_updated",
+  "object": "event",
+  "account": "acct_test_fixture",
+  "created": 1787001000,
+  "livemode": false,
+  "type": "refund.updated",
+  "data": {
+    "object": {
+      "id": "re_test_1",
+      "object": "refund",
+      "amount": 400,
+      "currency": "eur",
+      "status": "succeeded",
+      "payment_intent": "pi_test_1",
+      "reason": "requested_by_customer"
+    }
+  }
+}

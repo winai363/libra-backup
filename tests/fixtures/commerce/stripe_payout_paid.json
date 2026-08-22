@@ -1,0 +1,19 @@
+{
+  "id": "evt_test_payout",
+  "object": "event",
+  "account": "acct_test_fixture",
+  "created": 1787003000,
+  "livemode": false,
+  "type": "payout.paid",
+  "data": {
+    "object": {
+      "id": "po_test_1",
+      "object": "payout",
+      "amount": 1240,
+      "currency": "eur",
+      "status": "paid",
+      "arrival_date": 1787100000,
+      "automatic": true
+    }
+  }
+}

@@ -44,6 +44,10 @@ APPROVED_AMAZON_HOSTS = frozenset(
     _AMAZON_MARKETPLACE_BASES | {f"www.{base}" for base in _AMAZON_MARKETPLACE_BASES}
 )
 
+# Each destination kind carries its own allowlist. Widening the Amazon set to
+# fit a second storefront would weaken the check that protects the first.
+DEFAULT_ALLOWED_HOSTS = {"amazon": APPROVED_AMAZON_HOSTS}
+
 TRACKING_SECRET_ENV = "LIBRA_GROWTH_TRACKING_SECRET"
 
 
@@ -66,13 +70,25 @@ def _secret_key() -> bytes:
     return secret.encode("utf-8")
 
 
-def _validate_destination(destination) -> str:
+def _validate_destination(destination, allowed_hosts=None) -> str:
+    """Reject anything that is not an exact-host https URL on the allowlist.
+
+    urlsplit puts userinfo in `username`, so "https://payhip.com@evil.example/"
+    resolves its hostname to evil.example — that trick is rejected explicitly
+    rather than relied on. Fragments are rejected too: they never belong on a
+    storefront link and are a cheap way to smuggle text past a reviewer.
+    """
+    allowed = frozenset(allowed_hosts) if allowed_hosts is not None else APPROVED_AMAZON_HOSTS
     if not isinstance(destination, str) or not destination:
         raise InvalidDestinationError("destination must be a non-empty URL string")
     parts = urlsplit(destination)
     if parts.scheme != "https" or not parts.hostname:
         raise InvalidDestinationError(f"destination must be an https URL: {destination!r}")
-    if parts.hostname.lower() not in APPROVED_AMAZON_HOSTS:
+    if parts.username or parts.password:
+        raise InvalidDestinationError("destination must not carry userinfo")
+    if parts.fragment:
+        raise InvalidDestinationError("destination must not carry a fragment")
+    if parts.hostname.lower() not in allowed:
         raise InvalidDestinationError(f"destination host not approved: {parts.hostname!r}")
     return destination
 
@@ -86,7 +102,8 @@ def _b64decode(value: str) -> bytes:
     return base64.urlsafe_b64decode(value + padding)
 
 
-def make_tracking_token(slug: str, campaign: str, destination: str) -> str:
+def make_tracking_token(slug: str, campaign: str, destination: str, *,
+                        destination_kind: str = "amazon", allowed_hosts=None) -> str:
     """Mint a signed tracking token for one outbound Amazon link.
 
     Raises InvalidDestinationError if `destination` is not an approved
@@ -98,15 +115,27 @@ def make_tracking_token(slug: str, campaign: str, destination: str) -> str:
         raise ValueError("slug is required")
     if not isinstance(campaign, str) or not campaign:
         raise ValueError("campaign is required")
-    _validate_destination(destination)
+    if allowed_hosts is None:
+        allowed_hosts = DEFAULT_ALLOWED_HOSTS.get(destination_kind)
+        if allowed_hosts is None:
+            raise InvalidDestinationError(f"unknown destination kind: {destination_kind!r}")
+    _validate_destination(destination, allowed_hosts)
 
-    payload = {"slug": slug, "campaign": campaign, "destination": destination}
+    payload = {
+        "slug": slug,
+        "campaign": campaign,
+        "destination": destination,
+        "destination_kind": destination_kind,
+        # Opaque per-click id, minted before the token is signed so it is
+        # covered by the signature and can be matched to a hub event.
+        "click_id": secrets.token_hex(16),
+    }
     body = _b64encode(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8"))
     signature = hmac.new(_secret_key(), body.encode("ascii"), hashlib.sha256).digest()
     return f"{body}.{_b64encode(signature)}"
 
 
-def resolve_tracking_token(token: str) -> dict:
+def resolve_tracking_token(token: str, allowed_hosts=None) -> dict:
     """Verify a token's signature and re-check the destination allowlist
     (defense in depth against a hand-crafted or tampered token), returning
     the decoded {"slug", "campaign", "destination"} payload.
@@ -136,23 +165,39 @@ def resolve_tracking_token(token: str) -> dict:
     if not isinstance(payload, dict) or {"slug", "campaign", "destination"} - payload.keys():
         raise ValueError("malformed tracking token payload")
 
-    _validate_destination(payload["destination"])
+    kind = payload.get("destination_kind", "amazon")
+    hosts_by_kind = allowed_hosts if allowed_hosts is not None else DEFAULT_ALLOWED_HOSTS
+    hosts = hosts_by_kind.get(kind)
+    if hosts is None:
+        raise InvalidDestinationError(f"destination kind not allowed here: {kind!r}")
+    _validate_destination(payload["destination"], hosts)
+    payload.setdefault("destination_kind", "amazon")
+    payload.setdefault("click_id", "")
     return payload
 
 
-def build_outbound_event(slug: str, campaign: str, *, now: datetime | None = None) -> dict:
+def build_outbound_event(slug: str, campaign: str, *, now: datetime | None = None,
+                         event_kind: str = "amazon_outbound", click_id: str | None = None) -> dict:
     """Build one `amazon_outbound` hub event. Stores only a random event
     key, slug, campaign, and timestamp — never an IP address, user agent,
     cookie, or email. Each call returns a fresh event_key, so repeated
     clicks are recorded as separate events rather than deduplicated."""
     occurred_at = (now or datetime.now(timezone.utc)).isoformat()
+    payload: dict = {}
+    if click_id:
+        payload = {
+            "click_id": click_id,
+            # A click is not a sale. Until a controlled transaction proves the
+            # id survives Payhip checkout, nothing may be attributed to it.
+            "attribution_status": "unknown",
+        }
     return {
         "event_key": secrets.token_hex(16),
         "occurred_at": occurred_at,
         "slug": slug,
         "campaign": campaign,
-        "event_kind": "amazon_outbound",
-        "payload": {},
+        "event_kind": event_kind,
+        "payload": payload,
     }
 
 

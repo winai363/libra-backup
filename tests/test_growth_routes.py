@@ -138,10 +138,10 @@ def test_book_hub_page_renders_with_one_tracked_cta(client, ledger):
     cta_path = body[start:end]
     token = cta_path.rsplit("/", 1)[-1]
     payload = resolve_tracking_token(token)
-    assert payload == {
-        "slug": "book-a", "campaign": "content-hub",
-        "destination": "https://www.amazon.com/dp/B0TESTASIN1",
-    }
+    assert payload["slug"] == "book-a"
+    assert payload["campaign"] == "content-hub"
+    assert payload["destination"] == "https://www.amazon.com/dp/B0TESTASIN1"
+    assert payload["destination_kind"] == "amazon"
 
 
 def test_book_hub_page_unknown_slug_is_404(client):
@@ -216,10 +216,10 @@ def test_article_hub_page_renders_with_one_tracked_cta(client, ledger):
     end = body.index('"', start)
     token = body[start:end].rsplit("/", 1)[-1]
     payload = resolve_tracking_token(token)
-    assert payload == {
-        "slug": "book-a", "campaign": "article-1",
-        "destination": "https://www.amazon.com/dp/B0TESTASIN1",
-    }
+    assert payload["slug"] == "book-a"
+    assert payload["campaign"] == "article-1"
+    assert payload["destination"] == "https://www.amazon.com/dp/B0TESTASIN1"
+    assert payload["destination_kind"] == "amazon"
 
 
 def test_article_hub_page_unknown_id_is_404(client):

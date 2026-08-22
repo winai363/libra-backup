@@ -33,7 +33,11 @@ def test_make_and_resolve_tracking_token_round_trips():
 
     payload = resolve_tracking_token(token)
 
-    assert payload == {"slug": "book-a", "campaign": "organic-1", "destination": AMAZON_URL}
+    assert payload["slug"] == "book-a"
+    assert payload["campaign"] == "organic-1"
+    assert payload["destination"] == AMAZON_URL
+    assert payload["destination_kind"] == "amazon"
+    assert len(payload["click_id"]) == 32
 
 
 @pytest.mark.parametrize("host", sorted(APPROVED_AMAZON_HOSTS))

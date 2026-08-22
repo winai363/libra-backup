@@ -176,3 +176,48 @@ signature.
 - **Attribution is unknown.** We do not yet know whether a click id survives
   Payhip checkout, so no sale is credited to a campaign. The summary says
   `unknown` rather than showing a misleading zero.
+
+---
+
+## What is automated now (22 Aug 2026) — and the three things that are not
+
+Run the readiness check any time; it prints booleans and reason codes, never values:
+
+```bash
+cd /root/libra && python3 scripts/commerce_setup_check.py
+```
+
+| Step | Who | How |
+|---|---|---|
+| Payhip account (email + password) | **human, once** | sign up at payhip.com, then put `PAYHIP_EMAIL` / `PAYHIP_PASSWORD` in `.env` |
+| Stripe account + KYC + Thai bank | **human, once** | identity documents and 2FA cannot be delegated |
+| Payhip → Connect Stripe | **human, once** | Payhip: Account → Settings → Payment Details → Connect (OAuth + 2FA); then set `PAYHIP_STRIPE_CONNECTED=1` in `.env` |
+| Stripe TEST secret key + account id | human copies once | `STRIPE_SECRET_KEY_TEST`, `STRIPE_EXPECTED_ACCOUNT_TEST` in `.env` |
+| Stripe webhook endpoint + signing secret | **auto** | `python3 scripts/commerce_setup_check.py --stripe` (idempotent; writes `STRIPE_WEBHOOK_SECRET_TEST` into `.env` itself) |
+| Payhip webhook URL | **auto** (browser) | `payhip_admin.set_webhook(...)` — runs inside the publish flow once credentials exist |
+| Product creation on Payhip | **auto** (browser) | `python3 scripts/payhip_publish.py --slug SLUG --price-minor 1290 --currency EUR --execute` |
+| Buyer bundle (PDF + EPUB + README) | auto | built by the publish flow; never includes working files |
+| Product page with tracked link | auto | `/libra/growth/products/<slug>` appears as soon as the product is recorded live |
+| Ingest → reconcile → report | auto | webhooks + cron every 30 min + daily Telegram digest 09:35 |
+| Growth decision | auto | zero paid spend, stops on any money incident |
+
+Payhip's public API covers coupons and license keys only (checked at
+payhip.com/api-reference on 22 Aug 2026) — there is no endpoint to create a
+product or register a webhook, which is why those two steps go through a
+browser with before/after screenshots, exactly like the KDP uploader.
+
+**First real login:** run `python3 scripts/payhip_publish.py --inspect` once. It
+logs in, opens the new-product form, and dumps the real field names so
+`payhip_admin.SELECTORS` can be corrected before the first `--execute`. Do not
+skip this: the selectors were written without a live account to test against.
+
+### Order of operations for Bui
+
+1. Payhip sign-up → `.env` credentials
+2. Stripe sign-up + KYC + bank → copy the TEST key and `acct_…` id into `.env`
+3. Payhip → Connect Stripe → `PAYHIP_STRIPE_CONNECTED=1`
+4. `python3 scripts/commerce_setup_check.py --stripe` → everything should read `ok`
+5. `python3 scripts/payhip_publish.py --inspect` → fix selectors if needed
+6. `python3 scripts/payhip_publish.py --slug aquarelle-botanique-debutants-fr --price-minor 1290 --currency EUR --execute`
+7. One controlled test purchase (Stripe test card) → watch the digest and `/api/commerce/summary`
+8. Only then: live keys, with a fresh explicit authorisation

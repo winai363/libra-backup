@@ -1,0 +1,15 @@
+{
+  "type": "paid",
+  "id": "sale_test_1",
+  "product_id": "kit-fr-test",
+  "product_name": "Kit Autonomie Numerique (test)",
+  "price": "12.90",
+  "currency": "eur",
+  "date": "2026-08-21T10:00:00+00:00",
+  "country": "FR",
+  "payment_processor": "stripe",
+  "payment_id": "pi_test_1",
+  "email": "buyer@example.test",
+  "first_name": "Test",
+  "last_name": "Buyer"
+}

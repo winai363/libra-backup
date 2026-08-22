@@ -1,0 +1,13 @@
+{
+  "type": "refunded",
+  "id": "refund_test_1",
+  "sale_id": "sale_test_1",
+  "product_id": "kit-fr-test",
+  "price": "12.90",
+  "currency": "eur",
+  "date": "2026-08-22T09:00:00+00:00",
+  "country": "FR",
+  "payment_processor": "stripe",
+  "payment_id": "pi_test_1",
+  "email": "buyer@example.test"
+}

@@ -407,3 +407,25 @@ def test_commerce_modules_do_not_import_kdp_mutators():
             elif isinstance(node, ast.ImportFrom) and node.module:
                 imported.add(node.module.split(".")[-1])
         assert imported.isdisjoint(forbidden), (name, imported & forbidden)
+
+
+def test_a_live_payment_verifies_revenue_just_like_a_test_one(tmp_path):
+    """The mode was already checked at the webhook; reconciliation must not
+    silently refuse live money as 'unverified'."""
+    db = tmp_path / "ledger.db"
+    _ingest(db, {**payhip_paid(), "mode": "live"})
+    _ingest(db, {**stripe_payment(), "mode": "live"})
+
+    assert commerce_order(db, "payhip", "sale_test_1")["status"] == "paid_verified"
+    assert currency_totals(db)["EUR"]["verified_gross_minor"] == 1290
+
+
+def test_a_live_refund_reverses_live_revenue(tmp_path):
+    db = tmp_path / "ledger.db"
+    _ingest(db, {**payhip_paid(), "mode": "live"})
+    _ingest(db, {**stripe_payment(), "mode": "live"})
+
+    _ingest(db, {**stripe_refund("re_live_1", "pi_test_1", 400, status="succeeded"), "mode": "live"})
+
+    assert currency_totals(db)["EUR"]["refunded_minor"] == 400
+    assert currency_totals(db)["EUR"]["verified_net_sales_minor"] == 890

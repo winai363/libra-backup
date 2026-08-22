@@ -52,7 +52,10 @@ def verify_account(stripe_module, *, api_key: str, expected_account: str, mode: 
     account = stripe_module.Account.retrieve()
     account_id = _get(account, "id")
     livemode = _get(account, "livemode")
-    if bool(livemode) is not (mode == "live"):
+    # The Account resource does not always carry `livemode` (it is a property of
+    # the request, not of the account). When absent, the key prefix checked
+    # above is the authority; when present, it must agree.
+    if livemode is not None and bool(livemode) is not (mode == "live"):
         raise StripeAdminError("mode_mismatch", f"account livemode={livemode} but mode={mode}")
     if account_id != expected_account:
         raise StripeAdminError("wrong_account", f"key belongs to {account_id}, expected {expected_account}")

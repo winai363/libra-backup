@@ -203,9 +203,10 @@ def _apply_payhip_paid(connection, event: dict, payload: dict) -> _Result:
 
 
 def _apply_stripe_payment(connection, event: dict, payload: dict) -> _Result:
-    # Task 3 already proved signature, account and test mode. What is checked
-    # here is that this money belongs to the order we think it does.
-    if event["verification_state"] != "verified" or event["mode"] != "test":
+    # The webhook already proved signature, account, and that the event's mode
+    # matches our configuration — a mode mismatch never reaches this point. What
+    # is checked here is that this money belongs to the order we think it does.
+    if event["verification_state"] != "verified" or event["mode"] not in ("test", "live"):
         return _Result("pending_reconciliation", "unverified_payment_event")
 
     payment_id = payload["provider_payment_id"]

@@ -84,6 +84,15 @@ def test_an_account_whose_livemode_disagrees_with_the_mode_is_refused():
                                     expected_account="acct_test_fixture", mode="test")
 
 
+def test_an_account_without_a_livemode_field_falls_back_to_the_key_prefix():
+    """Stripe's Account resource often omits livemode; the key prefix decides."""
+    fake = FakeStripe(account_id="acct_x", livemode=None)
+
+    assert stripe_admin.verify_account(
+        fake, api_key="sk_live_abc", expected_account="acct_x", mode="live"
+    ) == {"account": "acct_x", "livemode": False}
+
+
 def test_a_live_key_on_a_live_account_is_accepted():
     result = stripe_admin.verify_account(
         FakeStripe(account_id="acct_live_x", livemode=True),

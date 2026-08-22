@@ -605,3 +605,14 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - seed live config ฝั่ง Payhip แล้ว: `PAYHIP_PRODUCT_IDS_LIVE`, `PAYHIP_WEBHOOK_TOKEN_LIVE` (URL ใหม่ ต้องเปลี่ยนใน Payhip Developer tab)
 - ⛔ **ยังขาดอย่างเดียว**: `STRIPE_SECRET_KEY_LIVE` (`sk_live_…`) — บุ๋ยต้องใส่ .env เอง ห้ามส่งผ่านแชท; หลังใส่แล้วรัน `scripts/commerce_setup_check.py --stripe` จะสร้าง live webhook + เขียน `STRIPE_WEBHOOK_SECRET_LIVE` ให้เอง
 - pytest 837 passed / 8 skipped / 2 failed เดิม
+
+## 2026-08-22 (ค่ำ-2) — LIVE MODE ทำงานจริงแล้ว + วิธีจัดการ sk_live ที่ปลอดภัย
+- บุ๋ยส่ง `sk_live_` มาในแชท (เตือนแล้วแต่ส่งมา) → ใช้ทำงานให้จบทันที แล้ว **ลบออกจาก .env** เพราะ **runtime ไม่ต้องใช้ secret key เลย** — ระบบแค่ verify ลายเซ็นด้วย `STRIPE_WEBHOOK_SECRET_LIVE` + เทียบ `STRIPE_EXPECTED_ACCOUNT_LIVE` ⇒ secret key มีไว้ตอน setup ครั้งเดียวเท่านั้น **บอกบุ๋ยให้ roll key ทิ้งได้เลย**
+- ปรับ `commerce_setup_check` ให้ readiness ขึ้นกับ webhook secret + account id (ไม่ใช่ secret key) → เก็บ key ไว้ในเครื่องนานๆ ไม่มีเหตุผล
+- live webhook endpoint: `we_1U79DAJUy2UX3wWtniapHPTz` (8 events) · account `acct_1U76cEJUy2UX3wWt`
+- **บั๊ก SDK ที่เจอ**: `stripe.Account.retrieve()` ไม่มี field `livemode` (มันเป็นคุณสมบัติของ request ไม่ใช่ของ account) → `verify_account` เดิม fail `mode_mismatch` ตอน live. แก้: ถ้า livemode เป็น None ให้ยึด prefix ของคีย์ (`sk_live_`/`sk_test_`) เป็นตัวชี้ขาด
+- **บั๊กจริงที่เกือบทำยอดขายหาย**: `_apply_stripe_payment` ฮาร์ดโค้ด `event["mode"] != "test"` → live payment จะค้าง `unverified_payment_event` ตลอดกาล = ขายได้จริงแต่ยอดไม่ขึ้น **แก้แล้ว** + เทสต์ live payment/refund
+- **พิสูจน์ท่อ live จริงผ่าน public URL**: live signed → `200 accepted` เก็บเป็น `mode=live, verified` · test-mode event → `403 wrong_mode` · ลายเซ็นปลอม → `400 signature_invalid` (ล้าง ledger หลังทดสอบแล้ว events=0 incidents=0)
+- `.env` ตอนนี้: `LIBRA_COMMERCE_MODE=live`, มี `*_LIVE` ครบ, **ไม่มี** `STRIPE_SECRET_KEY_LIVE`
+- ⚠️ ค้าง: บุ๋ยต้องเปลี่ยน webhook URL ใน Payhip เป็นโทเคน LIVE (`PAYHIP_WEBHOOK_TOKEN_LIVE`) ไม่งั้น event จาก Payhip จะโดนปฏิเสธ 404
+- pytest 840 passed / 8 skipped / 2 failed เดิม

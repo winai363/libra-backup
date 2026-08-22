@@ -30,7 +30,7 @@ HUMAN_ONLY = [
     ("payhip_account", "Create the Payhip account (email + password) and put PAYHIP_EMAIL / PAYHIP_PASSWORD in .env"),
     ("stripe_account", "Create the Stripe account, pass KYC (ID card), link the Thai bank account"),
     ("payhip_stripe_connect", "In Payhip: Account → Settings → Payment Details → Connect Stripe (OAuth + 2FA)"),
-    ("stripe_live_key", "Stripe dashboard with Test mode OFF → Developers → API keys → reveal the LIVE secret key (sk_live_…) → put STRIPE_SECRET_KEY_LIVE in .env yourself. Never paste it into chat."),
+    ("stripe_webhook_ready", "run --stripe once with STRIPE_SECRET_KEY_LIVE set; it creates the endpoint, stores the signing secret, and the secret key can then be deleted and rolled"),
 ]
 
 
@@ -43,9 +43,11 @@ def report(env: dict) -> dict:
     for key, how in HUMAN_ONLY:
         done = {
             "payhip_account": _present(env, "PAYHIP_EMAIL") and _present(env, "PAYHIP_PASSWORD"),
-            "stripe_account": _present(env, "STRIPE_SECRET_KEY_LIVE") or _present(env, "STRIPE_SECRET_KEY_TEST"),
+            "stripe_account": _present(env, f"STRIPE_EXPECTED_ACCOUNT_{MODE.upper()}"),
             "payhip_stripe_connect": _present(env, "PAYHIP_STRIPE_CONNECTED"),
-            "stripe_live_key": _present(env, "STRIPE_SECRET_KEY_LIVE"),
+            # The runtime verifies signatures; it never needs the secret key.
+            "stripe_webhook_ready": _present(env, f"STRIPE_WEBHOOK_SECRET_{MODE.upper()}")
+                                    and _present(env, f"STRIPE_EXPECTED_ACCOUNT_{MODE.upper()}"),
         }[key]
         steps.append({"step": key, "state": "ok" if done else "manual", "how": how})
 

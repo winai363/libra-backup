@@ -24,7 +24,7 @@ SESSION_FILE = LIBRA_DIR / "payhip_session.json"
 SHOTS_DIR = LIBRA_DIR / "logs" / "payhip-shots"
 
 BASE_URL = "https://payhip.com"
-LOGIN_URL = f"{BASE_URL}/login"
+LOGIN_URL = f"{BASE_URL}/auth/login"
 PRODUCTS_URL = f"{BASE_URL}/dashboard/products"
 NEW_PRODUCT_URL = f"{BASE_URL}/product/add/digital"
 SETTINGS_URL = f"{BASE_URL}/dashboard/settings"
@@ -33,10 +33,11 @@ SETTINGS_URL = f"{BASE_URL}/dashboard/settings"
 # confirmed with `python3 scripts/payhip_publish.py --inspect` on the first
 # real login; the tests only guarantee every step we drive has an entry.
 SELECTORS = {
-    "login_email": "input[name='email']",
+    # confirmed against the live form 22 Aug 2026 (probe_payhip_login_form.py)
+    "login_email": "input[name='login']",
     "login_password": "input[name='password']",
-    "login_submit": "button[type='submit']",
-    "logged_in_marker": "a[href*='/dashboard']",
+    "login_submit": "button[type='submit']:has-text('Log in')",
+    "logged_in_marker": "a[href*='logout'], a[href*='/dashboard'], a[href*='/product/add']",
     "product_new": "a[href*='/product/add']",
     "product_name": "input[name='name'], input[name='product_name']",
     "product_price": "input[name='price']",
@@ -127,12 +128,23 @@ def classify_outcome(*, before: dict, after: dict) -> str:
 
 # ── live driver (only runs when asked, and only with real credentials) ──────
 
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+
+
 async def _new_context(p, *, headless: bool = True):
-    browser = await p.chromium.launch(headless=headless)
-    kwargs = {}
+    # Same posture as the KDP/free-promo drivers: plain Chrome fingerprint, no
+    # automation banner. reCAPTCHA v3 scores headless bots low, so this matters.
+    browser = await p.chromium.launch(
+        headless=headless, args=["--disable-blink-features=AutomationControlled"]
+    )
+    kwargs = {"user_agent": UA, "locale": "en-US", "viewport": {"width": 1366, "height": 850}}
     if SESSION_FILE.exists():
         kwargs["storage_state"] = str(SESSION_FILE)
     context = await browser.new_context(**kwargs)
+    await context.add_init_script(
+        "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})"
+    )
     return browser, context
 
 
@@ -150,11 +162,21 @@ async def ensure_logged_in(page, credentials: dict) -> None:
     await page.goto(LOGIN_URL, wait_until="domcontentloaded")
     await page.fill(SELECTORS["login_email"], credentials["email"])
     await page.fill(SELECTORS["login_password"], credentials["password"])
+    await page.wait_for_timeout(1500)  # let reCAPTCHA v3 mint its token first
     await page.click(SELECTORS["login_submit"])
-    await page.wait_for_timeout(4000)
-    if "login" in page.url or not await page.query_selector(SELECTORS["logged_in_marker"]):
-        await _shot(page, "login-failed")
-        raise PayhipAdminError("login_failed", "Payhip did not accept the credentials (2FA/CAPTCHA?)")
+    await page.wait_for_timeout(6000)
+    if "/auth/login" in page.url or not await page.query_selector(SELECTORS["logged_in_marker"]):
+        shot = await _shot(page, "login-failed")
+        body = (await page.evaluate("() => document.body.innerText") or "")[:300]
+        if "not a robot" in body.lower() or "recaptcha" in page.url.lower():
+            # House rule: CAPTCHA means a human, never a workaround. Payhip's
+            # reCAPTCHA scores this server's headless Chrome low and falls back
+            # to the checkbox (seen 22 Aug 2026) — use the upload pack instead.
+            raise PayhipAdminError(
+                "captcha_manual_required",
+                f"Payhip asked for the 'I am not a robot' checkbox; use scripts/payhip_upload_pack.py (shot={shot})",
+            )
+        raise PayhipAdminError("login_failed", f"url={page.url} shot={shot} text={body!r}")
     await page.context.storage_state(path=str(SESSION_FILE))
     os.chmod(SESSION_FILE, 0o600)
 

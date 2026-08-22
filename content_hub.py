@@ -46,7 +46,15 @@ APPROVED_AMAZON_HOSTS = frozenset(
 
 # Each destination kind carries its own allowlist. Widening the Amazon set to
 # fit a second storefront would weaken the check that protects the first.
-DEFAULT_ALLOWED_HOSTS = {"amazon": APPROVED_AMAZON_HOSTS}
+# Our own Lemon Squeezy store only. Any other subdomain is somebody else's
+# storefront, which is exactly what an attacker would substitute.
+LEMONSQUEEZY_STORE_HOST = "wkbui.lemonsqueezy.com"
+APPROVED_LEMONSQUEEZY_HOSTS = frozenset({LEMONSQUEEZY_STORE_HOST})
+
+DEFAULT_ALLOWED_HOSTS = {
+    "amazon": APPROVED_AMAZON_HOSTS,
+    "lemonsqueezy": APPROVED_LEMONSQUEEZY_HOSTS,
+}
 
 TRACKING_SECRET_ENV = "LIBRA_GROWTH_TRACKING_SECRET"
 

@@ -651,3 +651,14 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - **พิสูจน์ผ่าน public URL จริง**: signed → 200 accepted → order `paid_verified` 50000 THB slug ถูกต้อง · ลายเซ็นปลอม → 400 · ไม่มีลายเซ็น → 400 (ล้าง ledger แล้ว)
 - pytest 861 passed / 8 skipped / 2 failed เดิม
 - ⚠️ ค้าง: **identity verification ใน LS ยัง Action Required** (ต้องคน) — ยังรับเงินจริงไม่ได้จนกว่าจะผ่าน แต่ test mode ใช้ได้เลย; ยังไม่ได้สร้างสินค้าใน LS
+
+## 2026-08-22 (ดึก) — ✅ ทดสอบขายครบวงจรผ่านหมด (Lemon Squeezy test mode, ฟรี)
+- **ซื้อทดสอบสำเร็จ**: order `3f61d376…` → webhook เข้า → `verified` → `paid_verified` → slug จับคู่ถูกอัตโนมัติจาก `custom_data` ที่ฝังใน checkout ที่สร้างผ่าน API
+- **บุ๋ยยืนยันได้รับอีเมล + ไฟล์แล้ว** ⇒ ฝั่งส่งมอบสินค้าใช้ได้จริง
+- ⚠️ **ตัวเลขที่ต้องรู้**: ตั้งราคา ฿490.00 แต่ order จริง = **฿490.11** — LS คิดเงินภายในเป็น USD (rate 0.0306463) แล้วแปลงกลับ ⇒ ปัดเศษ 2 ทาง. ระบบเราบันทึกตรงกับ LS ทุกหลัก **ไม่ใช่บั๊ก** และตอน refund คืนได้สูงสุด ฿490.10 (LS หักเศษ)
+- **ทดสอบคืนเงินผ่าน API สำเร็จ**: `POST /v1/orders/{id}/refund` → order เป็น `refunded` · refund row เดียว `refund:<order_id>` · summary: gross 49011 / refunded 49011 / **net 0** / incidents 0 · Telegram digest แสดงถูกต้อง
+- **บั๊กที่เจอ+แก้ 2 จุด**: (1) `record_product` ไม่อัปเดตคอลัมน์ `provider` ตอนย้าย storefront → ยอดขาย LS จะถูกนับเป็น Payhip (2) หน้า `/growth/products/` ฮาร์ดโค้ด `destination_kind="payhip"` → 500 เมื่อย้ายไป LS. แก้ให้ CTA ตามผู้ให้บริการจริงของสินค้า + เพิ่ม `lemonsqueezy` เข้า allowlist (เฉพาะ `wkbui.lemonsqueezy.com` โดเมนเดียว — subdomain อื่น = ร้านคนอื่น ปฏิเสธ)
+- หน้าขายจริง: `/libra/growth/products/aquarelle-botanique-debutants-fr` → ปุ่ม "Acheter — 490.00 THB" → 307 ไป LS checkout · บันทึก `lemonsqueezy_outbound` + click_id · **ไม่โชว์ URL ปลายทางในหน้า** (ผ่านลิงก์ติดตามเท่านั้น)
+- ล้าง ledger ทั้งหมดแล้ว (events/orders/refunds/incidents = 0) พร้อมรับของจริง
+- pytest 868 passed / 8 skipped / 2 failed เดิม
+- ⏳ ค้างอย่างเดียว: **identity verification = In Review** ที่ LS → พอผ่านแล้วกด Store activation ถึงรับเงินจริงได้

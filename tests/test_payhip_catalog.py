@@ -133,3 +133,25 @@ def test_record_product_is_idempotent_and_keeps_provider_id(tmp_path):
     with sqlite3.connect(db) as connection:
         rows = connection.execute("SELECT slug, provider_product_id, status, price_minor FROM commerce_products").fetchall()
     assert rows == [("aquarelle-botanique-debutants-fr", "payhip-abc", "live", 1290)]
+
+
+def test_moving_a_product_to_another_provider_updates_the_provider(tmp_path):
+    """Switching storefronts must not leave the old provider name behind —
+    the ledger would then attribute Lemon Squeezy sales to Payhip."""
+    import sqlite3
+
+    db = tmp_path / "ledger.db"
+    book = _book(tmp_path)
+    spec = build_product_spec(book, price_minor=1290, currency="EUR")
+    record_product(db, spec, provider_product_id="https://payhip.com/b/OLD", status="live")
+
+    moved = build_product_spec(book, price_minor=49000, currency="THB")
+    record_product(db, moved, provider="lemonsqueezy",
+                   provider_product_id="https://wkbui.lemonsqueezy.com/checkout/buy/NEW",
+                   status="live")
+
+    with sqlite3.connect(db) as connection:
+        rows = connection.execute(
+            "SELECT provider, provider_product_id, currency, price_minor FROM commerce_products"
+        ).fetchall()
+    assert rows == [("lemonsqueezy", "https://wkbui.lemonsqueezy.com/checkout/buy/NEW", "THB", 49000)]

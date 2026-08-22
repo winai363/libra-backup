@@ -145,6 +145,9 @@ def record_product(path: Path, spec: dict, *, provider_product_id: str, status: 
             "(slug, provider, provider_product_id, status, currency, price_minor, updated_at)"
             " VALUES (?,?,?,?,?,?,?)"
             " ON CONFLICT(slug) DO UPDATE SET"
+            # provider is updated too: a product moved to another storefront
+            # must stop being attributed to the old one.
+            " provider=excluded.provider,"
             " provider_product_id=excluded.provider_product_id, status=excluded.status,"
             " currency=excluded.currency, price_minor=excluded.price_minor,"
             " updated_at=excluded.updated_at",

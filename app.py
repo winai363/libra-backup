@@ -1390,12 +1390,13 @@ async def growth_outbound_click(token: str):
         raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")
     except ValueError:
         raise HTTPException(status_code=404, detail="Invalid tracking link")
-    if payload.get("destination_kind") == "payhip":
-        # A Payhip click gets its own event kind and an opaque click id; a sale
-        # cannot be attributed to it until a round trip is proven.
+    kind = payload.get("destination_kind", "amazon")
+    if kind in ("payhip", "lemonsqueezy"):
+        # A storefront click gets its own event kind and an opaque click id; a
+        # sale cannot be attributed to it until a round trip is proven.
         event = build_outbound_event(
             payload["slug"], payload["campaign"],
-            event_kind="payhip_outbound", click_id=payload.get("click_id"),
+            event_kind=f"{kind}_outbound", click_id=payload.get("click_id"),
         )
     else:
         event = build_outbound_event(payload["slug"], payload["campaign"])
@@ -1409,13 +1410,17 @@ def _payhip_hosts() -> frozenset:
 
 
 def _outbound_allowlists() -> dict:
-    from content_hub import APPROVED_AMAZON_HOSTS
-    return {"amazon": APPROVED_AMAZON_HOSTS, "payhip": _payhip_hosts()}
+    from content_hub import APPROVED_AMAZON_HOSTS, APPROVED_LEMONSQUEEZY_HOSTS
+    return {
+        "amazon": APPROVED_AMAZON_HOSTS,
+        "payhip": _payhip_hosts(),
+        "lemonsqueezy": APPROVED_LEMONSQUEEZY_HOSTS,
+    }
 
 
 @app.get("/growth/products/{slug}", response_class=HTMLResponse)
 async def growth_product_page(slug: str):
-    """Public product page: one tracked Payhip CTA, attribution shown as unknown."""
+    """Public product page: one tracked storefront CTA, attribution shown as unknown."""
     from payhip_catalog import list_products
 
     product = next((p for p in list_products(PROFIT_LEDGER_FILE)
@@ -1424,10 +1429,16 @@ async def growth_product_page(slug: str):
         return HTMLResponse("<h1>Product not found</h1>", status_code=404)
     listing_file = get_book_dir(slug) / "listing.json"
     listing = json.loads(listing_file.read_text(encoding="utf-8")) if listing_file.exists() else {}
+    # The CTA follows whichever storefront the product actually lives on, so
+    # moving a product between providers cannot leave a dead or wrong link.
+    kind = product.get("provider") or "payhip"
+    allowed = _outbound_allowlists().get(kind)
+    if allowed is None:
+        return HTMLResponse("<h1>Product not available</h1>", status_code=404)
     try:
         token = make_tracking_token(
             slug, GROWTH_HUB_CAMPAIGN, product["provider_product_id"],
-            destination_kind="payhip", allowed_hosts=_payhip_hosts(),
+            destination_kind=kind, allowed_hosts=allowed,
         )
     except TrackingConfigError:
         raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")

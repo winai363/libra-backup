@@ -122,3 +122,40 @@ def test_no_click_event_stores_personal_data():
     serialized = str(event).lower()
     for leak in ("ip_address", "user_agent", "email", "cookie", "referer"):
         assert leak not in serialized
+
+
+# ── Lemon Squeezy destinations ───────────────────────────────────────────────
+
+LEMONSQUEEZY_URL = "https://wkbui.lemonsqueezy.com/checkout/buy/abc123"
+
+
+def test_a_lemonsqueezy_checkout_is_an_approved_destination():
+    from content_hub import DEFAULT_ALLOWED_HOSTS
+
+    token = make_tracking_token(
+        "kit-fr", "organic", LEMONSQUEEZY_URL, destination_kind="lemonsqueezy"
+    )
+    resolved = resolve_tracking_token(token)
+
+    assert resolved["destination"] == LEMONSQUEEZY_URL
+    assert resolved["destination_kind"] == "lemonsqueezy"
+    assert "lemonsqueezy.com" in str(DEFAULT_ALLOWED_HOSTS["lemonsqueezy"])
+
+
+@pytest.mark.parametrize("url", [
+    "http://wkbui.lemonsqueezy.com/checkout/buy/x",
+    "https://lemonsqueezy.com.evil.example/checkout",
+    "https://wkbui.lemonsqueezy.com@evil.example/checkout",
+    "https://someone-else.lemonsqueezy.com/checkout/buy/x",
+])
+def test_a_lookalike_or_foreign_store_is_rejected(url):
+    with pytest.raises(InvalidDestinationError):
+        make_tracking_token("kit-fr", "organic", url, destination_kind="lemonsqueezy")
+
+
+def test_a_lemonsqueezy_click_is_recorded_as_its_own_event_kind():
+    event = build_outbound_event(
+        "kit-fr", "organic", event_kind="lemonsqueezy_outbound", click_id="e" * 32
+    )
+    assert event["event_kind"] == "lemonsqueezy_outbound"
+    assert event["payload"]["attribution_status"] == "unknown"

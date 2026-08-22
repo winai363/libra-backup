@@ -429,3 +429,79 @@ def test_a_live_refund_reverses_live_revenue(tmp_path):
 
     assert currency_totals(db)["EUR"]["refunded_minor"] == 400
     assert currency_totals(db)["EUR"]["verified_net_sales_minor"] == 890
+
+
+# ── Lemon Squeezy (merchant of record) ───────────────────────────────────────
+
+def lemonsqueezy_order(*, order_id="ls_order_1", gross_minor=50000, currency="THB",
+                       event="order_created", slug="aquarelle-botanique-debutants-fr",
+                       tax_minor=0, mode="test"):
+    return {
+        "provider": "lemonsqueezy",
+        "event_id": f"lemonsqueezy:{event}:{order_id}",
+        "event_type": event,
+        "occurred_at": "2026-08-22T15:00:00+00:00",
+        "received_at": RECEIVED,
+        "mode": mode,
+        "verification_state": "verified",
+        "payload_hash": f"hash-{event}-{order_id}",
+        "sanitized_payload": {
+            "kind": "order",
+            "provider_order_id": order_id,
+            "gross_minor": gross_minor,
+            "subtotal_minor": gross_minor - tax_minor,
+            "tax_minor": tax_minor,
+            "discount_minor": 0,
+            "currency": currency,
+            "status": "refunded" if event == "order_refunded" else "paid",
+            "refunded": event == "order_refunded",
+            "slug": slug,
+        },
+    }
+
+
+def test_a_lemonsqueezy_order_is_verified_revenue_on_its_own(tmp_path):
+    """A merchant of record IS the seller — its signed order needs no second proof."""
+    db = tmp_path / "ledger.db"
+
+    _ingest(db, lemonsqueezy_order(gross_minor=50000))
+
+    order = commerce_order(db, "lemonsqueezy", "ls_order_1")
+    assert order["status"] == "paid_verified"
+    assert order["slug"] == "aquarelle-botanique-debutants-fr"
+    totals = currency_totals(db)["THB"]
+    assert totals["verified_gross_minor"] == 50000
+    assert totals["verified_net_sales_minor"] == 50000
+
+
+def test_a_lemonsqueezy_refund_reverses_exactly_once(tmp_path):
+    db = tmp_path / "ledger.db"
+    _ingest(db, lemonsqueezy_order(gross_minor=50000))
+
+    _ingest(db, lemonsqueezy_order(event="order_refunded", gross_minor=50000))
+    _ingest(db, lemonsqueezy_order(event="order_refunded", gross_minor=50000))  # replay
+
+    totals = currency_totals(db)["THB"]
+    assert totals["refunded_minor"] == 50000
+    assert totals["verified_net_sales_minor"] == 0
+    assert commerce_order(db, "lemonsqueezy", "ls_order_1")["status"] == "refunded"
+
+
+def test_tax_collected_by_the_merchant_of_record_is_not_our_revenue(tmp_path):
+    """VAT belongs to the tax authority, not to us — it must not inflate sales."""
+    db = tmp_path / "ledger.db"
+
+    _ingest(db, lemonsqueezy_order(gross_minor=60000, tax_minor=10000))
+
+    totals = currency_totals(db)["THB"]
+    assert totals["verified_gross_minor"] == 50000  # net of tax
+    assert totals["tax_minor"] == 10000
+
+
+def test_an_unverified_lemonsqueezy_event_creates_no_revenue(tmp_path):
+    db = tmp_path / "ledger.db"
+    forged = {**lemonsqueezy_order(), "verification_state": "unverified"}
+
+    _ingest(db, forged)
+
+    assert currency_totals(db) == {}

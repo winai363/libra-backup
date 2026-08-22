@@ -105,11 +105,17 @@ def currency_totals(path: Path) -> dict:
             entry["payout_minor"] = int(row["paid"] or 0)
             entry["reconciled_payout_minor"] = int(row["reconciled"] or 0)
 
+        taxes = connection.execute(
+            "SELECT currency, SUM(COALESCE(tax_minor, 0)) tax FROM commerce_orders"
+            f" WHERE status IN {ORDER_OPEN_STATES} GROUP BY currency"
+        ).fetchall()
+
         fees = connection.execute(
             "SELECT currency, SUM(stripe_fee_minor) fee FROM commerce_orders"
             " WHERE stripe_fee_minor IS NOT NULL GROUP BY currency"
         ).fetchall()
     fee_by_currency = {row["currency"]: int(row["fee"] or 0) for row in fees}
+    tax_by_currency = {row["currency"]: int(row["tax"] or 0) for row in taxes}
 
     for currency, entry in totals.items():
         gross = entry.setdefault("verified_gross_minor", 0)
@@ -120,6 +126,9 @@ def currency_totals(path: Path) -> dict:
         # Absent fees stay unknown. Coercing them to zero would overstate profit.
         entry["stripe_fee_minor"] = fee_by_currency.get(currency)
         entry["payhip_fee_minor"] = None
+        # Tax a merchant of record collected and remits on our behalf. Shown so
+        # the number is visible, never folded into revenue.
+        entry["tax_minor"] = tax_by_currency.get(currency, 0)
     return totals
 
 
@@ -200,6 +209,55 @@ def _apply_payhip_paid(connection, event: dict, payload: dict) -> _Result:
         ),
     )
     return _Result("observed")
+
+
+def _apply_lemonsqueezy_order(connection, event: dict, payload: dict) -> _Result:
+    """A merchant of record settles the sale itself, so its signed order is the
+    money fact. Tax it collected belongs to the tax authority, not to us, so
+    revenue is recorded net of tax."""
+    if event["verification_state"] != "verified":
+        return _Result("pending_reconciliation", "unverified_order_event")
+
+    order_id = payload["provider_order_id"]
+    tax = int(payload.get("tax_minor") or 0)
+    net_of_tax = int(payload["gross_minor"]) - tax
+    now = _now()
+    refunding = event["event_type"] == "order_refunded" or payload.get("refunded")
+
+    connection.execute(
+        "INSERT INTO commerce_orders"
+        "(provider, provider_order_id, slug, status, currency, gross_minor, tax_minor,"
+        " ordered_at, updated_at)"
+        " VALUES (?,?,?,?,?,?,?,?,?)"
+        " ON CONFLICT(provider, provider_order_id) DO UPDATE SET"
+        " status=excluded.status, updated_at=excluded.updated_at",
+        (
+            "lemonsqueezy", order_id, payload.get("slug"),
+            "refunded" if refunding else "paid_verified",
+            payload["currency"], net_of_tax, tax, event["occurred_at"], now,
+        ),
+    )
+
+    if refunding:
+        # One refund row per order id: a replayed refund updates it, never adds.
+        connection.execute(
+            "INSERT INTO commerce_refunds"
+            "(provider, provider_refund_id, provider_order_id, amount_minor, currency,"
+            " status, occurred_at) VALUES (?,?,?,?,?,?,?)"
+            " ON CONFLICT(provider, provider_refund_id) DO UPDATE SET"
+            " amount_minor=excluded.amount_minor, status=excluded.status,"
+            " occurred_at=excluded.occurred_at",
+            ("lemonsqueezy", f"refund:{order_id}", order_id, net_of_tax,
+             payload["currency"], "succeeded", event["occurred_at"]),
+        )
+        return _Result("reconciled")
+
+    return _Result("reconciled", None, {
+        "source_key": f"commerce-sale:lemonsqueezy:{order_id}",
+        "slug": payload.get("slug"),
+        "amount_minor": net_of_tax,
+        "currency": payload["currency"],
+    })
 
 
 def _apply_stripe_payment(connection, event: dict, payload: dict) -> _Result:
@@ -368,6 +426,8 @@ def _apply_dispute(connection, event: dict, payload: dict) -> _Result:
 
 
 _HANDLERS = {
+    ("lemonsqueezy", "order_created"): _apply_lemonsqueezy_order,
+    ("lemonsqueezy", "order_refunded"): _apply_lemonsqueezy_order,
     ("payhip", "paid"): _apply_payhip_paid,
     ("stripe", "payment_intent.succeeded"): _apply_stripe_payment,
     ("stripe", "refund.created"): _apply_stripe_refund,

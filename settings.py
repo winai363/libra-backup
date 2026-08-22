@@ -55,6 +55,10 @@ class CommerceSettings:
     payhip_allowed_hosts: frozenset
     payhip_product_ids: frozenset
     max_webhook_bytes: int = MAX_WEBHOOK_BYTES
+    # Lemon Squeezy is a merchant of record and carries its own mode inside each
+    # event, so it uses one secret rather than a per-mode pair.
+    lemonsqueezy_webhook_secret: str = ""
+    lemonsqueezy_store_id: str = ""
 
     @classmethod
     def from_sources(cls, env: Mapping) -> "CommerceSettings":
@@ -76,6 +80,8 @@ class CommerceSettings:
             mode=mode,
             payhip_allowed_hosts=_csv(env.get("PAYHIP_ALLOWED_HOSTS", "")),
             payhip_product_ids=_csv(env.get(f"PAYHIP_PRODUCT_IDS_{suffix}", "")),
+            lemonsqueezy_webhook_secret=env.get("LEMONSQUEEZY_WEBHOOK_SECRET", ""),
+            lemonsqueezy_store_id=env.get("LEMONSQUEEZY_STORE_ID", ""),
             **required,
         )
 

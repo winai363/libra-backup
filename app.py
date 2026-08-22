@@ -1876,3 +1876,43 @@ async def commerce_summary_api(request: Request):
         # we cannot attribute a sale to a campaign. Say so rather than show 0.
         "attribution": {"status": "unknown", "verified_sales": 0},
     }
+
+
+@app.post("/api/webhooks/lemonsqueezy")
+async def lemonsqueezy_webhook_route(request: Request):
+    """Lemon Squeezy is the merchant of record: its signed order is the money
+    fact, so the signature is the whole defence and it covers the raw bytes."""
+    from lemonsqueezy_webhook import (
+        LemonSqueezyWebhookError,
+        normalize_lemonsqueezy_event,
+        verify_lemonsqueezy_signature,
+    )
+
+    settings = commerce_settings()
+    raw_body = await request.body()
+    if len(raw_body) > settings.max_webhook_bytes:
+        raise HTTPException(status_code=413, detail={"code": "body_too_large"})
+
+    try:
+        verify_lemonsqueezy_signature(
+            raw_body, request.headers.get("X-Signature", ""), settings
+        )
+        normalized = normalize_lemonsqueezy_event(
+            raw_body, settings, received_at=datetime.now(timezone.utc).isoformat()
+        )
+    except LemonSqueezyWebhookError as exc:
+        status = {
+            "body_too_large": 413,
+            "not_configured": 503,
+            "wrong_store": 403,
+            "unsupported_event": 202,
+        }.get(exc.code, 400)
+        raise HTTPException(status_code=status, detail={"code": exc.code}) from exc
+
+    from commerce_ledger import record_provider_event
+    from commerce_reconciliation import reconcile_event
+
+    receipt = record_provider_event(PROFIT_LEDGER_FILE, normalized)
+    if receipt["status"] == "inserted":
+        reconcile_event(PROFIT_LEDGER_FILE, normalized["provider"], normalized["event_id"])
+    return _commerce_receipt(receipt)

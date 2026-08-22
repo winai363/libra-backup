@@ -639,3 +639,15 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - Stripe ซื้อ Lemon Squeezy ปี 2024 → กำลังรวมเป็น Stripe Managed Payments
 - **ที่ต้องเขียนใหม่**: `lemonsqueezy_webhook.py` + catalog adapter (~20% ของงาน); **ที่ใช้ต่อได้ทั้งหมด**: commerce_ledger, reconciliation, reporting, growth, routes, CLI (~80%)
 - Payhip: ไม่ลบทิ้ง เก็บสินค้า GDRi5 ไว้ก่อน (ยังไม่มีใครซื้อ) — คูปอง TESTRUN95 ยังไม่ถูกใช้
+
+## 2026-08-22 (กลางคืน) — ต่อ Lemon Squeezy สำเร็จ ท่อทำงานจริงแล้ว
+- ร้าน **WKBUI** `wkbui.lemonsqueezy.com` · store id **457485** · สกุล THB · ประเทศ TH · user winai363@gmail.com
+- **LS มี API เต็มรูปแบบ** (ต่างจาก Payhip): auth ผ่าน Bearer + header `Accept/Content-Type: application/vnd.api+json`; ตั้ง webhook เองผ่าน API ได้ → **ไม่ต้องใช้บราวเซอร์เลย** (แก้ปัญหา CAPTCHA ที่เจอกับ Payhip)
+- สร้าง webhook **128617** ผ่าน API: events `order_created, order_refunded, subscription_*` → `/libra/api/webhooks/lemonsqueezy`; signing secret สุ่มเองเก็บใน `.env` (`LEMONSQUEEZY_WEBHOOK_SECRET`, `LEMONSQUEEZY_STORE_ID`)
+- **โมเดลความจริงต่างจาก Payhip/Stripe**: LS เป็น merchant of record = เป็นผู้ขายตามกฎหมายเอง ⇒ order ที่เซ็นลายเซ็นถูกต้อง **คือ** หลักฐานเงิน ไม่มี processor ที่สองให้จับคู่ ⇒ ลายเซ็นคือด่านเดียว (HMAC-SHA256 hex ของ raw body ใน header `X-Signature`)
+- **กฎภาษีที่ใส่ไว้**: `tax_minor` ที่ LS เก็บและนำส่งแทนเรา **ไม่ใช่รายได้เรา** → บันทึก gross เป็นยอดหักภาษีแล้ว และแสดง `tax_minor` แยกใน totals (เพิ่มคอลัมน์ `tax_minor` ใน commerce_orders)
+- refund ใช้ id เดียว `refund:<order_id>` → replay ไม่สร้างซ้ำ; `meta.test_mode` กำหนด mode ของ event เอง (config ไม่ทับ)
+- ไฟล์ใหม่: `lemonsqueezy_webhook.py` + route `/api/webhooks/lemonsqueezy` + fixtures + เทสต์ 17 ตัว
+- **พิสูจน์ผ่าน public URL จริง**: signed → 200 accepted → order `paid_verified` 50000 THB slug ถูกต้อง · ลายเซ็นปลอม → 400 · ไม่มีลายเซ็น → 400 (ล้าง ledger แล้ว)
+- pytest 861 passed / 8 skipped / 2 failed เดิม
+- ⚠️ ค้าง: **identity verification ใน LS ยัง Action Required** (ต้องคน) — ยังรับเงินจริงไม่ได้จนกว่าจะผ่าน แต่ test mode ใช้ได้เลย; ยังไม่ได้สร้างสินค้าใน LS

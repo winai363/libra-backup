@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS commerce_orders (
   currency TEXT NOT NULL,
   gross_minor INTEGER NOT NULL CHECK(gross_minor >= 0),
   discount_minor INTEGER NOT NULL DEFAULT 0 CHECK(discount_minor >= 0),
-  tax_minor INTEGER NOT NULL DEFAULT 0 CHECK(tax_minor >= 0),
+  tax_minor INTEGER DEFAULT 0 CHECK(tax_minor >= 0),
   payhip_fee_minor INTEGER,
   stripe_fee_minor INTEGER,
   net_minor INTEGER,

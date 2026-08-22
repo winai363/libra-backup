@@ -34,6 +34,11 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 # ── Config from .env ──
 ENV_FILE = Path(__file__).parent / ".env"
 ENV = load_env_file(ENV_FILE)
+# content_hub signs tracking links from the process environment; the service
+# unit has no EnvironmentFile, so hand it the value from .env without
+# overriding one that was set explicitly. Never a default.
+if ENV.get("LIBRA_GROWTH_TRACKING_SECRET"):
+    os.environ.setdefault("LIBRA_GROWTH_TRACKING_SECRET", ENV["LIBRA_GROWTH_TRACKING_SECRET"])
 
 app = FastAPI(title="Libra")
 
@@ -1380,14 +1385,63 @@ async def growth_outbound_click(token: str):
     """Verify a signed tracking token, record one privacy-safe
     amazon_outbound hub event, and redirect to the approved destination."""
     try:
-        payload = resolve_tracking_token(token)
+        payload = resolve_tracking_token(token, allowed_hosts=_outbound_allowlists())
     except TrackingConfigError:
         raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")
     except ValueError:
         raise HTTPException(status_code=404, detail="Invalid tracking link")
-    event = build_outbound_event(payload["slug"], payload["campaign"])
+    if payload.get("destination_kind") == "payhip":
+        # A Payhip click gets its own event kind and an opaque click id; a sale
+        # cannot be attributed to it until a round trip is proven.
+        event = build_outbound_event(
+            payload["slug"], payload["campaign"],
+            event_kind="payhip_outbound", click_id=payload.get("click_id"),
+        )
+    else:
+        event = build_outbound_event(payload["slug"], payload["campaign"])
     record_hub_event(PROFIT_LEDGER_FILE, event)
     return RedirectResponse(url=payload["destination"], status_code=307)
+
+
+def _payhip_hosts() -> frozenset:
+    raw = ENV.get("PAYHIP_ALLOWED_HOSTS", "payhip.com,www.payhip.com")
+    return frozenset(h.strip().lower() for h in raw.split(",") if h.strip())
+
+
+def _outbound_allowlists() -> dict:
+    from content_hub import APPROVED_AMAZON_HOSTS
+    return {"amazon": APPROVED_AMAZON_HOSTS, "payhip": _payhip_hosts()}
+
+
+@app.get("/growth/products/{slug}", response_class=HTMLResponse)
+async def growth_product_page(slug: str):
+    """Public product page: one tracked Payhip CTA, attribution shown as unknown."""
+    from payhip_catalog import list_products
+
+    product = next((p for p in list_products(PROFIT_LEDGER_FILE)
+                    if p["slug"] == slug and p["status"] == "live"), None)
+    if product is None:
+        return HTMLResponse("<h1>Product not found</h1>", status_code=404)
+    listing_file = get_book_dir(slug) / "listing.json"
+    listing = json.loads(listing_file.read_text(encoding="utf-8")) if listing_file.exists() else {}
+    try:
+        token = make_tracking_token(
+            slug, GROWTH_HUB_CAMPAIGN, product["provider_product_id"],
+            destination_kind="payhip", allowed_hosts=_payhip_hosts(),
+        )
+    except TrackingConfigError:
+        raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")
+    price = f"{product['price_minor'] // 100}.{product['price_minor'] % 100:02d} {product['currency']}"
+    html_path = Path(__file__).parent / "templates" / "hub_book.html"
+    page = render_hub_page(html_path.read_text(), {
+        "TITLE": escape_text(listing.get("title", slug)),
+        "DESCRIPTION": escape_text(
+            (listing.get("description", "") + f"\n\nPrix : {price}").strip()
+        ),
+        "CTA_URL": escape_text(f"/growth/out/{token}"),
+        "CTA_LABEL": f"Acheter — {price}",
+    })
+    return HTMLResponse(page)
 
 
 @app.get("/api/growth/summary")

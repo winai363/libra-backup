@@ -31,3 +31,8 @@ data/ebrolis_session.json
 data/.lovely-profile/
 data/growth-autopilot-state.json
 data/growth-autopilot.lock
+
+# commerce lane — never commit
+payhip_session.json
+data/payhip-bundles/
+logs/payhip-shots/

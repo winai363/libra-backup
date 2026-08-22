@@ -576,3 +576,13 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - ส่วนที่ยังออโต้ 100%: bundle/สเปก/ด่าน KDP Select, Stripe webhook (API), รับเงิน/กระทบยอด/รายงาน/ตัดสินใจ, หน้าสินค้า+tracking. ส่วนที่ต้องคนครั้งเดียวต่อเล่ม: กดอัปโหลดใน Payhip (เพราะ CAPTCHA)
 - ทางเลือกถ้าบุ๋ยอยากออโต้เต็ม: ล็อกอินบนเครื่องตัวเองแล้วส่ง cookie session มา (ยังไม่ได้ทดสอบว่า Payhip ยอมรับ session ข้าม IP) — ไม่ได้ทำ
 - ⚠️ แจ้งบุ๋ย: อย่าส่งรหัสผ่านในแชทอีก ให้พิมพ์ใส่ .env เองหรือบอกให้ผมสร้าง prompt รับแบบไม่แสดง; รหัสที่ส่งมาควรเปลี่ยนหลังตั้งค่าเสร็จ
+
+## 2026-08-22 (ปิดท้าย) — Payhip + Stripe เชื่อมจริงแล้ว (test mode) ท่อทดสอบผ่าน
+- บุ๋ยทำครบ: สมัคร Payhip · สมัคร Stripe + KYC + บัญชีกรุงไทย (THB) · Connect Stripe ใน Payhip · วาง webhook URL + ติ๊ก paid/refunded
+- Stripe account จริง: `acct_1U76cEJUy2UX3wWt` (livemode=false); webhook endpoint `we_1U77OaJUy2UX3wWtGoHpBS8J` **สร้างอัตโนมัติโดย `scripts/commerce_setup_check.py --stripe`** พร้อม 8 events; signing secret เขียนลง .env เอง
+- ปรับ setup check: ดึง `acct_…` จากคีย์เอง บุ๋ยจึง copy ค่าเดียว (`STRIPE_SECRET_KEY_TEST`)
+- Radar = **Lite (ฟรี)** ตามที่แนะนำ; statement descriptor เดิม "LIBRA WINAI" แนะนำเปลี่ยนเป็นชื่อที่ลูกค้าจำได้ (กัน chargeback) — ยังไม่ยืนยันว่าบุ๋ยเปลี่ยนหรือยัง
+- **ทดสอบท่อจริงผ่าน public URL**: signed event → `200 {"status":"accepted"}` เก็บลง ledger เป็น `verified` / `pending_reconciliation` (`no_matching_order` = ถูกต้อง เพราะยังไม่มี Payhip order) · forged signature → `400 signature_invalid` ⇒ nginx → app → ตรวจลายเซ็น → inbox ทำงานครบ (ลบ event ทดสอบออกแล้ว)
+- `commerce_setup_check.py` = **ready: True** ทุกข้อ
+- ⚠️ บุ๋ยส่ง secret key มาในแชท (test key) — ควร roll คีย์นี้ใน Stripe หลังใช้งานจริงเริ่ม และห้ามส่ง live key แบบเดียวกันเด็ดขาด
+- เหลือขั้นเดียว: อัปโหลดสินค้าใน Payhip ด้วยชุดที่เตรียมไว้ `/root/downloads/payhip-aquarelle-botanique-debutants-fr/` แล้วส่ง URL `payhip.com/b/xxxx` กลับมา → `scripts/payhip_record_product.py` + เติม `PAYHIP_PRODUCT_IDS_TEST` (ตอนนี้ placeholder `pending-first-product`)

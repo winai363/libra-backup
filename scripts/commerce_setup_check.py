@@ -28,7 +28,7 @@ HUMAN_ONLY = [
     ("payhip_account", "Create the Payhip account (email + password) and put PAYHIP_EMAIL / PAYHIP_PASSWORD in .env"),
     ("stripe_account", "Create the Stripe account, pass KYC (ID card), link the Thai bank account"),
     ("payhip_stripe_connect", "In Payhip: Account → Settings → Payment Details → Connect Stripe (OAuth + 2FA)"),
-    ("stripe_test_key", "Stripe dashboard (TEST mode) → Developers → API keys → put STRIPE_SECRET_KEY_TEST and STRIPE_EXPECTED_ACCOUNT_TEST (acct_…) in .env"),
+    ("stripe_test_key", "Stripe dashboard (TEST mode) → Developers → API keys → put STRIPE_SECRET_KEY_TEST in .env (the acct_… id is fetched from the key automatically)"),
 ]
 
 
@@ -43,7 +43,7 @@ def report(env: dict) -> dict:
             "payhip_account": _present(env, "PAYHIP_EMAIL") and _present(env, "PAYHIP_PASSWORD"),
             "stripe_account": _present(env, "STRIPE_SECRET_KEY_TEST"),
             "payhip_stripe_connect": _present(env, "PAYHIP_STRIPE_CONNECTED"),
-            "stripe_test_key": _present(env, "STRIPE_SECRET_KEY_TEST") and _present(env, "STRIPE_EXPECTED_ACCOUNT_TEST"),
+            "stripe_test_key": _present(env, "STRIPE_SECRET_KEY_TEST"),
         }[key]
         steps.append({"step": key, "state": "ok" if done else "manual", "how": how})
 
@@ -74,9 +74,18 @@ def stripe_setup(env: dict) -> dict:
     import stripe_admin
 
     key = env.get("STRIPE_SECRET_KEY_TEST", "")
+    if not key:
+        return {"state": "missing", "reason": "STRIPE_SECRET_KEY_TEST not set"}
     expected = env.get("STRIPE_EXPECTED_ACCOUNT_TEST", "")
-    if not key or not expected:
-        return {"state": "missing", "reason": "STRIPE_SECRET_KEY_TEST / STRIPE_EXPECTED_ACCOUNT_TEST not set"}
+    if not expected:
+        # One less thing for a human to copy correctly: the key already knows
+        # which account it belongs to. Still verified as a test-mode account.
+        if not key.startswith("sk_test_"):
+            return {"state": "failed", "error": "test_key_required"}
+        stripe.api_key = key
+        discovered = stripe.Account.retrieve()
+        expected = discovered.get("id") if hasattr(discovered, "get") else discovered.id
+        stripe_admin.write_env_value(ENV_PATH, "STRIPE_EXPECTED_ACCOUNT_TEST", expected)
     account = stripe_admin.verify_account(stripe, api_key=key, expected_account=expected)
     endpoint = stripe_admin.ensure_webhook_endpoint(stripe, url=f"{PUBLIC_BASE}/api/webhooks/stripe")
     if endpoint.get("secret"):

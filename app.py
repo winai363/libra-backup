@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from business_ledger import record_hub_event
 from kdp_freeze import KDPFrozenError, assert_kdp_mutation_allowed
+from settings import CommerceConfigError, CommerceSettings, load_env_file
 from content_hub import (
     TrackingConfigError,
     build_outbound_event,
@@ -31,14 +32,8 @@ logger = logging.getLogger("libra")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # ── Config from .env ──
-ENV = {}
-_env_path = Path(__file__).parent / ".env"
-if _env_path.exists():
-    for line in _env_path.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            k, v = line.split("=", 1)
-            ENV[k.strip()] = v.strip()
+ENV_FILE = Path(__file__).parent / ".env"
+ENV = load_env_file(ENV_FILE)
 
 app = FastAPI(title="Libra")
 

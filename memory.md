@@ -486,3 +486,23 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - เพิ่ม revenue-stall signal: 3 วันล่าสุด royalties โตเพียง `$0.15` (< `$0.25`) จึง `active=true`. Profit agent เพิ่ม `metadata_safety=closed` และปิดเฉพาะ category/metadata mutation; observation/evaluation/organic lanes ยังทำงาน.
 - ไม่แก้ listing LIVE และไม่เรียก `--execute-actions`. Production pace วันที่ 22 ก.ค. = critical, actual mode revenue `$6.17`, projected 90-day `$49.73` เทียบเป้า `$75`.
 - Verification: focused red/green ผ่าน; full `PYTHONPATH=. pytest -q` = `194 passed`; runtime category health + profit state ยืนยัน signal จริง.
+
+## 2026-08-01 — Reddit post easy-taxes ถูก mod ลบ (ตรวจพบระหว่างเก็บหลักฐาน pairing)
+- บุ๋ยโพสต์เล่มภาษีสเปนลง r/FreeEBOOKS จริง 29 ก.ค. 13:11 UTC (u/WK_Bui_Books, post id 1v9vtd5) แต่ถูก mod/automod ลบ — ยืนยัน 3 ชั้นผ่าน Reddit RSS (user feed + post feed = "[removed]", ไม่อยู่ใน sub new feed 100 โพสต์) 1 view/0 comment หลัง 2 วัน
+- บันทึกใน data/reddit_promo_schedule.json เป็น attempted_post_url + post_result=removed_by_moderator — **จงใจไม่ใส่ post_url** เพื่อไม่ให้ pairing gate นับ distribution ที่ไม่มี traffic จริง (commit 8a120c9)
+- โพสต์เก่า 8 ก.ค. (ai-prompts-freelance-designers, id 1uqr7lk) ยังมองเห็นสาธารณะ → บันทึก post_url เป็นหลักฐาน valid ย้อนหลัง
+- เทคนิคเวิร์กอราวด์: Reddit บล็อก IP เซิร์ฟเวอร์ (403 ทุกหน้า HTML/JSON) แต่ **RSS (.rss) เข้าได้** — ใช้ /user/<name>/submitted.rss, /comments/<id>/.rss, /r/<sub>/new/.rss (ระวัง 429 ให้เว้นจังหวะ)
+- ค้างตัดสินใจ: โปรโม easy-taxes จบ 2 ส.ค. — ท่อ traffic รอบนี้ตายแล้ว; แนวทางเสนอบุ๋ย = เช็ค inbox Reddit หาข้อความ mod / message mods ขอ approve; สาเหตุน่าจะ karma ต่ำ (1) + บัญชีอายุ 26 วัน
+
+## 2026-08-22 — TOTAL KDP FREEZE บังคับใช้ในโค้ดจริง + เลน staging แยกขาด (claude รับช่วงจาก codex)
+- เดิม freeze เป็นแค่ข้อความใน CLAUDE.md — ตอนนี้เป็น `kdp_freeze.py` ที่รันได้: `assert_kdp_mutation_allowed()` raise เสมอ, ไม่มี env override/force/วันหมดอายุ (มีเทสต์ AST ยืนยันว่าโมดูล import แค่ `dataclasses`)
+- ปิดประตูครบ: Python mutator 16 ตัว (upload/cover/metadata/content/finish_publish + aplus_upload, aplus_resume_submit, set_price, free_promo_auto.schedule_one, kdp_unpublish, kdp_live_replace, kdp_fix_book, kdp_fix_publish, kdp_paperback_upload, kdp_enroll_v2, author_photo_upload, author_url_retry); HTTP 423 (approve-kdp / request-approval / status=ready, archived ยังผ่าน); `process_kdp_queue.sh` exit 73 ก่อนอ่านคิว; `watchdog.sh` เลิกตั้ง status=ready → `staged_freeze` + `publish_blocked`
+- `validate_action` = ด่าน freeze ก่อน แล้วค่อยเรียก `validate_action_rules` (กฎ category/ASIN, price band, promo pairing ยังมีเทสต์ครบ ไม่ได้ถูกลบ)
+- เทสต์เดิมที่พฤติกรรมเข้าไม่ถึงแล้วถูก mark skip พร้อมเหตุผล (queue rotation 6 ตัว, experiment proposer 2 ตัว) — ไม่ได้ลบทิ้ง เพื่อเป็นสเปกถ้าปลด freeze ในอนาคต
+- เลน staging ใหม่: `staging_pipeline.prepare_pilot()` + `scripts/prepare_kdp_pilot.py` + สเปกตายตัว `data/pilots/senior-smartphone-fr.json` — เขียนเฉพาะใต้ `/root/kdp-staging/`, snapshot `queue.txt`+live tree ก่อน/หลัง ถ้าเปลี่ยน = `StagingBoundaryError`, จบที่ `staged_quality_passed` + manifest
+- `validate_book(..., root=, require_visuals=True)` ใหม่: นิช visual ต้องมีภาพ ≥12 + `image-provenance.json` ครบทุกรูป (ห้ามมี personal data, ต้องมี alt text, ไฟล์ต้องอยู่ใน images/ เท่านั้น)
+- `review_book(slug, root=)`, `build_paperback_pdf(slug, root=)`, `step4_create_files(..., output_root=)`, `write_book_from_topic(topic, output_root=, preparation_only=True)` — ทั้งหมดรับ root ชัดเจน ไม่เดา KDP_DIR; เขียนลง live root = โดน freeze guard
+- run_dry_run ของ writer เดิม fail เมื่อมี cron libra ใดๆ ทำงาน → เปลี่ยนเป็นเช็คเฉพาะ cron ที่มิวเทตได้ (auto-generate / process_kdp_queue / kdp_upload / kdp_finish_publish) เพื่อให้ cron read-only (sales sync/roster/session) ไม่ทำ staging ล้มโดยไม่มีเหตุผล
+- **ยังไม่ได้รันสร้างหนังสือจริง** — รันแค่ `--dry-run` (PASS, ไม่เขียนไฟล์เลย, /root/kdp-staging ยังไม่มี). `--execute` = เผา API จริง ต้องรอบุ๋ยสั่ง
+- ยืนยัน: cron `auto-generate.sh` + `process_kdp_queue.sh` ยัง PAUSED (ไม่แตะ crontab); ไม่มี KDP/Playwright/Telegram action เกิดขึ้นระหว่างทำงานนี้
+- Verification: `pytest tests/ -q` = 620 passed / 8 skipped / **2 failed ที่พังอยู่ก่อนแล้ว** (test_profit_api::test_primary_dashboard_exposes_verified_royalties, test_libra_profit_agent_daily::test_bounded_attribution_gap — ยืนยันด้วย git stash ว่าไม่ได้เกิดจากงานนี้ ยังไม่ได้แก้)

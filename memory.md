@@ -672,3 +672,12 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - **ปิดข้อยกเว้นทันทีตามกฎ**: `APPROVED_UPLOADS = {}` (ว่างแล้ว) + cron คิว PAUSED กลับ ⇒ freeze กลับมาปิดสนิท ไม่มี auto-unlock เล่มถัดไป
 - เทสต์ freeze ปรับให้ทำงานกับ allowlist ว่าง (ใช้ fixture ชั่วคราวแทน) + เพิ่ม `test_nothing_is_authorised_by_default`
 - ⏳ รอ Amazon review (ปกติ 24-72 ชม.) → ได้ ASIN แล้วเล่มจะขึ้นร้าน
+
+## 2026-08-22 (ค่ำ) — 🔴 Amazon บล็อกเล่ม aquarelle = บล็อกครั้งที่ 5 ของบัญชี → ปิดเลนเล่มใหม่ถาวร
+- อีเมล KDP 19:52: `Aquarelle Botanique pour Débutants ... (ID: 67406856)` → "we won't be accepting your submission for publication because the book(s) might result in a disappointing customer experience" (ข้อความเดียวกับบล็อก 4 ครั้งก่อนเป๊ะ)
+- **นี่คือหลักฐานชี้ขาด**: เล่มนี้แก้ทุกอย่างที่เคยสงสัยว่าเป็นสาเหตุแล้ว — ภาพสาธิต 12 รูปในหน้าที่ถูกต้อง, editorial 8/8 ทุกมิติ, fact check supported, อ้างอิง 13 รายการมี URL, ปกมาตรฐาน v2, หมวด leaf ถูกทั้ง 3, ไม่ซ้ำเล่มเดิมในบัญชี, นิชเลือกจากยอดขายจริง → **ยังโดนภายใน ~4 ชม.หลังอัปโหลด** ⇒ ตัวแปรที่เหลือคือ **AI disclosure (text: entire work) + ประวัติบัญชี 4 บล็อก** ไม่ใช่คุณภาพเนื้อหา
+- สรุปเชิงกลยุทธ์: **KDP เลนเล่มใหม่ = ตายถาวรสำหรับบัญชีนี้** ไม่ใช่ปัญหาที่แก้ได้ด้วยการทำเล่มให้ดีขึ้น ทดลองซ้ำ = จ่ายค่า API + เพิ่มความเสี่ยงปิดบัญชี ~38 เล่มที่เหลือ
+- **ไม่ appeal ไม่ reply ไม่ resubmit** ตามกฎถาวร (ทำไปแล้ว 0 action ฝั่ง Amazon)
+- state ที่เช็คแล้วหลังรู้ผล (ไม่มีอะไรจะยิงซ้ำ): `APPROVED_UPLOADS = {}` · `/root/kdp/queue.txt` ว่าง · cron คิว 09:00/13:00 PAUSED ทั้งคู่ · cron ที่เหลือของ Libra เป็น read-only/bookkeeping
+- bookkeeping: `/root/kdp/aquarelle-botanique-debutants-fr/listing.json` → `live_status=BLOCKED` + `blocked{date,reason,decision,note}`; `CLAUDE.md` → block count 4→5 + เปลี่ยนหัวข้อข้อยกเว้นเป็นผล FAIL + ห้ามเสนอเล่มใหม่อีก
+- ✅ ทางออกที่เหลือของเล่มนี้ (งานไม่เสียเปล่า): EPUB/PDF พร้อมขาย ไม่ได้ enroll KDP Select → เอาขึ้น Lemon Squeezy ได้ทันทีโดยไม่ผิด exclusivity — รอบุ๋ยสั่ง

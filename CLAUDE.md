@@ -26,6 +26,18 @@ Amazon บล็อก ebook อีก 2 เล่มวันเดียว (T
 - staging ห้ามเติม `queue.txt`, ห้ามตั้ง `ready/uploaded/live`, ห้ามเปิด Playwright, ห้ามคุย KDP (มีเทสต์กันไว้)
 - นิช visual: ไม่ผ่านด่านถ้าไม่มีภาพสาธิต ≥12 รูป + `image-provenance.json` ครบทุกรูป (`validate_book(..., require_visuals=True)`)
 
+## 📊 ข้อเท็จจริงจากข้อมูลจริง (วัดเมื่อ 22 ส.ค. 2026 — ห้ามเดาแทน)
+
+รัน `python3 demand_analysis.py` เพื่ออัปเดตตัวเลขก่อนเสนออะไรก็ตามเรื่องสินค้าใหม่ (read-only ทั้งหมด ไม่มี LLM ตัดสิน)
+
+- รายได้ที่วัดได้ **$25.58** ตลอด 11 ก.ค.–21 ส.ค. (63 เล่มในระบบ / 38 LIVE) — **31 จาก 38 เล่ม LIVE ได้ $0**
+- **hub_events = 0 แถว → ไม่เคยมีใครคลิกลิงก์ของเราเลยสักครั้ง** ⇒ ยอด $0 **ไม่ได้พิสูจน์ว่าไม่มี demand** มันพิสูจน์ว่าไม่มีใครเห็นสินค้า. ห้ามสรุปว่านิชไหน "ไม่มีคนอยากได้" จากยอด $0 เพียงอย่างเดียว
+- ธีมที่ทุ่มเล่มแล้วได้ศูนย์: **anxiety/mental-health 12 เล่ม = $0**, **ภาษี/บัญชีสเปน 8 เล่ม = $0**, **ai_productivity 20 เล่มได้รวม $5.51 ($0.50/เล่ม LIVE)**
+- ธีมที่มีสัญญาณ (n เล็กมาก ทั้งหมด confidence=low): art_craft $3.19/เล่ม · adhd $3.10 · senior_tech $2.53 · kids_language $2.42
+- **ทุกเล่มในแค็ตตาล็อกมีภาพประกอบ 0 รูป** — รวมถึง "Acuarela para Principiantes" (สอนวาดสีน้ำ) ที่โดนบล็อกด้วยเหตุผล disappointing customer experience. สินค้าใหม่ในนิชสอนทำ/สอนใช้ **ต้องมีภาพจริง** (ด่าน `require_visuals` บังคับแล้ว)
+- KDP snapshot เป็นยอด**สะสมรายเดือน** — บวกแถวรายวันเข้าด้วยกัน = ตัวเลขเฟ้อ 4 เท่า (ใช้ค่า max ต่อเดือน)
+- ADHD ES และ acuarela ที่ทำเงินได้ **เป็นเล่มที่ถูกบล็อกไปแล้ว** — ห้ามนับเป็นเหตุผลรีไซเคิลนิชนั้นบนบัญชีนี้
+
 ## 🚫 ห้าม republish เล่มที่เคย publish แล้ว (มี ASIN)
 ทุกการ republish (เปลี่ยนหมวด/subtitle/description/ปก/เนื้อใน) = ส่งเล่มกลับเข้า Amazon content review ใหม่ = ทอยลูกเต๋า. **acuarela ถูก reject "disappointing customer experience" + หลุดจากร้าน (404) เมื่อ 11 ก.ค. 2026 จากการ republish เพื่อเปลี่ยนหมวดเท่านั้น.** ปกเคยผ่าน (3 ก.ค.) ≠ การันตีว่าจะผ่านอีก.
 - Gate ในโค้ด: `scripts/kdp_action_executor.py::validate_action` refuse `category_update` ทุก listing ที่มี `asin` — ห้ามถอย gate นี้

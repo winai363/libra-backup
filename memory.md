@@ -506,3 +506,14 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - **ยังไม่ได้รันสร้างหนังสือจริง** — รันแค่ `--dry-run` (PASS, ไม่เขียนไฟล์เลย, /root/kdp-staging ยังไม่มี). `--execute` = เผา API จริง ต้องรอบุ๋ยสั่ง
 - ยืนยัน: cron `auto-generate.sh` + `process_kdp_queue.sh` ยัง PAUSED (ไม่แตะ crontab); ไม่มี KDP/Playwright/Telegram action เกิดขึ้นระหว่างทำงานนี้
 - Verification: `pytest tests/ -q` = 620 passed / 8 skipped / **2 failed ที่พังอยู่ก่อนแล้ว** (test_profit_api::test_primary_dashboard_exposes_verified_royalties, test_libra_profit_agent_daily::test_bounded_attribution_gap — ยืนยันด้วย git stash ว่าไม่ได้เกิดจากงานนี้ ยังไม่ได้แก้)
+
+## 2026-08-22 (บ่าย) — วัด demand จากยอดขายจริงครั้งแรก: `demand_analysis.py`
+- บุ๋ยสั่ง: สินค้าใหม่ต้องมาจากการวิเคราะห์ยอดขายจริง ไม่ใช่หัวข้อที่เดาเอา + การตลาดต้องปลอดภัยไม่เสี่ยงบล็อก
+- สร้าง `demand_analysis.py` (deterministic 100% ไม่เรียก LLM — มีเทสต์ห้าม import openai/httpx) อ่าน `kdp_title_attribution` + `listing.json` จริง
+- **กับดักที่เจอ**: KDP snapshot เป็นยอดสะสม month-to-date — โค้ดเดิมถ้าบวกรายวันจะได้ $325 แทนที่จะเป็น $25.58 (เฟ้อ ~13 เท่า) ต้องใช้ MAX ต่อ (asin, month) แล้วค่อยบวกข้ามเดือน
+- **กับดักที่ 2**: จัดกลุ่มตาม Amazon category ไม่ได้ เพราะชื่อหมวดเป็นภาษาท้องถิ่นต่อ marketplace ("Informatique et Internet", "Negocios y dinero", "本") → คลัสเตอร์แตกเป็น 29 ก้อนไร้ความหมาย. แก้ด้วย THEME_RULES (keyword ต่อ slug ประกาศชัดในโค้ด + บันทึกว่า match คำไหน ตรวจย้อนได้)
+- ผลจริง: $25.58 / 63 เล่ม, 31 จาก 38 LIVE ได้ $0; anxiety 12 เล่ม=$0, ภาษีสเปน 8 เล่ม=$0, ai_productivity 20 เล่ม=$5.51; ธีมที่มีสัญญาณ art_craft/adhd/senior_tech/kids_language (n เล็กทั้งหมด)
+- **ข้อค้นพบที่สำคัญที่สุด**: `hub_events` = 0 แถว → ไม่เคยมีคลิกจากช่องทางเราเลย ⇒ ยอด $0 อาจแปลว่า "ไม่มีคนเห็น" ไม่ใช่ "ไม่มี demand". ผลิตเล่มใหม่โดยไม่แก้ distribution = ทำซ้ำความผิดเดิม
+- **ข้อค้นพบที่ 2**: ทุกเล่มมีภาพ 0 รูป รวมเล่มสอนวาดสีน้ำที่โดนบล็อก → ตรงกับเหตุผล disappointing customer experience
+- `product_opportunities()` จัดอันดับด้วย **รายได้ต่อเล่ม LIVE** ไม่ใช่รายได้รวม (ไม่งั้น ai_productivity 20 เล่มจะดูดีทั้งที่ $0.50/เล่ม); ตัดธีมที่หลักฐานมาจากเล่ม blocked ล้วน และตัด diet/meal-plan ถาวร
+- ยังไม่ได้ตัดสินใจ: ธีมสินค้าใหม่ / ปลายทางขาย (KDP บัญชีเดิม = เสี่ยงบล็อกครั้งที่ 5 ปิดบัญชี vs Payhip = ปลอดภัย) / ช่องทางการตลาดที่ audience ตรงภาษา — รอบุ๋ยตัดสิน

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "pilot_id": "senior-smartphone-fr-v1",
+  "slug": "smartphone-sans-stress-seniors-fr",
+  "title": "Le Smartphone Sans Stress",
+  "subtitle": "Guide pratique grand format pour seniors : appels, WhatsApp, photos et sécurité pas à pas",
+  "language": "French",
+  "lang_code": "fr",
+  "marketplace": "amazon.fr",
+  "audience": "French-speaking seniors and family caregivers",
+  "niche": "senior smartphone practical guide",
+  "description_en": "A large-print, illustrated guide to essential Android smartphone tasks, WhatsApp, photos, video calls, accessibility, and scam prevention.",
+  "required_sections": [
+    "Android basics",
+    "accessibility",
+    "WhatsApp",
+    "photos",
+    "video calls",
+    "online safety",
+    "scam prevention",
+    "caregiver checklist"
+  ],
+  "visual_required": true,
+  "minimum_instructional_images": 12,
+  "prohibited_claims": [
+    "guaranteed safety",
+    "official WhatsApp guide",
+    "official Android guide"
+  ],
+  "publish_target": "kdp",
+  "publish_blocked": "total_kdp_freeze"
+}

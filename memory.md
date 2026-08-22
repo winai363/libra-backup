@@ -567,3 +567,12 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - dry-run จริง: `payhip_publish.py --slug aquarelle-botanique-debutants-fr --price-minor 1290 --currency EUR --dry-run` → bundle 40.9MB (PDF+EPUB+LISEZ-MOI) ที่ data/payhip-bundles/ (gitignored)
 - Verification: `pytest tests/ -q` = 816 passed / 8 skipped / 2 failed เดิม; libra.service restart แล้ว active; ยังไม่ติดต่อ Payhip/Stripe จริง (ไม่มีบัญชี)
 - เหลือของบุ๋ย 3 ข้อ (ทำครั้งเดียว): สมัคร Payhip → สมัคร Stripe+KYC+ธนาคาร → กด Connect Stripe ใน Payhip แล้วใส่ค่าใน .env ตาม `scripts/commerce_setup_check.py`; จากนั้น `--inspect` ยืนยัน selectors ก่อน `--execute` ครั้งแรก
+
+## 2026-08-22 (ดึกสุด) — Payhip login ติด reCAPTCHA → เปลี่ยนเป็น human-handoff
+- บุ๋ยสมัคร Payhip แล้ว ส่ง credential มาในแชท → เก็บลง `.env` (chmod 600) ด้วย write_env_value ไม่พิมพ์ออกจอ
+- หน้า login จริง = `/auth/login` (ไม่ใช่ /login → 404), ช่องอีเมล `input[name='login']` (#email_affil), password `#password_f`, ปุ่ม "Log in", มี reCAPTCHA v3 + fallback v2; แก้ SELECTORS แล้ว (probe: `manual_probes/probe_payhip_login_form.py`)
+- **ผล login จริง**: Payhip บังคับ "I'm not a robot" checkbox (หน้าเขียนว่า "exceeding reCAPTCHA Enterprise free quota") — บราวเซอร์ทุกตัวบนเซิร์ฟเวอร์นี้ (Playwright/MCP) IP เดียวกัน ติดเหมือนกัน; **ไม่หลบ CAPTCHA** (กฎบ้าน + ToS + เสี่ยงบัญชีใหม่โดนแบน) → driver raise `captcha_manual_required`
+- ทางที่ใช้: `scripts/payhip_upload_pack.py` สร้างโฟลเดอร์ `/root/downloads/payhip-<slug>/` (zip ลูกค้า 40.9MB, cover, product-text.txt, CHECKLIST-TH.txt, webhook URL) → บุ๋ยอัปโหลดเอง ~5 นาที/เล่ม → ส่ง URL `payhip.com/b/xxxx` กลับ → `scripts/payhip_record_product.py --slug --url` **เปิดหน้าสาธารณะตรวจว่ามีชื่อเล่มจริงก่อนบันทึก** (หลักฐาน ไม่ใช่แค่ลิงก์ที่แปะมา) → หน้า /growth/products/<slug> ขึ้นเอง
+- ส่วนที่ยังออโต้ 100%: bundle/สเปก/ด่าน KDP Select, Stripe webhook (API), รับเงิน/กระทบยอด/รายงาน/ตัดสินใจ, หน้าสินค้า+tracking. ส่วนที่ต้องคนครั้งเดียวต่อเล่ม: กดอัปโหลดใน Payhip (เพราะ CAPTCHA)
+- ทางเลือกถ้าบุ๋ยอยากออโต้เต็ม: ล็อกอินบนเครื่องตัวเองแล้วส่ง cookie session มา (ยังไม่ได้ทดสอบว่า Payhip ยอมรับ session ข้าม IP) — ไม่ได้ทำ
+- ⚠️ แจ้งบุ๋ย: อย่าส่งรหัสผ่านในแชทอีก ให้พิมพ์ใส่ .env เองหรือบอกให้ผมสร้าง prompt รับแบบไม่แสดง; รหัสที่ส่งมาควรเปลี่ยนหลังตั้งค่าเสร็จ

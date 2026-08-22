@@ -616,3 +616,15 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - `.env` ตอนนี้: `LIBRA_COMMERCE_MODE=live`, มี `*_LIVE` ครบ, **ไม่มี** `STRIPE_SECRET_KEY_LIVE`
 - ⚠️ ค้าง: บุ๋ยต้องเปลี่ยน webhook URL ใน Payhip เป็นโทเคน LIVE (`PAYHIP_WEBHOOK_TOKEN_LIVE`) ไม่งั้น event จาก Payhip จะโดนปฏิเสธ 404
 - pytest 840 passed / 8 skipped / 2 failed เดิม
+
+## 2026-08-22 (ค่ำ-3) — ⛔ พบข้อจำกัดถาวร: Payhip (GB) + Stripe ไทย เก็บค่าคอมไม่ได้
+- หน้าจ่ายเงินจริงขึ้นเตือน: **"Stripe doesn't currently support application fees for platforms in GB with connected accounts in TH"**
+- ตรวจแล้ว: Stripe Connect **ไม่รองรับ application fee ข้ามคู่ประเทศ GB↔TH** (Payhip เป็นบริษัทอังกฤษ, บัญชีเราไทย) — Payhip ใช้ application fee เก็บค่าคอม 5% (แผนฟรี) จึงหักไม่ได้
+- ไม่ใช่บั๊กชั่วคราวและแก้ฝั่งเราไม่ได้ — เป็นข้อจำกัดระดับ Stripe/ประเทศ
+- **ทางเลือกที่ตรวจแล้ว**:
+  1. **PayPal ใน Payhip** — Payhip รองรับ PayPal + อีก 1 processor พร้อมกัน; PayPal เก็บค่าคอมของ Payhip ได้คนละกลไก (ไม่ใช้ application fee) ⇒ น่าจะใช้ได้ **แต่ยังไม่ได้ทดสอบจริง** และเราไม่มีบัญชี PayPal ธุรกิจ
+  2. **อัปเป็น Payhip Pro $99/เดือน (0% fee)** — ถ้าไม่มีค่าคอมก็ไม่ต้องใช้ application fee (สมมติฐาน ยังไม่ยืนยัน) แต่ $99/ด. = ~3,600฿ ไม่คุ้มเลยเมื่อยอดขายยัง $0
+  3. **ขายตรงด้วย Stripe Payment Links ของเราเอง** — ไม่ผ่านตัวกลาง ไม่มี application fee, เงินเข้าบัญชีเราตรง, เสียแค่ค่าธรรมเนียม Stripe; ต้องทำระบบส่งไฟล์เอง (เรามี webhook + ledger อยู่แล้ว ต่อเพิ่มไม่มาก)
+  4. Gumroad / Lemon Squeezy (merchant of record) — ต้องตรวจว่ารองรับผู้ขายไทยไหม
+- **ยังไม่ได้ซื้อทดสอบ** — หยุดบุ๋ยไว้ก่อนกด Buy Now; คูปอง TESTRUN95 ยังไม่ถูกใช้ (คำนวณถูก €12.90→€0.64)
+- Payhip pricing: ฟรี 5% · Plus $29/ด. 2% · Pro $99/ด. 0%

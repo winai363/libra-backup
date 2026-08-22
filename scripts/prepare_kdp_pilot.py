@@ -10,6 +10,8 @@ successful `--execute` run writes only under the staging root and ends at
 """
 
 import argparse
+import json
+import logging
 import os
 import re
 import sys
@@ -23,7 +25,16 @@ from gpt_fallback_writer import write_book_from_topic  # noqa: E402
 from kdp_freeze import freeze_state  # noqa: E402
 from pdf_builder import build_paperback_pdf  # noqa: E402
 from quality_gate import validate_book  # noqa: E402
-from staging_pipeline import StageDependencies, prepare_pilot  # noqa: E402
+from seo_optimizer import optimize as optimize_seo  # noqa: E402
+from staging_pipeline import (  # noqa: E402
+    StageDependencies,
+    StageResult,
+    load_pilot_spec,
+    prepare_pilot,
+    write_manifest,
+)
+
+logger = logging.getLogger("prepare_kdp_pilot")
 
 PILOTS_DIR = LIBRA_DIR / "data" / "pilots"
 DEFAULT_PILOT = "aquarelle-botanique-fr"
@@ -67,7 +78,22 @@ def production_dependencies(staging_root: Path) -> StageDependencies:
         return build_paperback_pdf(slug, root=Path(root))
 
     def editorial(slug, root):
-        return review_book(slug, root=Path(root))
+        root = Path(root)
+        # SEO first: the editorial board scores seo_quality, so running the
+        # optimiser afterwards (as the legacy writer did) means that score is
+        # always judged on un-optimised keywords.
+        try:
+            optimize_seo(slug, root=root)
+        except Exception as exc:
+            logger.warning("SEO optimisation skipped for %s: %s", slug, exc)
+
+        review = review_book(slug, root=root)
+        # The quality gate reads editorial-review.json from disk; without this
+        # bridge a passing review still fails the gate as "missing".
+        (root / slug / "editorial-review.json").write_text(
+            json.dumps(review, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        return review
 
     def validate(slug, root):
         report = validate_book(
@@ -88,6 +114,33 @@ def production_dependencies(staging_root: Path) -> StageDependencies:
     )
 
 
+def finalize_pilot(*, spec_path: Path, staging_root: Path) -> StageResult:
+    """Re-run PDF, SEO, editorial and quality on an already-staged book.
+
+    Writing a book costs real API money; a book that failed only on a gate
+    should be re-gated, never rewritten.
+    """
+    spec, spec_bytes = load_pilot_spec(Path(spec_path))
+    staging_root = Path(staging_root)
+    book_dir = staging_root / spec["slug"]
+    if not (book_dir / "listing.json").exists():
+        raise SystemExit(f"nothing staged at {book_dir} — run --execute first")
+
+    dependencies = production_dependencies(staging_root)
+    dependencies.build_pdf(spec["slug"], staging_root)
+    editorial = dependencies.editorial(spec["slug"], staging_root)
+    quality = dependencies.validate(spec["slug"], staging_root)
+    status = (
+        "staged_quality_passed"
+        if editorial.get("passed") and quality.get("passed")
+        else "staged_quality_failed"
+    )
+    manifest_path = write_manifest(
+        book_dir, spec, spec_bytes, status=status, editorial=editorial, quality=quality
+    )
+    return StageResult(status, spec["publish_blocked"], book_dir, manifest_path)
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="Prepare a frozen KDP pilot book locally (no publishing)"
@@ -95,6 +148,8 @@ def parse_args(argv=None):
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="check the boundary only")
     mode.add_argument("--execute", action="store_true", help="run the staging pipeline")
+    mode.add_argument("--finalize", action="store_true",
+                      help="re-run the gates on an already-staged book (no rewriting)")
     parser.add_argument("--pilot", default=DEFAULT_PILOT,
                         help=f"pilot spec name in data/pilots (default: {DEFAULT_PILOT})")
     return parser.parse_args(argv)
@@ -112,6 +167,14 @@ def main(argv=None) -> int:
 
     staging_root = Path(os.getenv("KDP_STAGING_ROOT", "/root/kdp-staging"))
     live_root = Path(os.getenv("KDP_DIR", "/root/kdp"))
+
+    if args.finalize:
+        result = finalize_pilot(spec_path=spec, staging_root=staging_root)
+        print(f"status: {result.status}")
+        print(f"publish_blocked: {result.publish_blocked}")
+        print(result.manifest_path)
+        return 0 if result.status == "staged_quality_passed" else 2
+
     result = prepare_pilot(
         spec_path=spec,
         staging_root=staging_root,

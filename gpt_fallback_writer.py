@@ -805,6 +805,8 @@ def write_book_from_topic(topic: dict, *, output_root: Path, preparation_only: b
     )
     if not step5_generate_epub(book_dir):
         raise ValueError("EPUB generation failed")
+    _USAGE["images"] = _USAGE.get("images", 0) + 1  # cover
+    _save_cost_report(book_dir)
     return book_dir
 
 

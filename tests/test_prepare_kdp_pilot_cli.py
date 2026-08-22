@@ -223,3 +223,81 @@ def test_the_watercolour_pilot_records_why_it_was_chosen():
     assert evidence["supporting_titles"][0]["asin"] == "B0H4FMMP8P"
     assert evidence["confidence"] == "low"
     assert "duplicate" in evidence["duplicate_check"]
+
+
+def test_editorial_adapter_writes_the_report_the_gate_reads(monkeypatch, tmp_path):
+    """review_book returns a dict; the quality gate reads a file. Bridge them."""
+    import prepare_kdp_pilot
+
+    book = tmp_path / "aquarelle-botanique-debutants-fr"
+    book.mkdir(parents=True)
+    monkeypatch.setattr(prepare_kdp_pilot, "review_book",
+                        lambda slug, root=None: {"passed": True, "scores": {"seo_quality": 8}})
+    monkeypatch.setattr(prepare_kdp_pilot, "optimize_seo", lambda slug, root: {"seo_score_after": 9})
+
+    deps = prepare_kdp_pilot.production_dependencies(tmp_path)
+    result = deps.editorial("aquarelle-botanique-debutants-fr", tmp_path)
+
+    assert result["passed"] is True
+    stored = json.loads((book / "editorial-review.json").read_text())
+    assert stored["passed"] is True
+
+
+def test_seo_runs_before_the_editorial_review(monkeypatch, tmp_path):
+    """SEO score was being judged before the optimiser had ever run."""
+    import prepare_kdp_pilot
+
+    book = tmp_path / "aquarelle-botanique-debutants-fr"
+    book.mkdir(parents=True)
+    order = []
+    monkeypatch.setattr(prepare_kdp_pilot, "optimize_seo",
+                        lambda slug, root: order.append("seo") or {})
+    monkeypatch.setattr(prepare_kdp_pilot, "review_book",
+                        lambda slug, root=None: order.append("editorial") or {"passed": True})
+
+    deps = prepare_kdp_pilot.production_dependencies(tmp_path)
+    deps.editorial("aquarelle-botanique-debutants-fr", tmp_path)
+
+    assert order == ["seo", "editorial"]
+
+
+def test_a_failing_seo_pass_never_blocks_the_editorial_review(monkeypatch, tmp_path):
+    import prepare_kdp_pilot
+
+    book = tmp_path / "aquarelle-botanique-debutants-fr"
+    book.mkdir(parents=True)
+
+    def broken(slug, root):
+        raise RuntimeError("seo API down")
+
+    monkeypatch.setattr(prepare_kdp_pilot, "optimize_seo", broken)
+    monkeypatch.setattr(prepare_kdp_pilot, "review_book",
+                        lambda slug, root=None: {"passed": True})
+
+    deps = prepare_kdp_pilot.production_dependencies(tmp_path)
+
+    assert deps.editorial("aquarelle-botanique-debutants-fr", tmp_path)["passed"] is True
+
+
+def test_finalize_mode_reuses_the_staged_manuscript(monkeypatch, tmp_path):
+    """Re-running the gates must not re-pay for writing the book."""
+    import prepare_kdp_pilot
+
+    book = tmp_path / "aquarelle-botanique-debutants-fr"
+    book.mkdir(parents=True)
+    (book / "listing.json").write_text(json.dumps({"title": "T"}))
+    monkeypatch.setattr(prepare_kdp_pilot, "write_book_from_topic",
+                        lambda *a, **k: pytest.fail("writer must not run in finalize mode"))
+    monkeypatch.setattr(prepare_kdp_pilot, "build_paperback_pdf", lambda slug, root=None: book / "b.pdf")
+    monkeypatch.setattr(prepare_kdp_pilot, "optimize_seo", lambda slug, root: {})
+    monkeypatch.setattr(prepare_kdp_pilot, "review_book", lambda slug, root=None: {"passed": True})
+    monkeypatch.setattr(prepare_kdp_pilot, "validate_book",
+                        lambda slug, **kwargs: type("R", (), {"passed": True, "errors": []})())
+
+    result = prepare_kdp_pilot.finalize_pilot(
+        spec_path=LIBRA / "data" / "pilots" / "aquarelle-botanique-fr.json",
+        staging_root=tmp_path,
+    )
+
+    assert result.status == "staged_quality_passed"
+    assert json.loads(result.manifest_path.read_text())["status"] == "staged_quality_passed"

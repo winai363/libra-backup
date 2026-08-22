@@ -96,7 +96,7 @@ def prepare_pilot(
     except Exception as exc:
         # A crashed stage still leaves an auditable record — never a silent
         # half-staged directory that could be mistaken for a finished book.
-        _write_manifest(
+        write_manifest(
             book_dir,
             spec,
             spec_bytes,
@@ -110,14 +110,14 @@ def prepare_pilot(
 
     passed = bool(editorial.get("passed")) and bool(quality.get("passed"))
     status = "staged_quality_passed" if passed else "staged_quality_failed"
-    manifest_path = _write_manifest(
+    manifest_path = write_manifest(
         book_dir, spec, spec_bytes, status=status, editorial=editorial, quality=quality
     )
     assert_live_untouched()
     return StageResult(status, FREEZE_CODE, book_dir, manifest_path)
 
 
-def _write_manifest(
+def write_manifest(
     book_dir: Path, spec: dict, spec_bytes: bytes, *, status: str, editorial: dict, quality: dict
 ) -> Path | None:
     if not book_dir.exists():

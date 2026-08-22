@@ -32,14 +32,14 @@ _GPT41_OUT = 8.0  / 1_000_000
 _SEARCH    = 25.0 / 1_000
 
 
-def _append_step_cost(slug: str, step: str, response) -> None:
+def _append_step_cost(slug: str, step: str, response, root: Path | None = None) -> None:
     usage = getattr(response, "usage", None)
     inp  = (getattr(usage, "input_tokens", 0) or getattr(usage, "prompt_tokens", 0)) if usage else 0
     out  = (getattr(usage, "output_tokens", 0) or getattr(usage, "completion_tokens", 0)) if usage else 0
     srch = sum(1 for item in response.output
                if getattr(item, "type", "") in ("web_search_call", "web_search_preview_call"))
     cost_usd = inp * _GPT41_IN + out * _GPT41_OUT + srch * _SEARCH
-    report_path = KDP_DIR / slug / "cost-report.json"
+    report_path = (root if root is not None else KDP_DIR) / slug / "cost-report.json"
     try:
         report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
     except (OSError, json.JSONDecodeError):
@@ -148,9 +148,12 @@ def _extract_json(text: str) -> dict:
     raise ValueError("Incomplete JSON in SEO response")
 
 
-def optimize(slug: str, dry_run: bool = False) -> dict:
-    """Run SEO optimization for a book. Returns the seo-analysis dict."""
-    book_dir = KDP_DIR / slug
+def optimize(slug: str, dry_run: bool = False, root: Path | None = None) -> dict:
+    """Run SEO optimization for a book. Returns the seo-analysis dict.
+
+    `root` lets frozen staging optimise a book outside the live KDP tree.
+    """
+    book_dir = (root if root is not None else KDP_DIR) / slug
     listing_path = book_dir / "listing.json"
     if not listing_path.exists():
         raise FileNotFoundError(f"No listing.json for {slug}")
@@ -202,7 +205,7 @@ def optimize(slug: str, dry_run: bool = False) -> dict:
     if response is None:
         raise RuntimeError("SEO optimizer got no response")
 
-    _append_step_cost(slug, "seo", response)
+    _append_step_cost(slug, "seo", response, root)
 
     raw = ""
     for item in response.output:

@@ -153,13 +153,30 @@ def resolve_paths(proposed_paths, leaves=None, max_n: int = 3, min_score: float 
     subject = {t for t, n in _counts.items() if n >= 2} - _GENERIC
     out, used = [], set()
     for path in proposed_paths:
-        best, best_s = None, min_score
+        scored = []
         for leaf in leaves:
             if leaf in used:
                 continue
             s = _score(path, leaf, book_context, subject)
-            if s > best_s:
-                best, best_s = leaf, s
+            if s > min_score:
+                scored.append((s, leaf))
+        best = None
+        if scored:
+            best_s = max(s for s, _ in scored)
+            tied = [leaf for s, leaf in scored if s == best_s]
+            if len(tied) == 1:
+                best = tied[0]
+            else:
+                # Several leaves scored identically because only the shared
+                # parent path matched — the leaf word itself was never relevant.
+                # Picking one would be a coin toss (this is how a watercolour
+                # book landed in "Techniques > Basketry"). Prefer a tied leaf
+                # that actually shares a word with the book; otherwise refuse.
+                relevant = [
+                    leaf for leaf in tied
+                    if _tok(_segments(leaf)[-1]) & (book_context - _GENERIC)
+                ]
+                best = relevant[0] if len(relevant) == 1 else None
         if best:
             out.append(best); used.add(best)
         else:

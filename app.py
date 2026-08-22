@@ -8,7 +8,7 @@ import time
 import re
 import sqlite3
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, RedirectResponse
@@ -1702,3 +1702,123 @@ async def growth_state_api(request: Request):
     state file returns data_available: false rather than a 404/500."""
     check_read(request)
     return build_growth_dashboard()
+
+
+# ── Commerce webhooks (Payhip + Stripe, TEST MODE ONLY) ──────────────────────
+# Public endpoints. Everything they touch is fail-closed: without complete
+# commerce configuration they return 503 rather than guessing a default, and no
+# response, log line, or stored row ever contains a secret, signature, raw body
+# or customer identity.
+
+def commerce_settings() -> CommerceSettings:
+    try:
+        return CommerceSettings.from_sources(ENV)
+    except CommerceConfigError as exc:
+        raise HTTPException(status_code=503, detail={"code": "commerce_not_configured",
+                                                     "reason": str(exc)}) from exc
+
+
+def _commerce_receipt(receipt: dict) -> Response:
+    status = receipt["status"]
+    if status == "conflict":
+        # Same provider event id, different content: a critical incident is
+        # already open and no projection was touched.
+        return JSONResponse(status_code=409, content={"status": "conflict"})
+    return JSONResponse(status_code=200, content={"status": "accepted" if status == "inserted" else status})
+
+
+@app.post("/api/webhooks/stripe")
+async def stripe_webhook_route(request: Request):
+    from stripe_webhook import StripeWebhookError, normalize_stripe_event, verify_stripe_event
+
+    settings = commerce_settings()
+    raw_body = await request.body()
+    if len(raw_body) > settings.max_webhook_bytes:
+        raise HTTPException(status_code=413, detail={"code": "body_too_large"})
+
+    try:
+        event = verify_stripe_event(
+            raw_body,
+            request.headers.get("Stripe-Signature", ""),
+            settings,
+            now=int(time.time()),
+        )
+        normalized = normalize_stripe_event(
+            event, raw_body, received_at=datetime.now(timezone.utc).isoformat()
+        )
+    except StripeWebhookError as exc:
+        raise HTTPException(status_code=_stripe_status(exc.code),
+                            detail={"code": exc.code}) from exc
+
+    from commerce_ledger import record_provider_event
+    from commerce_reconciliation import reconcile_event
+
+    receipt = record_provider_event(PROFIT_LEDGER_FILE, normalized)
+    if receipt["status"] == "inserted":
+        # The inbox row is committed first: a projection failure returns 500 but
+        # leaves the event retryable instead of losing it.
+        reconcile_event(PROFIT_LEDGER_FILE, normalized["provider"], normalized["event_id"])
+    return _commerce_receipt(receipt)
+
+
+def _stripe_status(code: str) -> int:
+    if code == "body_too_large":
+        return 413
+    if code in ("wrong_mode", "wrong_account"):
+        return 403
+    if code == "unsupported_event":
+        return 202
+    return 400
+
+
+@app.post("/api/webhooks/payhip/{callback_token}")
+async def payhip_webhook_route(callback_token: str, request: Request):
+    from payhip_webhook import (
+        PayhipWebhookError,
+        normalize_payhip_event,
+        verify_payhip_callback_token,
+    )
+
+    settings = commerce_settings()
+    try:
+        verify_payhip_callback_token(callback_token, settings.payhip_webhook_token)
+    except PayhipWebhookError:
+        # Generic 404: the response must not reveal that this path exists.
+        raise HTTPException(status_code=404, detail="Not Found")
+
+    raw_body = await request.body()
+    if len(raw_body) > settings.max_webhook_bytes:
+        raise HTTPException(status_code=413, detail={"code": "body_too_large"})
+
+    try:
+        normalized = normalize_payhip_event(
+            raw_body, settings, received_at=datetime.now(timezone.utc).isoformat()
+        )
+    except PayhipWebhookError as exc:
+        status = 202 if exc.code == "unsupported_event" else 400
+        raise HTTPException(status_code=status, detail={"code": exc.code}) from exc
+
+    from commerce_ledger import record_provider_event
+    from commerce_reconciliation import reconcile_event
+
+    receipt = record_provider_event(PROFIT_LEDGER_FILE, normalized)
+    if receipt["status"] == "inserted":
+        reconcile_event(PROFIT_LEDGER_FILE, normalized["provider"], normalized["event_id"])
+    return _commerce_receipt(receipt)
+
+
+@app.get("/api/commerce/summary")
+async def commerce_summary_api(request: Request):
+    check_auth(request)
+    from commerce_ledger import open_incidents
+    from commerce_reconciliation import currency_totals
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "mode": ENV.get("LIBRA_COMMERCE_MODE", "unconfigured"),
+        "by_currency": currency_totals(PROFIT_LEDGER_FILE),
+        "open_incidents": open_incidents(PROFIT_LEDGER_FILE),
+        # Until a controlled transaction proves the click id survives checkout,
+        # we cannot attribute a sale to a campaign. Say so rather than show 0.
+        "attribution": {"status": "unknown", "verified_sales": 0},
+    }

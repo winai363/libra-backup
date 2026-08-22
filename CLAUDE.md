@@ -35,6 +35,14 @@ Amazon บล็อก ebook อีก 2 เล่มวันเดียว (T
 - staging ห้ามเติม `queue.txt`, ห้ามตั้ง `ready/uploaded/live`, ห้ามเปิด Playwright, ห้ามคุย KDP (มีเทสต์กันไว้)
 - นิช visual: ไม่ผ่านด่านถ้าไม่มีภาพสาธิต ≥12 รูป + `image-provenance.json` ครบทุกรูป (`validate_book(..., require_visuals=True)`)
 
+## 🛒 เลนขายตรง Payhip + Stripe (test mode, 22 ส.ค. 2026)
+- **Payhip สังเกต / Stripe พิสูจน์** — event จาก Payhip สร้างรายได้เองไม่ได้ ต้องมี Stripe verified ตรง id+จำนวน+สกุล
+- ⛔ **ห้ามขาย EPUB ของเล่มที่อยู่ใน KDP Select** (`payhip_catalog.guard_book_for_payhip` บล็อกไว้) — เล่มเก่า 39/64 อยู่ใน Select ห้ามเอาไป Payhip; เฉพาะเล่มใหม่ที่ไม่ enroll เท่านั้น
+- Payhip ไม่มี API สร้างสินค้า/webhook → ใช้ `payhip_admin.py` (Playwright) ต้องมี before/after evidence; ครั้งแรกรัน `scripts/payhip_publish.py --inspect` ยืนยัน SELECTORS ก่อน `--execute`
+- readiness: `python3 scripts/commerce_setup_check.py` (+ `--stripe` สร้าง webhook endpoint ให้เอง); runbook เต็ม `docs/runbooks/libra-commerce-test-mode.md`
+- ค่าที่ไม่รู้ = null ห้ามใส่ 0 · สกุลเงินไม่รวมกัน · payout ≠ รายได้ · `paid_spend_minor: 0` เสมอ
+- ⚠️ `LIBRA_GROWTH_TRACKING_SECRET` ต้องอยู่ใน `.env` (app.py export ให้ service) — ก่อน 22 ส.ค. หน้า /growth/books/* คืน 503 ตลอด ลิงก์ hub ที่โพสต์ไปตายหมด
+
 ## 📊 ข้อเท็จจริงจากข้อมูลจริง (วัดเมื่อ 22 ส.ค. 2026 — ห้ามเดาแทน)
 
 รัน `python3 demand_analysis.py` เพื่ออัปเดตตัวเลขก่อนเสนออะไรก็ตามเรื่องสินค้าใหม่ (read-only ทั้งหมด ไม่มี LLM ตัดสิน)

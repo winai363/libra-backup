@@ -11,7 +11,20 @@ import pytest
 
 import kdp_freeze
 
-APPROVED = next(iter(kdp_freeze.APPROVED_UPLOADS))
+# Normally empty (nothing is authorised), so the "approved" cases run against a
+# temporary entry rather than requiring a real live authorisation to exist.
+APPROVED = "a-book-bui-authorised"
+
+
+@pytest.fixture
+def approved(monkeypatch):
+    monkeypatch.setattr(kdp_freeze, "APPROVED_UPLOADS", {APPROVED: "test fixture"})
+    return APPROVED
+
+
+def test_nothing_is_authorised_by_default():
+    """The steady state is a closed freeze — an entry here is the exception."""
+    assert kdp_freeze.APPROVED_UPLOADS == {}
 
 
 def test_freeze_state_is_machine_readable_and_active():
@@ -33,18 +46,18 @@ def test_every_kdp_mutation_fails_closed_without_an_approved_slug(action):
 
 
 @pytest.mark.parametrize("action", ["republish", "price", "metadata", "cover", "update_ebook_content"])
-def test_an_approved_slug_still_cannot_touch_an_existing_listing(action):
+def test_an_approved_slug_still_cannot_touch_an_existing_listing(action, approved):
     """This is the whole point: approval publishes a new book, nothing else."""
     with pytest.raises(kdp_freeze.KDPFrozenError):
         kdp_freeze.assert_kdp_mutation_allowed(action, APPROVED)
 
 
 @pytest.mark.parametrize("action", sorted(kdp_freeze.NEW_TITLE_ACTIONS))
-def test_approved_slug_may_publish_a_new_title(action):
+def test_approved_slug_may_publish_a_new_title(action, approved):
     kdp_freeze.assert_kdp_mutation_allowed(action, APPROVED)
 
 
-def test_an_unapproved_slug_is_refused_for_every_action():
+def test_an_unapproved_slug_is_refused_for_every_action(approved):
     for action in sorted(kdp_freeze.NEW_TITLE_ACTIONS):
         with pytest.raises(kdp_freeze.KDPFrozenError):
             kdp_freeze.assert_kdp_mutation_allowed(action, "some-other-book")

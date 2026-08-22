@@ -172,10 +172,11 @@ def test_kdp_select_enroll_script_refuses_on_import():
 # ── The one authorised new title ─────────────────────────────────────────────
 
 def test_the_approved_book_can_reach_the_uploader(monkeypatch):
-    """The guard must let the authorised NEW title through — and only it."""
-    from kdp_freeze import APPROVED_UPLOADS
+    """The guard must let an authorised NEW title through — and only it."""
+    import kdp_freeze
 
-    approved = next(iter(APPROVED_UPLOADS))
+    approved = "a-book-bui-authorised"
+    monkeypatch.setattr(kdp_freeze, "APPROVED_UPLOADS", {approved: "test fixture"})
     reached = {}
     monkeypatch.setattr(kdp_upload, "require_quality_gate",
                         lambda slug: reached.setdefault("slug", slug) and False)

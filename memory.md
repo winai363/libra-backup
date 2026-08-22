@@ -662,3 +662,13 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - ล้าง ledger ทั้งหมดแล้ว (events/orders/refunds/incidents = 0) พร้อมรับของจริง
 - pytest 868 passed / 8 skipped / 2 failed เดิม
 - ⏳ ค้างอย่างเดียว: **identity verification = In Review** ที่ LS → พอผ่านแล้วกด Store activation ถึงรับเงินจริงได้
+
+## 2026-08-22 (บ่าย-เย็น) — ✅ หนังสือขึ้น KDP สำเร็จ + แก้บั๊กหมวดหมู่ที่บล็อกมาทั้งวัน
+- **อัปโหลดล้มเหลว 2 รอบ (09:00, 13:00)** ก่อนหน้านี้: `0 categories matched — cancelled` แล้วค้างพยายามคลิก "Leatherwork & Hidework" 30 วิ → timeout → exit 1 (คิว RETAINED ไม่หาย ไม่มีผลเสียกับบัญชี)
+- **รากของบั๊ก**: `"general"` อยู่ใน `_STOP` ของ `kdp_categories.py` ⇒ `_tokens("General")` = set ว่าง ⇒ (ก) `_path_segments` **ตัด segment ท้ายทิ้ง** ("Art > Painting > General" เหลือ "Art > Painting") (ข) leaf_tokens fallback เป็น {painting} ⇒ checkbox ที่ชื่อ "General" ตรงหน้าได้คะแนน 0 ⇒ ทั้ง 3 หมวดตก ⇒ cancel ⇒ modal ค้างบังปุ่มอื่น
+- **แก้**: เพิ่ม `_leaf_tokens()` (ไม่ตัด stopword — ชื่อ leaf คือชื่อหมวดจริง) · `_path_segments` ตัด prefix เฉพาะด้านหน้า เก็บ segment ท้ายเสมอ · `_score(..., leaf=True)` ใช้ leaf tokens ทั้งสองฝั่ง · เทสต์ใหม่ 13 ตัว
+- **บั๊กที่ 2**: หมวด `Arts & Photography > Art > Techniques` **ไม่ใช่ leaf** (เป็น branch ที่มี Basketry/Beadwork ใต้มัน) → ไม่มี checkbox ให้ติ๊ก. เปลี่ยนเป็น `Instruction & Reference > Study & Teaching` (leaf จริง) + เพิ่มเทสต์ที่ตรวจว่าทุกหมวดของเล่มที่รออัปเป็น leaf จริงในทรี
+- **ผลอัปโหลดจริง**: `✅ Published successfully!` · **kdp_book_id A2HGRQ4KXYKLSA** · 3 หมวดติดครบ (match 1.00 ทั้งหมด) · AI disclosure ตั้งถูก (text: entire work / images: AI-generated / translations: none) · royalty 70% · ราคาตั้งแล้ว · status=uploaded
+- **ปิดข้อยกเว้นทันทีตามกฎ**: `APPROVED_UPLOADS = {}` (ว่างแล้ว) + cron คิว PAUSED กลับ ⇒ freeze กลับมาปิดสนิท ไม่มี auto-unlock เล่มถัดไป
+- เทสต์ freeze ปรับให้ทำงานกับ allowlist ว่าง (ใช้ fixture ชั่วคราวแทน) + เพิ่ม `test_nothing_is_authorised_by_default`
+- ⏳ รอ Amazon review (ปกติ 24-72 ชม.) → ได้ ASIN แล้วเล่มจะขึ้นร้าน

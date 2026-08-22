@@ -22,12 +22,11 @@ FREEZE_REASON = (
 )
 
 # slug -> why it was authorised. One book at a time; remove it once published.
-APPROVED_UPLOADS = {
-    "aquarelle-botanique-debutants-fr": (
-        "authorised by Bui on 2026-08-22 after reviewing the staged book "
-        "(73 pages, 12 instructional images, editorial 8/8)"
-    ),
-}
+# Empty by default. A slug goes in only when Bui has reviewed that specific
+# book and asked for it, and comes straight back out once it is on the shelf.
+# 2026-08-22: aquarelle-botanique-debutants-fr was authorised, published
+# (kdp_book_id A2HGRQ4KXYKLSA), and removed the same day.
+APPROVED_UPLOADS: dict = {}
 
 # The only actions an approved slug unlocks — enough to publish a NEW title and
 # nothing more. Deliberately excludes republish/price/metadata/cover.

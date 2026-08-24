@@ -712,3 +712,11 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - พฤติกรรม: รอบแรกจำ UID ล่าสุดเฉยๆ ไม่ยิงเมลเก่าย้อนหลัง · เมลใหม่จากผู้ส่งที่เฝ้า → Telegram (ผู้ส่ง/เรื่อง/เนื้อความ 500 ตัวอักษรแรก ตัดส่วน quote ทิ้ง) · เมลอื่นเลื่อน cursor เงียบๆ · **ส่ง Telegram ไม่สำเร็จ = ไม่เลื่อน cursor** (รอบหน้ายิงซ้ำ) · อ่านกล่องไม่ได้ 3 ครั้งติดเตือนครั้งเดียว
 - กับดักที่กันไว้ในโค้ด: Gmail ตอบ `UID n:*` ด้วยเมลล่าสุดเสมอแม้ไม่มีของใหม่ → ต้องกรอง `uid <= last_uid` ทิ้งเอง ไม่งั้นเตือนซ้ำทุก 10 นาที
 - เทสต์ 10 ตัว `tests/test_mail_watch.py`
+
+### แก้ 24 ส.ค. (19:25) — ⭐ cron เรียก Gmail connector ได้จริง (ที่บอกว่าไม่ได้ = ผิด) → ไม่ต้องใช้ App password
+- ทดสอบตรงๆ: `claude -p "..." --allowedTools mcp__claude_ai_Gmail__search_threads --output-format json` รันจาก shell ปกติ **อ่านกล่องจดหมายได้** ⇒ ข้อความในเอกสารที่ว่า connector ของ claude.ai "อาจไม่มีใน headless/cron" ไม่เป็นจริงบนเครื่องนี้
+- ตัวที่ใช้จริงตอนนี้: **`scripts/mail_watch_connector.py`** + cron `*/20` — ให้โมเดลอ่านเมลอย่างเดียว (คืน JSON array) ส่วนการตัดสินว่าอันไหนใหม่/ควรเตือน อยู่ในสคริปต์ทั้งหมด ไม่ปล่อยให้โมเดลตัดสิน
+- กันซ้ำ/กันหาย: id ที่เคยเตือนแล้วเก็บใน `data/mail-watch-connector-state.json` (200 ล่าสุด) · เมลที่เราส่งเอง (winai363@) ไม่นับ · รอบแรกจำเฉยๆ ไม่ยิงย้อนหลัง · **ส่ง Telegram ไม่สำเร็จ = ไม่ mark ว่าเห็นแล้ว** · claude/เน็ตล่ม 3 ครั้งติดเตือนครั้งเดียว
+- ทดสอบจริงครบวง: dry-run อ่านได้ 10 เมล → baseline → ลบ id อีเมลของ Suhasini ออกแล้วรันใหม่ → **Telegram เข้าจริง** → id กลับเข้า seen (ไม่เตือนซ้ำ)
+- `scripts/mail_watch.py` (IMAP) **เก็บไว้เป็นตัวสำรอง ไม่มี cron** — ใช้เมื่อ connector มีปัญหา ต้องเติม App password ใน `/root/.config/mail-watch/imap.env` ก่อน
+- ⚠️ เจอ cron ของโปรเจกต์อื่นที่น่าจะพัง (ไม่ได้แก้ ไม่ใช่งานนี้): `5 8 * * * /usr/bin/python3 watch.py digest >> /root/toeic-sale/data/watch.log` — ไม่มี `cd /root/toeic-sale` นำหน้า จะรันจาก /root แล้วหาไฟล์ไม่เจอ

@@ -705,3 +705,10 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - cron: `*/30 * * * * /usr/bin/python3 /root/libra/scripts/lemonsqueezy_watch.py >> /root/libra/logs/ls-watch.log` (ต้องใช้ path เต็ม — cron cwd = /root ไม่ใช่ /root/libra)
 - เทสต์ 7 ตัวใน `tests/test_lemonsqueezy_watch.py`; รวมทั้งชุด 893 passed / 2 failed เดิม
 - ⚠️ **ตัวนี้เฝ้า "สถานะร้าน" ไม่ได้เฝ้า "อีเมลตอบกลับ"** — Gmail connector ใช้ได้เฉพาะในเซสชันแชท (cron เรียกไม่ได้) ถ้าจะเฝ้าอีเมลจริงต้องมี app password ของ winai363@gmail.com แล้วต่อ IMAP
+
+### เพิ่มเติม 24 ส.ค. (19:15) — ตัวเฝ้าอีเมลตอบกลับผ่าน IMAP (cron 10 นาที → Telegram)
+- `scripts/mail_watch.py` + cron `*/10` — อ่านกล่อง Gmail ตรงผ่าน IMAP (imap.gmail.com) เพราะ **Gmail connector ใช้ได้เฉพาะในเซสชันแชท cron เรียกไม่ได้**
+- คอนฟิก `/root/.config/mail-watch/imap.env` (chmod 600): `IMAP_USER` · `IMAP_APP_PASSWORD` (⛔ ว่างอยู่ รอบุ๋ยใส่เอง ห้ามส่งผ่านแชท) · `WATCH_SENDERS=lemonsqueezy` (เพิ่มผู้ส่งอื่นได้ คั่นจุลภาค) — ยังไม่ใส่รหัส = สคริปต์ออก exit 2 พร้อมข้อความบอก ไม่พังเงียบ
+- พฤติกรรม: รอบแรกจำ UID ล่าสุดเฉยๆ ไม่ยิงเมลเก่าย้อนหลัง · เมลใหม่จากผู้ส่งที่เฝ้า → Telegram (ผู้ส่ง/เรื่อง/เนื้อความ 500 ตัวอักษรแรก ตัดส่วน quote ทิ้ง) · เมลอื่นเลื่อน cursor เงียบๆ · **ส่ง Telegram ไม่สำเร็จ = ไม่เลื่อน cursor** (รอบหน้ายิงซ้ำ) · อ่านกล่องไม่ได้ 3 ครั้งติดเตือนครั้งเดียว
+- กับดักที่กันไว้ในโค้ด: Gmail ตอบ `UID n:*` ด้วยเมลล่าสุดเสมอแม้ไม่มีของใหม่ → ต้องกรอง `uid <= last_uid` ทิ้งเอง ไม่งั้นเตือนซ้ำทุก 10 นาที
+- เทสต์ 10 ตัว `tests/test_mail_watch.py`

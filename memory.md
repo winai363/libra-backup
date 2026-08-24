@@ -690,3 +690,18 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - TDD: 5 เทสต์ใหม่ใน `tests/test_product_hub_page.py` (RED ก่อน) · เทสต์รวม **886 passed / 8 skipped / 2 failed เดิม**
 - ตรวจของจริงหลัง restart: หน้าขาย 200 + มีลิงก์ตัวอย่าง · `…/sample.pdf` = 200 `application/pdf` 149,896 ไบต์
 - **ร่างอีเมลตอบ LS**: `/root/downloads/lemonsqueezy-reply.txt` — บุ๋ยต้องกด Reply เอง (คอนเนคเตอร์ Gmail ถูกปิดสิทธิ์ในเซสชันนี้ ส่งแทนไม่ได้) · ในร่างมีข้อ 7 บอกตรงๆ ว่าใช้ AI ช่วยผลิต (แนะนำให้คงไว้ — โกหกผู้ให้บริการรับเงิน = เสี่ยงปิดร้าน/ยึดยอดทีหลัง)
+
+### เพิ่มเติม 24 ส.ค. (18:45) — ✅ ตอบอีเมล Lemon Squeezy ไปแล้ว (ส่งจริงจากกล่อง winai363@gmail.com)
+- บุ๋ยเปิดสิทธิ์ Gmail connector ให้ (ต้องรันคำสั่งเองด้วย `!` — **AI แก้ `~/.claude/settings.json` เองไม่ได้ ระบบบล็อก**)
+- พบว่า LS ตอบกลับมาแล้วเมื่อ 24 ส.ค. 11:06 UTC (18:06 ไทย) โดย Suhasini: ขอ **ไฟล์ PDF/EPUB ฉบับเต็ม + ราคา** เพื่อตรวจว่าสินค้าตรงนโยบาย ⇒ คำขอเปลี่ยนจากเดิม (ตัวอย่าง+URL) ร่างเก่าใน `/root/downloads/lemonsqueezy-reply.txt` จึงใช้ไม่ตรงแล้ว
+- ไฟล์ใหญ่ 20MB/ไฟล์ แนบอีเมลไม่ได้ (Gmail cap 25MB รวม) → ทำ **ลิงก์รีวิวลับ** แทน: `/var/www/ls-review/043a5ac685265e95273c39cca2ca79f2/` + บล็อก nginx `location /ls-review/` (alias, `autoindex off`) — ตรวจจริง: PDF/EPUB/ตัวอย่าง = 200 ครบ 3 ไฟล์, เปิดดูรายชื่อไฟล์ = 403
+- ตอบไปในเธรดเดิม (message `1a03393f019e5c3c`, thread `1a0286e9e4cbfaa5`): ลิงก์ 3 ไฟล์ + ราคา ฿490 ครั้งเดียว + ยืนยันว่าไม่มี subscription/ของส่งจริง + ลิงก์ร้าน/หน้าขาย + บอกตรงๆ ว่าใช้ AI ช่วยผลิตแล้วตรวจแก้เอง + เสนอส่งเป็นไฟล์แนบถ้าเขาต้องการ
+- 🧹 **ต้องลบทิ้งเมื่อร้านอนุมัติแล้ว**: โฟลเดอร์ `/var/www/ls-review/` + บล็อก `location /ls-review/` ใน `/etc/nginx/sites-enabled/newton` (ลิงก์นี้แจกหนังสือเต็มเล่มฟรีให้คนที่รู้ URL)
+
+### เพิ่มเติม 24 ส.ค. (19:10) — ตัวเฝ้าสถานะร้าน Lemon Squeezy (cron 30 นาที → Telegram)
+- `scripts/lemonsqueezy_watch.py` ดึงจาก LS API แล้วเทียบ fingerprint 5 ค่า: plan/ยอดขาย/รายได้ของร้าน · status ของสินค้า · status ของ variant → เปลี่ยนเมื่อไหร่ยิง Telegram บอก "ก่อน → หลัง" พร้อมเตือนให้ลบลิงก์รีวิว
+- **กฎในตัวสคริปต์**: ถ้าส่ง Telegram ไม่สำเร็จ **ห้ามบันทึก state ใหม่** (ไม่งั้นการเปลี่ยนแปลงครั้งเดียวที่รอจะหายไปเงียบๆ) · API ล่มแจ้งเตือนครั้งเดียวตอนพลาดครบ 3 ครั้งติด ไม่สแปม · ไม่เดาว่า field ไหน = "อนุมัติแล้ว" รายงานตามจริง
+- Telegram ใช้ `HQ_BOT_TOKEN`+`HQ_CHAT_ID` จาก `/root/loom/.env` (TELEGRAM_BOT_TOKEN ยัง revoke อยู่) — ทดสอบส่งจริงแล้วเข้า ✅
+- cron: `*/30 * * * * /usr/bin/python3 /root/libra/scripts/lemonsqueezy_watch.py >> /root/libra/logs/ls-watch.log` (ต้องใช้ path เต็ม — cron cwd = /root ไม่ใช่ /root/libra)
+- เทสต์ 7 ตัวใน `tests/test_lemonsqueezy_watch.py`; รวมทั้งชุด 893 passed / 2 failed เดิม
+- ⚠️ **ตัวนี้เฝ้า "สถานะร้าน" ไม่ได้เฝ้า "อีเมลตอบกลับ"** — Gmail connector ใช้ได้เฉพาะในเซสชันแชท (cron เรียกไม่ได้) ถ้าจะเฝ้าอีเมลจริงต้องมี app password ของ winai363@gmail.com แล้วต่อ IMAP

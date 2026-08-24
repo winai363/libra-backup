@@ -681,3 +681,12 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - state ที่เช็คแล้วหลังรู้ผล (ไม่มีอะไรจะยิงซ้ำ): `APPROVED_UPLOADS = {}` · `/root/kdp/queue.txt` ว่าง · cron คิว 09:00/13:00 PAUSED ทั้งคู่ · cron ที่เหลือของ Libra เป็น read-only/bookkeeping
 - bookkeeping: `/root/kdp/aquarelle-botanique-debutants-fr/listing.json` → `live_status=BLOCKED` + `blocked{date,reason,decision,note}`; `CLAUDE.md` → block count 4→5 + เปลี่ยนหัวข้อข้อยกเว้นเป็นผล FAIL + ห้ามเสนอเล่มใหม่อีก
 - ✅ ทางออกที่เหลือของเล่มนี้ (งานไม่เสียเปล่า): EPUB/PDF พร้อมขาย ไม่ได้ enroll KDP Select → เอาขึ้น Lemon Squeezy ได้ทันทีโดยไม่ผิด exclusivity — รอบุ๋ยสั่ง
+
+## 2026-08-24 (เย็น) — Lemon Squeezy ยังไม่อนุมัติร้าน: ทำไฟล์ตัวอย่างสาธารณะ + ร่างอีเมลตอบ
+- บุ๋ยส่งภาพอีเมล LS (22 ส.ค.) "Your application has been received" — เขาขอ **ตัวอย่างสินค้า/วิดีโอเดโม + URL ธุรกิจ** เพื่อเร่งอนุมัติร้าน; ตราบใดที่ยังไม่อนุมัติ = รับเงินจริงไม่ได้ (test mode ใช้ได้ไปแล้ว)
+- ตรวจสถานะจริงผ่าน LS API: store **457485 WKBUI** (TH/THB, plan free, total_sales 0) · product **1307967** `published` ฿490 · variant 2045626 **pending** · ไฟล์ส่งมอบ 2 ไฟล์ (epub 19.6MB + pdf 19.4MB) `published` — ฝั่งเราพร้อมหมด เหลือแค่รีวิวของ LS
+- **ทำไฟล์ตัวอย่างฟรี 16 หน้า**: `gs -dFirstPage=1 -dLastPage=16 -dPDFSETTINGS=/ebook` → `/root/kdp/aquarelle-botanique-debutants-fr/sample.pdf` (150KB, มีภาพสาธิต 4 รูป)
+- **route สาธารณะใหม่** `GET /growth/products/{slug}/sample.pdf` (app.py) — เสิร์ฟเฉพาะ slug ที่เป็นสินค้า `live` จริงในแค็ตตาล็อก (กันอ่านโฟลเดอร์หนังสือมั่ว) + ลิงก์ "Lire un extrait (PDF)" โผล่บนหน้าขายเมื่อมีไฟล์เท่านั้น (placeholder `{{SAMPLE}}` ใน `templates/hub_book.html`; หน้า `/growth/books/{slug}` ต้องส่ง `SAMPLE: ""` ด้วย ไม่งั้น render_hub_page โยน KeyError = 500)
+- TDD: 5 เทสต์ใหม่ใน `tests/test_product_hub_page.py` (RED ก่อน) · เทสต์รวม **886 passed / 8 skipped / 2 failed เดิม**
+- ตรวจของจริงหลัง restart: หน้าขาย 200 + มีลิงก์ตัวอย่าง · `…/sample.pdf` = 200 `application/pdf` 149,896 ไบต์
+- **ร่างอีเมลตอบ LS**: `/root/downloads/lemonsqueezy-reply.txt` — บุ๋ยต้องกด Reply เอง (คอนเนคเตอร์ Gmail ถูกปิดสิทธิ์ในเซสชันนี้ ส่งแทนไม่ได้) · ในร่างมีข้อ 7 บอกตรงๆ ว่าใช้ AI ช่วยผลิต (แนะนำให้คงไว้ — โกหกผู้ให้บริการรับเงิน = เสี่ยงปิดร้าน/ยึดยอดทีหลัง)

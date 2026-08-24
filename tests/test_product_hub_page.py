@@ -86,3 +86,50 @@ def test_unknown_or_unlisted_product_is_404(world):
 def test_product_page_needs_no_login(world):
     client = TestClient(libra_app.app)
     assert client.get("/growth/products/aquarelle-botanique-debutants-fr").status_code == 200
+
+
+def _write_sample(kdp_dir: Path) -> bytes:
+    pdf = b"%PDF-1.4 fake sample"
+    (kdp_dir / "aquarelle-botanique-debutants-fr" / "sample.pdf").write_bytes(pdf)
+    return pdf
+
+
+def test_sample_pdf_is_public_when_the_book_has_one(world):
+    pdf = _write_sample(libra_app.KDP_DIR)
+    client = TestClient(libra_app.app)
+
+    response = client.get("/growth/products/aquarelle-botanique-debutants-fr/sample.pdf")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content == pdf
+
+
+def test_missing_sample_file_is_404(world):
+    client = TestClient(libra_app.app)
+    assert client.get(
+        "/growth/products/aquarelle-botanique-debutants-fr/sample.pdf"
+    ).status_code == 404
+
+
+def test_sample_of_an_unlisted_product_is_404(world):
+    # A book directory that is not a live product must not be readable through
+    # the public sample route.
+    other = libra_app.KDP_DIR / "not-a-product"
+    other.mkdir()
+    (other / "sample.pdf").write_bytes(b"%PDF-1.4 private")
+    client = TestClient(libra_app.app)
+
+    assert client.get("/growth/products/not-a-product/sample.pdf").status_code == 404
+
+
+def test_product_page_links_the_sample_only_when_it_exists(world):
+    client = TestClient(libra_app.app)
+    assert "sample.pdf" not in client.get(
+        "/growth/products/aquarelle-botanique-debutants-fr"
+    ).text
+
+    _write_sample(libra_app.KDP_DIR)
+
+    page = client.get("/growth/products/aquarelle-botanique-debutants-fr").text
+    assert "/growth/products/aquarelle-botanique-debutants-fr/sample.pdf" in page

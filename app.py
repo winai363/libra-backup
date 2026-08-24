@@ -1341,6 +1341,7 @@ async def growth_book_hub_page(slug: str):
         "DESCRIPTION": escape_text(listing.get("description", "")),
         "CTA_URL": escape_text(cta_path),
         "CTA_LABEL": "View on Amazon",
+        "SAMPLE": "",
     })
     return HTMLResponse(page)
 
@@ -1451,8 +1452,34 @@ async def growth_product_page(slug: str):
         ),
         "CTA_URL": escape_text(f"/growth/out/{token}"),
         "CTA_LABEL": f"Acheter — {price}",
+        "SAMPLE": (
+            f'<p class="sample"><a href="/growth/products/{escape_text(slug)}/sample.pdf">'
+            "Lire un extrait (PDF)</a></p>"
+            if _sample_pdf(slug) else ""
+        ),
     })
     return HTMLResponse(page)
+
+
+def _sample_pdf(slug: str) -> Path | None:
+    """The free extract of a book, if one was prepared for it."""
+    sample = get_book_dir(slug) / "sample.pdf"
+    return sample if sample.exists() else None
+
+
+@app.get("/growth/products/{slug}/sample.pdf")
+async def growth_product_sample(slug: str):
+    """Public free extract -- only for a book that is actually a live product,
+    so this route can never read an arbitrary book directory."""
+    from payhip_catalog import list_products
+
+    live = any(p["slug"] == slug and p["status"] == "live"
+               for p in list_products(PROFIT_LEDGER_FILE))
+    sample = _sample_pdf(slug) if live else None
+    if sample is None:
+        raise HTTPException(status_code=404)
+    return FileResponse(sample, media_type="application/pdf",
+                        filename=f"{slug}-extrait.pdf")
 
 
 @app.get("/api/growth/summary")

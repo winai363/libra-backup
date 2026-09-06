@@ -293,3 +293,149 @@ def test_permanent_no_go_niches_are_never_proposed(tmp_path):
     ])
 
     assert product_opportunities(demand_report(db, books, today="2026-08-22")) == []
+
+
+def test_latest_correction_replaces_month_maximum(tmp_path):
+    db = _seed(tmp_path, [
+        ("2026-08-02T09:00:00+07:00", "2026-08", [("A1", 9, 4, 200)]),
+        ("2026-08-03T09:00:00+07:00", "2026-08", [("A1", 2, 1, 40)]),
+        ("2026-08-04T09:00:00+07:00", "2026-08", [("A1", 7, 3, 90)]),
+    ])
+    books = _books(tmp_path, [("ai-one", "A1", "English", "AI", "LIVE", "2026-07-01")])
+    row = title_performance(db, books, today="2026-08-03")[0]
+    assert (row["royalties_usd"], row["orders"], row["kenp"]) == (2, 1, 40)
+    assert row["months"]["2026-08"]["observed_at"] == "2026-08-03T09:00:00+07:00"
+
+
+def test_mixed_status_revenue_cannot_boost_live_opportunity(tmp_path):
+    from demand_analysis import product_opportunities
+    db = _seed(tmp_path, [("2026-08-02T09:00:00+07:00", "2026-08", [
+        ("A1", 2, 1, 10), ("A2", 90, 30, 900), ("A3", 80, 20, 800),
+    ])])
+    books = _books(tmp_path, [
+        ("ai-live", "A1", "English", "AI", "LIVE", "2026-07-01"),
+        ("ai-blocked", "A2", "French", "AI", "BLOCKED", "2026-07-01"),
+        ("ai-unknown", "A3", "German", "AI", "UNKNOWN", "2026-07-01"),
+    ])
+    report = demand_report(db, books, today="2026-08-03")
+    result = product_opportunities(report)[0]
+    assert result["royalties_per_live_title"] == 2
+    assert result["royalties_usd"] == 2
+    assert result["kenp"] == 10
+    assert result["languages_with_signal"] == ["English"]
+    assert [r["asin"] for r in result["evidence"]["titles"]] == ["A1"]
+    assert report["totals"]["royalties_usd"] == 172
+
+
+def test_unknown_status_is_not_a_live_opportunity(tmp_path):
+    from demand_analysis import product_opportunities
+    db = _seed(tmp_path, [("2026-08-02T09:00:00+07:00", "2026-08", [("A1", 9, 2, 300)])])
+    books = _books(tmp_path, [("ai-unknown", "A1", "English", "AI", "UNKNOWN", "2026-07-01")])
+    assert product_opportunities(demand_report(db, books, today="2026-08-03")) == []
+
+
+def test_evidence_reconciles_overview_and_uses_equal_period(tmp_path):
+    db = _seed(tmp_path, [
+        ("2026-08-05T09:00:00+07:00", "2026-08", [("A1", 2, 1, 10)]),
+        ("2026-08-31T09:00:00+07:00", "2026-08", [("A1", 90, 30, 900)]),
+        ("2026-09-05T09:00:00+07:00", "2026-09", [("A1", 3, 1, 20)]),
+    ])
+    with sqlite3.connect(db) as c:
+        c.execute("UPDATE kdp_snapshots SET royalties_usd=4 WHERE month='2026-09'")
+    books = _books(tmp_path, [("ai-live", "A1", "English", "AI", "LIVE", "2026-07-01")])
+    before = db.read_bytes()
+    evidence = demand_report(db, books, today="2026-09-06")["sales_evidence"]
+    assert db.read_bytes() == before
+    current = evidence["months"][-1]
+    assert current["attribution_gap_usd"] == 1
+    assert current["paid_orders"] is None
+    assert current["profit_usd"] is None
+    assert evidence["age_days"] == 1
+    assert evidence["comparison"]["previous"]["royalties_usd"] == 2
+    assert evidence["comparison"]["change_pct"] == 100
+
+
+def test_no_matching_comparison_date_means_unknown(tmp_path):
+    db = _seed(tmp_path, [
+        ("2026-08-04T09:00:00+07:00", "2026-08", [("A1", 2, 1, 10)]),
+        ("2026-09-05T09:00:00+07:00", "2026-09", [("A1", 3, 1, 20)]),
+    ])
+    books = _books(tmp_path, [("ai-live", "A1", "English", "AI", "LIVE", "2026-07-01")])
+    evidence = demand_report(db, books, today="2026-09-06")["sales_evidence"]
+    assert evidence["comparison"]["status"] == "unavailable"
+    assert evidence["comparison"]["change_pct"] is None
+
+
+def test_absent_ledger_is_unknown_and_not_created(tmp_path):
+    db = tmp_path / "missing.db"
+    report = demand_report(db, tmp_path / "books", today="2026-09-06")
+    assert report["sales_evidence"]["status"] == "unavailable"
+    assert report["sales_evidence"]["estimated_royalties_usd"] is None
+    assert not db.exists()
+
+
+def test_blocked_register_preserves_notes_without_claiming_cause(tmp_path):
+    db = _seed(tmp_path, [])
+    books = _books(tmp_path, [("ai-blocked", "A1", "English", "AI", "BLOCKED", "2026-07-01")])
+    path = books / "ai-blocked" / "listing.json"
+    listing = json.loads(path.read_text())
+    listing["blocked"] = {"date": "2026-08-22", "reason": "Old note blames AI disclosure"}
+    path.write_text(json.dumps(listing))
+    report = demand_report(db, books, today="2026-09-06")
+    case = report["rejections"]["cases"][0]
+    assert case["local_note"] == listing["blocked"]["reason"]
+    assert case["confirmed_cause"] is None
+    assert case["source"] == str(path)
+    assert report["rejections"]["status_source"] == "local_listings_not_live_verification"
+
+
+def test_missing_title_keeps_last_known_observation_explicit(tmp_path):
+    db = _seed(tmp_path, [
+        ("2026-08-02T09:00:00+07:00", "2026-08", [("A1", 2, 1, 10)]),
+        ("2026-08-03T09:00:00+07:00", "2026-08", [("A2", 3, 1, 20)]),
+    ])
+    books = _books(tmp_path, [("ai-live", "A1", "English", "AI", "LIVE", "2026-07-01")])
+    row = title_performance(db, books, today="2026-08-03")[0]
+    assert row["royalties_usd"] == 2
+    assert row["months"]["2026-08"]["observed_at"] == "2026-08-02T09:00:00+07:00"
+
+
+def test_zero_baseline_and_stale_data_do_not_imply_percent_growth(tmp_path):
+    db = _seed(tmp_path, [
+        ("2026-08-05T09:00:00+07:00", "2026-08", [("A1", 0, 0, 0)]),
+        ("2026-09-05T09:00:00+07:00", "2026-09", [("A1", 3, 1, 20)]),
+    ])
+    books = _books(tmp_path, [("ai-live", "A1", "English", "AI", "LIVE", "2026-07-01")])
+    evidence = demand_report(db, books, today="2026-09-09")["sales_evidence"]
+    assert evidence["stale"] is True
+    assert evidence["comparison"]["change_pct"] is None
+    assert evidence["comparison"]["reason"] == "nonpositive_baseline"
+
+
+def test_month_end_without_equivalent_day_does_not_compare_full_month(tmp_path):
+    db = _seed(tmp_path, [
+        ("2026-02-28T09:00:00+07:00", "2026-02", [("A1", 10, 3, 0)]),
+        ("2026-03-31T09:00:00+07:00", "2026-03", [("A1", 20, 5, 0)]),
+    ])
+    books = _books(tmp_path, [("ai-live", "A1", "English", "AI", "LIVE", "2026-01-01")])
+    comparison = demand_report(db, books, today="2026-03-31")["sales_evidence"]["comparison"]
+    assert comparison["status"] == "unavailable"
+
+
+def test_unreadable_listing_is_visible_and_does_not_abort_report(tmp_path):
+    db = _seed(tmp_path, [])
+    books = _books(tmp_path, [("ai-bad", "A1", "English", "AI", "LIVE", "2026-01-01")])
+    path = books / "ai-bad" / "listing.json"
+    path.write_text("[]")
+    report = demand_report(db, books, today="2026-09-06")
+    assert report["rejections"]["unreadable_listings"] == [str(path)]
+
+
+def test_historical_import_is_not_compared_as_current_month(tmp_path):
+    db = _seed(tmp_path, [
+        ("2026-08-05T09:00:00+07:00", "2026-08", [("A1", 2, 1, 10)]),
+        ("2026-09-05T09:00:00+07:00", "2026-07", [("A1", 3, 1, 20)]),
+    ])
+    books = _books(tmp_path, [("ai-live", "A1", "English", "AI", "LIVE", "2026-07-01")])
+    comparison = demand_report(db, books, today="2026-09-06")["sales_evidence"]["comparison"]
+    assert comparison["status"] == "unavailable"

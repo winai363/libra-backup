@@ -9,7 +9,7 @@ out to be the LLM inventing sources).
 Two facts shape every reading of this report:
 
 1. KDP snapshots are *month-to-date cumulative*, so revenue per month is the
-   maximum observed in that month, not the sum of daily rows.
+   latest observed value in that month, not the sum or maximum of daily rows.
 2. We have **no traffic data**. A title earning nothing may have no demand, or
    may simply never have been seen. This module refuses to conflate the two.
 """
@@ -18,10 +18,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import sqlite3
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
+
+from kdp_evidence import readonly_connection, rejection_evidence, sales_evidence
 
 LEDGER_FILE = Path(__file__).parent / "data" / "libra-business.db"
 BOOKS_DIR = Path("/root/kdp")
@@ -74,23 +75,25 @@ def evidence_strength(*, royalties: float, kenp: int) -> str:
     return "no_signal"
 
 
-def _monthly_totals(ledger_path: Path) -> dict:
-    """{asin: {month: {royalties_usd, orders, kenp}}} using month maxima."""
+def _monthly_totals(ledger_path: Path, *, today: str) -> dict:
+    """Last observed values per ASIN/month, including downward corrections."""
     totals: dict = defaultdict(dict)
     if not Path(ledger_path).exists():
         return totals
-    with sqlite3.connect(ledger_path) as connection:
+    with readonly_connection(ledger_path) as connection:
         rows = connection.execute(
-            "SELECT a.asin, s.month, MAX(a.royalties_usd), MAX(a.orders_count), MAX(a.kenp)"
+            "SELECT a.asin, s.month, a.royalties_usd, a.orders_count, a.kenp, s.observed_at"
             " FROM kdp_title_attribution a"
             " JOIN kdp_snapshots s ON s.id = a.snapshot_id"
-            " GROUP BY a.asin, s.month"
+            " WHERE substr(s.observed_at,1,10)<=?"
+            " ORDER BY julianday(s.observed_at), s.id", (today,)
         ).fetchall()
-    for asin, month, royalties, orders, kenp in rows:
+    for asin, month, royalties, orders, kenp, observed_at in rows:
         totals[asin][month] = {
             "royalties_usd": round(float(royalties or 0), 2),
             "orders": int(orders or 0),
             "kenp": int(kenp or 0),
+            "observed_at": observed_at,
         }
     return totals
 
@@ -110,11 +113,14 @@ def _category_root(categories) -> str:
 
 def title_performance(ledger_path: Path, books_dir: Path, *, today: str) -> list:
     """One row per catalogue title, sales attached where we have them."""
-    monthly = _monthly_totals(Path(ledger_path))
+    date.fromisoformat(today)
+    monthly = _monthly_totals(Path(ledger_path), today=today)
     rows = []
     for listing_file in sorted(Path(books_dir).glob("*/listing.json")):
         try:
             listing = json.loads(listing_file.read_text(encoding="utf-8"))
+            if not isinstance(listing, dict):
+                continue
         except (OSError, json.JSONDecodeError):
             continue
         asin = listing.get("asin")
@@ -166,7 +172,7 @@ def demand_clusters(performance: list) -> list:
         kenp = sum(r["kenp"] for r in rows)
         earning = [r for r in rows if r["evidence"] != "no_signal"]
         blocked = [r for r in rows if r["live_status"] == "BLOCKED"]
-        live_earning = [r for r in earning if r["live_status"] != "BLOCKED"]
+        live_earning = [r for r in earning if r["live_status"] == "LIVE"]
         if earning:
             verdict = "signal_present"
         elif len(rows) >= SCALE_THRESHOLD:
@@ -184,8 +190,7 @@ def demand_clusters(performance: list) -> list:
             entry["kenp"] += row["kenp"]
             entry["slugs"].append(row["slug"])
 
-        # A niche whose only evidence comes from a blocked title must not be
-        # reused on this account: the block is about the account, not demand.
+        # Historical blocked revenue must not authorize another submission.
         safe = not (blocked and not live_earning)
         clusters.append({
             "theme": theme,
@@ -228,16 +233,19 @@ def demand_report(ledger_path: Path, books_dir: Path, *, today: str) -> dict:
                 "click data we cannot tell an unwanted book from an unseen one"
             ),
             "sample": "tens of dollars over weeks; every verdict is directional only",
-            "snapshot_semantics": "month-to-date cumulative; monthly maxima used",
+            "snapshot_semantics": "month-to-date cumulative; latest observation per ASIN/month",
+            "title_totals": "Last known per-title attribution, not account-wide royalties; observation dates may differ.",
+            "orders": "All types; paid/free split unknown",
+            "publishing": "Analysis only; existing KDP freeze remains enforced",
         },
+        "sales_evidence": sales_evidence(ledger_path, today=today),
+        "rejections": rejection_evidence(books_dir),
         "clusters": clusters,
         "titles": sorted(performance, key=lambda r: (-r["royalties_usd"], -r["kenp"], r["slug"])),
     }
 
 
-# Themes where the reader is being taught to DO something. A text-only book
-# here is what Amazon calls a "disappointing customer experience" — that is
-# exactly how acuarela was rejected and lost (11 Jul 2026).
+# Internal requirement for instructional themes, not proof of rejection cause.
 VISUAL_THEMES = frozenset({"senior_tech", "art_craft", "kids_language", "home_diy"})
 
 # Permanently closed regardless of measured revenue: the diet/meal-plan niche
@@ -261,29 +269,33 @@ def product_opportunities(report: dict) -> list:
         earners = [
             row for row in report["titles"]
             if row["theme"] == cluster["theme"] and row["evidence"] != "no_signal"
+            and row["live_status"] == "LIVE"
         ]
+        if not earners:
+            continue
         if any(marker in row["slug"] for row in earners for marker in NO_GO_SLUG_MARKERS):
             continue
-        live = max(cluster["live_titles"], 1)
+        live = cluster["live_titles"]
+        live_rows = [row for row in report["titles"]
+                     if row["theme"] == cluster["theme"] and row["live_status"] == "LIVE"]
+        royalties = round(sum(row["royalties_usd"] for row in live_rows), 2)
+        kenp = sum(row["kenp"] for row in live_rows)
         visual = cluster["theme"] in VISUAL_THEMES
         must_have = []
         if visual:
             must_have.append(
-                "real instructional images with provenance — a how-to book without "
-                "them is the exact 'disappointing customer experience' rejection"
+                "instructional images with provenance and editorial review; "
+                "internal requirement, not an Amazon acceptance guarantee"
             )
         opportunities.append({
             "theme": cluster["theme"],
-            "royalties_usd": cluster["royalties_usd"],
+            "royalties_usd": royalties,
             "live_titles": cluster["live_titles"],
-            "royalties_per_live_title": round(cluster["royalties_usd"] / live, 2),
-            "kenp": cluster["kenp"],
+            "royalties_per_live_title": round(royalties / live, 2),
+            "kenp": kenp,
             "visual_required": visual,
             "must_have": must_have,
-            "languages_with_signal": sorted(
-                language for language, stats in cluster["languages"].items()
-                if stats["royalties_usd"] > 0 or stats["kenp"] > 0
-            ),
+            "languages_with_signal": sorted({str(row["language"]) for row in earners}),
             "confidence": "low",
             "evidence": {
                 "titles": [
@@ -339,8 +351,20 @@ def main() -> int:
     print(f"Measured demand — {report['generated_for']} "
           f"({', '.join(totals['months_observed']) or 'no data'})")
     print(f"  titles: {totals['titles']}  with any signal: {totals['titles_with_any_signal']}"
-          f"  royalties: ${totals['royalties_usd']:.2f}  KENP: {totals['kenp']}")
+          f"  attributed royalties: ${totals['royalties_usd']:.2f}  KENP: {totals['kenp']}")
     print(f"  caveat: {report['caveats']['interpretation']}")
+    sales = report["sales_evidence"]
+    print(f"  latest sales observation: {sales['observed_at']} (age days: {sales['age_days']})")
+    print("\nACCOUNT ESTIMATES (paid/free orders and profit unknown)")
+    for month in sales["months"]:
+        print(f"  {month['month']}: ${month['royalties_usd']:.2f} "
+              f"attributed ${month['attributed_royalties_usd']:.2f} "
+              f"gap ${month['attribution_gap_usd']:.2f} as of {month['observed_at']}")
+    comparison = sales["comparison"]
+    print(f"  same-period comparison: {comparison['status']}; change %: {comparison['change_pct']}")
+    print("\nLOCAL REJECTION REGISTER (cause unconfirmed; KDP freeze unchanged)")
+    for case in report["rejections"]["cases"]:
+        print(f"  {case['date'] or 'date unknown'} {case['slug']}: {case['source']}")
     print()
     print(f"{'theme':24} {'n':>3} {'live':>4} {'earn':>4} {'$':>7} {'KENP':>6}  verdict")
     for cluster in report["clusters"]:
@@ -349,7 +373,7 @@ def main() -> int:
               f"{cluster['earning_titles']:4} {cluster['royalties_usd']:7.2f} "
               f"{cluster['kenp']:6}  {cluster['verdict']}{flag}")
 
-    print("\nWHERE A NEW PRODUCT HAS MEASURED SUPPORT (per live title, best first)")
+    print("\nLIVE COHORT SIGNALS (research only; no publishing authorization)")
     opportunities = product_opportunities(report)
     if not opportunities:
         print("  none — no theme has a safe, non-blocked earning title")

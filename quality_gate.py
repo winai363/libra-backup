@@ -5,13 +5,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import io
 import re
 import subprocess
+import posixpath
+import zipfile
+import xml.etree.ElementTree as ET
 import httpx
 from PIL import Image
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 
 KDP_DIR = Path("/root/kdp")
@@ -682,6 +686,10 @@ def validate_book(
         report.metrics["instructional_images"] = count
         for error in errors:
             report.error(error)
+        embedded_errors, embedded_count = _epub_instructional_images(book_dir)
+        report.metrics["epub_instructional_images"] = embedded_count
+        for error in embedded_errors:
+            report.error(error)
     return report
 
 
@@ -706,12 +714,67 @@ VISUAL_SOURCE_KINDS = {
 }
 
 
-def _validate_visual_assets(book_dir: Path, minimum: int = 12) -> tuple[list[str], int]:
-    """A visual guide must ship real instructional images with full provenance.
+def _epub_instructional_images(book_dir: Path, minimum: int = 12) -> tuple[list[str], int]:
+    """Count manifest images actually used by spine pages, excluding the cover."""
+    ns = {"c": "urn:oasis:names:tc:opendocument:xmlns:container",
+          "o": "http://www.idpf.org/2007/opf"}
+    used = set()
+    errors = []
 
-    Text-only books in a visual niche are exactly what Amazon rejects as a
-    "disappointing customer experience" — so this gate is structural, never
-    inferred from the prose.
+    def resolve(base, href):
+        parsed = urlparse(href)
+        if parsed.scheme or parsed.netloc:
+            raise ValueError("external asset reference")
+        return posixpath.normpath(posixpath.join(posixpath.dirname(base), unquote(parsed.path)))
+
+    try:
+        with zipfile.ZipFile(book_dir / "ebook.epub") as archive:
+            container = ET.fromstring(archive.read("META-INF/container.xml"))
+            rootfile = container.find("c:rootfiles/c:rootfile", ns)
+            if rootfile is None:
+                raise ValueError("missing package rootfile")
+            package_path = rootfile.attrib["full-path"]
+            package = ET.fromstring(archive.read(package_path))
+            items = {item.attrib["id"]: item for item in package.findall("o:manifest/o:item", ns)}
+            cover_ids = {meta.get("content") for meta in package.findall("o:metadata/o:meta", ns)
+                         if meta.get("name") == "cover"}
+            image_paths = {resolve(package_path, item.attrib["href"])
+                           for key, item in items.items()
+                           if item.get("media-type", "").startswith("image/")
+                           and item.get("media-type") != "image/svg+xml"
+                           and key not in cover_ids
+                           and "cover-image" not in item.get("properties", "").split()}
+            for ref in package.findall("o:spine/o:itemref", ns):
+                item = items[ref.attrib["idref"]]
+                page_path = resolve(package_path, item.attrib["href"])
+                page = ET.fromstring(archive.read(page_path))
+                for element in page.iter():
+                    tag = element.tag.rsplit("}", 1)[-1]
+                    if tag not in {"img", "image"}:
+                        continue
+                    href = (element.get("src") if tag == "img" else
+                            element.get("href") or element.get("{http://www.w3.org/1999/xlink}href"))
+                    if not href:
+                        raise ValueError("image reference has no source")
+                    image_path = resolve(page_path, href)
+                    if image_path not in archive.namelist():
+                        raise ValueError("missing referenced image: " + image_path)
+                    if image_path in image_paths:
+                        with Image.open(io.BytesIO(archive.read(image_path))) as embedded:
+                            embedded.verify()
+                        used.add(image_path)
+    except (OSError, zipfile.BadZipFile, ET.ParseError, KeyError, ValueError) as exc:
+        errors.append(f"EPUB instructional images could not be verified: {exc}")
+    if len(used) < minimum:
+        errors.append(f"EPUB instructional images: need {minimum} used interior assets; found {len(used)}.")
+    return errors, len(used)
+
+
+def _validate_visual_assets(book_dir: Path, minimum: int = 12) -> tuple[list[str], int]:
+    """Check instructional assets and provenance under the internal visual policy.
+
+    Passing structural checks does not establish instructional accuracy or
+    explain Amazon's rejection cause.
     """
     errors: list[str] = []
     images_dir = book_dir / "images"

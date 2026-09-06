@@ -7,6 +7,7 @@ is what a text-only book in a visual niche looks like from the outside.
 
 import json
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -47,6 +48,24 @@ def _provenance(book_dir: Path, names, **overrides) -> None:
         row.update(overrides)
         rows.append(row)
     (book_dir / "image-provenance.json").write_text(json.dumps({"images": rows}))
+    _epub(book_dir, names)
+
+
+def _epub(book_dir, names, referenced=None, corrupt=None, cover=None):
+    referenced = names if referenced is None else referenced
+    manifest = ''.join(f'<item id="i{n}" href="images/{name}" media-type="image/png"'
+                       + (' properties="cover-image"' if name == cover else '') + '/>'
+                       for n, name in enumerate(names))
+    body = ''.join(f'<img src="images/{name}" alt="step"/>' for name in referenced)
+    with zipfile.ZipFile(book_dir / "ebook.epub", "w") as archive:
+        archive.writestr("META-INF/container.xml", '<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container"><rootfiles><rootfile full-path="book.opf"/></rootfiles></container>')
+        archive.writestr("book.opf", '<package xmlns="http://www.idpf.org/2007/opf"><manifest>' + manifest + '<item id="text" href="body.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="text"/></spine></package>')
+        archive.writestr("body.xhtml", '<html xmlns="http://www.w3.org/1999/xhtml"><body>' + body + '<p>' + 'content ' * 800 + '</p></body></html>')
+        for name in names:
+            if name == corrupt:
+                archive.writestr("images/" + name, b"not an image")
+            else:
+                archive.write(book_dir / "images" / name, "images/" + name)
 
 
 @pytest.fixture
@@ -147,6 +166,7 @@ def _ai_provenance(book_dir: Path, names, **overrides) -> None:
         row.update(overrides)
         rows.append(row)
     (book_dir / "image-provenance.json").write_text(json.dumps({"images": rows}))
+    _epub(book_dir, names)
 
 
 def test_ai_generated_images_pass_with_model_and_prompt(book):
@@ -195,3 +215,40 @@ def test_unknown_source_kind_is_refused(book):
     report = validate_book(slug, root=root, require_visuals=True)
 
     assert any("source_kind" in error for error in report.errors)
+
+
+def test_image_files_on_disk_do_not_prove_images_shipped_in_epub(book):
+    book_dir, slug, root = book
+    _provenance(book_dir, _images(book_dir))
+    (book_dir / "ebook.epub").write_bytes(b"PK" + b"\x00" * 6000)
+    report = validate_book(slug, root=root, require_visuals=True)
+    assert any("EPUB instructional" in error for error in report.errors)
+
+
+def test_unreferenced_images_in_epub_do_not_count(book):
+    book_dir, slug, root = book
+    names = _images(book_dir)
+    _provenance(book_dir, names)
+    _epub(book_dir, names, referenced=names[:2])
+    report = validate_book(slug, root=root, require_visuals=True)
+    assert report.metrics["epub_instructional_images"] == 2
+    assert any("EPUB instructional" in error for error in report.errors)
+
+
+def test_corrupt_embedded_copy_fails_even_when_original_is_valid(book):
+    book_dir, slug, root = book
+    names = _images(book_dir)
+    _provenance(book_dir, names)
+    _epub(book_dir, names, corrupt=names[0])
+    report = validate_book(slug, root=root, require_visuals=True)
+    assert any("EPUB instructional" in error for error in report.errors)
+
+
+def test_cover_and_repeated_references_do_not_inflate_interior_count(book):
+    from quality_gate import _epub_instructional_images
+    book_dir, _, _ = book
+    names = _images(book_dir)
+    _epub(book_dir, names, referenced=[names[0]] * 12)
+    assert _epub_instructional_images(book_dir)[1] == 1
+    _epub(book_dir, names, cover=names[0])
+    assert _epub_instructional_images(book_dir)[1] == 11

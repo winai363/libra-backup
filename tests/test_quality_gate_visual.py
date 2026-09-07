@@ -252,3 +252,47 @@ def test_cover_and_repeated_references_do_not_inflate_interior_count(book):
     assert _epub_instructional_images(book_dir)[1] == 1
     _epub(book_dir, names, cover=names[0])
     assert _epub_instructional_images(book_dir)[1] == 11
+
+
+def test_illustrated_listing_triggers_epub_check_without_opt_in(book):
+    book_dir, slug, root = book
+    listing = json.loads((book_dir / "listing.json").read_text())
+    listing["subtitle"] = "Guide illustré pour débutants"
+    (book_dir / "listing.json").write_text(json.dumps(listing))
+    _epub(book_dir, [])
+    report = validate_book(slug, root=root)
+    assert not report.passed
+    assert any("EPUB instructional" in error for error in report.errors)
+
+
+def test_images_elsewhere_do_not_fulfil_illustrated_demonstrations(book):
+    book_dir, slug, root = book
+    names = _images(book_dir)
+    _provenance(book_dir, names)
+    with zipfile.ZipFile(book_dir / "ebook.epub") as archive:
+        entries = {name: archive.read(name) for name in archive.namelist()}
+    body = '<html xmlns="http://www.w3.org/1999/xhtml"><body><h1>Techniques</h1>'
+    body += ''.join(f'<img src="images/{name}"/>' for name in names)
+    body += '<h2>Démonstration 1: Feuille</h2><h3>Ombres</h3>'
+    body += f'<img src="images/{names[0]}"/>'
+    body += '<h2>Démonstration 2: Fleur</h2><p>Paint the petals.</p>'
+    body += '<h1>Appendix</h1>' + f'<img src="images/{names[1]}"/>'
+    body += '<p>' + 'content ' * 800 + '</p></body></html>'
+    entries["body.xhtml"] = body.encode()
+    with zipfile.ZipFile(book_dir / "ebook.epub", "w") as archive:
+        for name, value in entries.items():
+            archive.writestr(name, value)
+    report = validate_book(slug, root=root, require_visuals=True)
+    assert report.metrics["epub_instructional_images"] == 12
+    assert not report.passed
+    assert any("Demonstration without interior image" in error for error in report.errors)
+    demos = report.metrics["epub_demonstrations"]
+    assert [row["image_count"] for row in demos] == [1, 0]
+
+
+def test_editorial_pass_flag_cannot_hide_missing_evidence(book):
+    book_dir, slug, root = book
+    (book_dir / "editorial-review.json").write_text(json.dumps({"passed": True}))
+    report = validate_book(slug, root=root, require_editorial=True)
+    assert not report.passed
+    assert any("Editorial evidence" in error for error in report.errors)

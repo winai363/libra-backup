@@ -720,3 +720,12 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - ทดสอบจริงครบวง: dry-run อ่านได้ 10 เมล → baseline → ลบ id อีเมลของ Suhasini ออกแล้วรันใหม่ → **Telegram เข้าจริง** → id กลับเข้า seen (ไม่เตือนซ้ำ)
 - `scripts/mail_watch.py` (IMAP) **เก็บไว้เป็นตัวสำรอง ไม่มี cron** — ใช้เมื่อ connector มีปัญหา ต้องเติม App password ใน `/root/.config/mail-watch/imap.env` ก่อน
 - ⚠️ เจอ cron ของโปรเจกต์อื่นที่น่าจะพัง (ไม่ได้แก้ ไม่ใช่งานนี้): `5 8 * * * /usr/bin/python3 watch.py digest >> /root/toeic-sale/data/watch.log` — ไม่มี `cd /root/toeic-sale` นำหน้า จะรันจาก /root แล้วหาไฟล์ไม่เจอ
+
+## 2026-09-07 — ปิดงานรื้อระบบตรวจคุณภาพและรายงานภายใน
+- ยืนยันสิทธิ์ ai-work ว่างก่อนเริ่ม. ปิดงานค้าง editorial/visual/catalogue; ผูกผลreviewกับhashต้นฉบับก่อนเรียกโมเดล, ตรวจคะแนน/คำตัดสิน/URLซ้ำ, fictionอาศัยประเภทที่ประกาศ. ไม่เชื่อ passedเก่าหรือเติมhashให้ผลเก่าย้อนหลัง
+- ตรวจ64เล่ม: LIVE38 BLOCKED5 UNKNOWN21 ตามไฟล์ท้องถิ่น. ทุกเล่มมีข้อแก้หรือหลักฐานขาด; 60เล่มขาดhashผลreview ไม่ใช่ข้อพิสูจน์ว่าเนื้อหาทั้ง64เล่มผิด. เทียบhash1359ไฟล์ก่อนหลังไม่เปลี่ยน
+- Smartphone FRไม่มีภาพเนื้อใน; aquarelle FR12ภาพแต่ภาพในบทสาธิต2/12. แก้ข้อสรุปเก่า22ส.ค.: ยังไม่ทราบสาเหตุบล็อก ไม่ถือว่าAI disclosure/ประวัติบัญชีเป็นเหตุที่พิสูจน์แล้ว
+- Dashboard/APIใช้freezeจริง ซ่อนแผนกรกฎาคม/โปรโม/วันส่งใหม่/experimentที่ยกเลิก; วันที่ยอดตรงprofitAPI. Regression2ข้อfailก่อนแก้ Full985ผ่าน8skip และfreeze/dashboard48ผ่านหลังปรับข้อความบล็อกเป็น5
+- Restartlibraแล้วactive; browserdesktop/mobileไม่มีJSerror/overflow. แผนเก่าซ่อนและKDPFROZENชัด. ตรวจโค้ดแยก2รอบไม่พบmaterialbug
+- รายงาน /root/downloads/libra-audit-2026-09-07-final/; สรุป docs/libra-rebuild-completion-2026-09-07.md. ไม่แก้ต้นฉบับ/ไม่ยิงKDP/ไม่เปิดcronผลิต/ไม่ใช้APIโมเดลเสียเงินทดสอบ
+- KDP TOTAL FREEZEคงเดิม. งานระบบภายในจบ แต่การแก้เนื้อหา/ตรวจภาษา-ความจริง-สิทธิ์รายเล่มยังไม่ได้ทำ และเป้ารายได้ใหม่ยังไม่ระบุ

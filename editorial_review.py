@@ -4,11 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import math
 import os
 import re
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -52,6 +55,99 @@ REQUIRED_SCORES = {
     "seo_quality": 8,
     "originality": 8,
 }
+
+
+def is_fiction_listing(listing: dict) -> bool:
+    """Only explicit classification can grant the fiction evidence exemption."""
+    categories = listing.get("categories", [])
+    if isinstance(categories, str):
+        categories = [categories]
+    if not isinstance(categories, list):
+        categories = []
+    text = " ".join(str(value) for value in [
+        listing.get("type", ""), listing.get("book_type", ""),
+        listing.get("genre", ""), *categories,
+    ]).casefold()
+    if re.search(r"\bnon[\s-]?fiction\b", text):
+        return False
+    fiction_types = {"fiction", "romance", "fantasy", "romantasy", "novel",
+                     "roman historique", "science fiction", "literature & fiction"}
+    if any(str(listing.get(key, "")).strip().casefold() in fiction_types
+           for key in ("type", "book_type", "genre")):
+        return True
+    for category in categories:
+        parts = [part.strip().casefold() for part in re.split(r"[>/]", str(category))]
+        while parts and parts[0] in {"books", "kindle store", "kindle ebooks", "ebooks"}:
+            parts.pop(0)
+        if parts and parts[0] in fiction_types:
+            return True
+    return False
+
+
+def editorial_source_hashes(book_dir: Path) -> dict:
+    """Fingerprint the local inputs whose prose and promises were reviewed."""
+    return {name: hashlib.sha256((book_dir / name).read_bytes()).hexdigest()
+            for name in ("ebook.md", "listing.json")}
+
+
+def validate_editorial_report(report: object, *, fiction: bool = False,
+                              expected_sources: dict | None = None) -> dict:
+    """Validate recorded evidence, not source truth or Amazon acceptance.
+
+    URL checks establish syntax only; they do not fetch or verify source claims.
+    A previously stored ``passed`` flag is deliberately not trusted.
+    """
+    score_failures = []
+    evidence_failures = []
+    if not isinstance(report, dict):
+        report = {}
+        evidence_failures.append("Editorial report must be an object")
+    if expected_sources is not None and report.get("source_sha256") != expected_sources:
+        evidence_failures.append("Editorial source hashes are missing or do not match current inputs")
+    scores = report.get("scores")
+    if not isinstance(scores, dict):
+        scores = {}
+    for name, minimum in REQUIRED_SCORES.items():
+        score = scores.get(name)
+        if (type(score) not in (int, float) or not math.isfinite(score)
+                or not minimum <= score <= 10):
+            score_failures.append(f"{name}={score!r}; expected {minimum}..10")
+
+    if report.get("recommended_action") != "pass":
+        evidence_failures.append("recommended_action must be pass")
+    issues = report.get("critical_issues")
+    if not isinstance(issues, list) or issues:
+        evidence_failures.append("critical_issues must be an empty list")
+    checks = report.get("fact_checks")
+    if not isinstance(checks, list):
+        evidence_failures.append("fact_checks must be a list")
+        checks = []
+    if not fiction and len(checks) < 5:
+        evidence_failures.append("Non-fiction requires at least five supported fact checks")
+    for index, check in enumerate(checks, 1):
+        if not isinstance(check, dict):
+            evidence_failures.append(f"fact_checks[{index}] must be an object")
+            continue
+        claim = check.get("claim")
+        if not isinstance(claim, str) or not claim.strip():
+            evidence_failures.append(f"fact_checks[{index}] needs a claim")
+        if check.get("result") != "supported":
+            evidence_failures.append(f"fact_checks[{index}] is not supported")
+        source = check.get("source_url")
+        valid_url = False
+        if isinstance(source, str) and not any(char.isspace() for char in source):
+            try:
+                parsed = urlsplit(source)
+                valid_url = parsed.scheme in ("http", "https") and bool(parsed.hostname)
+            except ValueError:
+                pass
+        if not valid_url:
+            evidence_failures.append(f"fact_checks[{index}] needs an http(s) source URL")
+    return {
+        "passed": not score_failures and not evidence_failures,
+        "score_failures": score_failures,
+        "evidence_failures": evidence_failures,
+    }
 
 
 def _extract_json(text: str) -> dict:
@@ -114,11 +210,14 @@ def review_book(slug: str, root: Path | None = None) -> dict:
     load_dotenv("/root/libra/.env")
     # `root` lets frozen staging review a book outside the live KDP tree.
     book_dir = (root if root is not None else KDP_DIR) / slug
-    listing = json.loads((book_dir / "listing.json").read_text(encoding="utf-8"))
-    content = (book_dir / "ebook.md").read_text(encoding="utf-8")
+    input_bytes = {name: (book_dir / name).read_bytes()
+                   for name in ("ebook.md", "listing.json")}
+    source_sha256 = {name: hashlib.sha256(value).hexdigest()
+                     for name, value in input_bytes.items()}
+    listing = json.loads(input_bytes["listing.json"].decode("utf-8"))
+    content = input_bytes["ebook.md"].decode("utf-8")
     research = (book_dir / "content-research.md").read_text(encoding="utf-8")
-    listing_text = json.dumps(listing, ensure_ascii=False).casefold()
-    fiction = bool(re.search(r"\b(?:fiction|romance|fantasy|romantasy|novel)\b", listing_text))
+    fiction = is_fiction_listing(listing)
 
     sampled_content, truncated = _sample_manuscript(content, fiction)
     # Tell the reviewer the TRUE size of the full manuscript. Otherwise, when the
@@ -221,32 +320,10 @@ Scoring rules:
                     chunks.append(value)
         text = "\n".join(chunks)
     result = _extract_json(text)
-    scores = result.get("scores", {})
-    score_failures = [
-        f"{name}={scores.get(name, 0)}<{minimum}"
-        for name, minimum in REQUIRED_SCORES.items()
-        if not isinstance(scores.get(name), (int, float)) or scores.get(name, 0) < minimum
-    ]
-    fact_checks = result.get("fact_checks", [])
-    contradicted = [
-        check for check in fact_checks
-        if str(check.get("result", "")).lower() == "contradicted"
-    ]
-    # A book passes when all numeric scores meet the minimum AND no blockers exist.
-    # recommended_action="revise" is informational only when scores already pass —
-    # GPT sometimes says "revise" while scoring every dimension ≥8, which is inconsistent.
-    # factual_reliability score already captures fact-check quality; require at least 1 check
-    # as a sanity gate (ensures the reviewer actually verified something).
-    passed = (
-        not score_failures
-        and not result.get("critical_issues")
-        and not contradicted
-        and len(fact_checks) >= 1
-    )
+    result["source_sha256"] = source_sha256
+    result.update(validate_editorial_report(result, fiction=fiction))
     result.update(
         slug=slug,
-        passed=passed,
-        score_failures=score_failures,
         reviewer_model="gpt-4.1",
     )
     return result

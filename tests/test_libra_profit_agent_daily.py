@@ -3,8 +3,8 @@ import json
 import sys
 from datetime import datetime, timedelta, timezone
 
-from business_ledger import record_kdp_snapshot
-from profit_agent import create_initial_experiments
+from business_ledger import record_direct_cost, record_kdp_snapshot
+from profit_agent import APPROVED_EXPERIMENTS, create_initial_experiments
 import scripts.libra_profit_agent_daily as libra_profit_agent_daily
 from scripts.libra_profit_agent_daily import run_controller, run_daily
 
@@ -134,7 +134,7 @@ def test_attribution_gap_allows_observation_but_blocks_commercial_mutation(tmp_p
     assert all(item["status"] == "ready" for item in second["experiments"])
 
 
-def test_bounded_attribution_gap_does_not_deadlock_absent_titles(tmp_path):
+def test_bounded_attribution_gap_does_not_deadlock_absent_titles(tmp_path, monkeypatch):
     # Regression (found 2026-07-14): KDP's top-N widget only lists titles with
     # earning activity, so zero-sale titles NEVER get an attribution row. The
     # old presence-only gate held their experiments "ready" forever. With the
@@ -142,6 +142,18 @@ def test_bounded_attribution_gap_does_not_deadlock_absent_titles(tmp_path):
     # the experiment must advance out of "ready" on the next run.
     db = tmp_path / "ledger.db"
     _snapshot(db, attributed=6.9)  # remainder 0.73 <= 2.00 bound
+    kdp = tmp_path / "kdp"
+    monkeypatch.setattr(libra_profit_agent_daily, "KDP_DIR", kdp)
+    for index, experiment in enumerate(APPROVED_EXPERIMENTS):
+        slug = experiment["slug"]
+        book = kdp / slug
+        book.mkdir(parents=True)
+        (book / "listing.json").write_text(json.dumps({"asin": f"ABSENT-{index}"}))
+        # Attribution is the variable under test; known costs satisfy its
+        # independent guard without relying on production files.
+        record_direct_cost(db, incurred_at=NOW.isoformat(), slug=slug,
+                           category="production", amount_usd=1.0,
+                           source_key=f"fixture:{slug}")
     first = run_daily(db, tmp_path / "state.json", now=NOW)
     assert all(item["status"] == "ready" for item in first["experiments"])
 

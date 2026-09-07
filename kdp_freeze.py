@@ -1,6 +1,6 @@
 """TOTAL KDP FREEZE — executable source of truth.
 
-The account carries four accumulated content blocks; a fifth risks losing all
+The account carries five accumulated content blocks; another risks losing all
 38 live titles. So the default is: every KDP mutation fails closed.
 
 The single exception is a *named new book* that Bui has personally reviewed and
@@ -17,7 +17,7 @@ from dataclasses import dataclass
 
 FREEZE_CODE = "total_kdp_freeze"
 FREEZE_REASON = (
-    "TOTAL KDP FREEZE is active after four account content blocks; "
+    "TOTAL KDP FREEZE is active after five recorded account content blocks; "
     "all KDP mutations are disabled."
 )
 

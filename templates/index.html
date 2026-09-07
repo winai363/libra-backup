@@ -49,7 +49,7 @@
       <div class="flex items-center justify-between gap-3">
         <div>
           <h1 class="text-xl font-bold text-amber-400">Libra Command Center</h1>
-          <p class="text-[11px] text-slate-500">Depth Loop · เจาะลึก 5 เล่มฮีโร่ให้ขายได้จริง (พักการผลิตเล่มใหม่)</p>
+          <p class="text-[11px] text-slate-500">ติดตามคลังหนังสือและยอดขายที่บันทึก</p>
         </div>
         <div class="flex gap-2">
           <a href="/libra/status" class="px-3 py-1.5 rounded-lg bg-sky-500/10 text-sky-300 text-xs font-medium hover:bg-sky-500/20">Pipeline</a>
@@ -108,9 +108,9 @@
               <h2 class="font-bold text-white">Auto Pipeline</h2>
               <p id="automation-times" class="text-xs text-slate-400 mt-1"></p>
             </div>
-            <span id="automation-state" class="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs">AUTO ON</span>
+            <span id="automation-state" class="px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300 text-xs">กำลังตรวจสถานะ</span>
           </div>
-          <div class="mt-4 flex items-center gap-2 text-xs overflow-x-auto">
+          <div id="pipeline-stages" class="mt-4 flex items-center gap-2 text-xs overflow-x-auto">
             <span class="px-3 py-2 rounded-lg bg-slate-900 text-slate-300 whitespace-nowrap">แจกฟรีแบบมีสื่อช่วยกระจาย</span>
             <span class="text-slate-600">→</span>
             <span class="px-3 py-2 rounded-lg bg-slate-900 text-slate-300 whitespace-nowrap">เก็บรีวิว</span>
@@ -197,6 +197,10 @@ async function loadStrategy() {
   const res = await fetch('api/strategy');
   if (!res.ok) return;
   const s = await res.json();
+  if (s.freeze?.active) {
+    document.getElementById('strategy-view').classList.add('hidden');
+    return;
+  }
   document.getElementById('strategy-view').classList.remove('hidden');
   document.getElementById('strategy-name').textContent = s.strategy_name;
   document.getElementById('checkpoint-chip').textContent =
@@ -284,18 +288,25 @@ function renderOverview(data) {
     </div>`).join('');
 
   const a = data.automation;
-  document.getElementById('automation-times').textContent = `สร้าง ${a.generation.join(' / ')} · ส่ง KDP ${a.kdp_upload.join(' / ')} · Sync ยอด ${a.sales_sync} (${a.timezone})`;
+  const frozen = a.freeze_code === 'total_kdp_freeze';
+  document.getElementById('pipeline-stages').classList.toggle('hidden', frozen);
+  document.getElementById('automation-times').textContent = frozen
+    ? `ติดตามยอดขายเล่มเดิม · Sync ยอด ${a.sales_sync} (${a.timezone})`
+    : `สร้าง ${a.generation.join(' / ')} · ส่ง KDP ${a.kdp_upload.join(' / ')} · Sync ยอด ${a.sales_sync} (${a.timezone})`;
   const autoState = document.getElementById('automation-state');
   if (a.paused) {
-    autoState.textContent = 'AUTO PAUSED';
+    autoState.textContent = frozen ? 'KDP FROZEN' : 'AUTO PAUSED';
     autoState.className = 'px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-300 text-xs';
+  } else {
+    autoState.textContent = 'AUTO ON';
+    autoState.className = 'px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-300 text-xs';
   }
 
   const alert = document.getElementById('queue-alert');
   if (a.paused) {
     alert.classList.remove('hidden');
     alert.innerHTML = `<p class="text-xs font-semibold text-amber-300">${escapeHtml(a.pause_reason)}</p>
-      <p class="text-xs text-amber-200/80 mt-1">พักการสร้างและการส่งคิวเพื่อไม่ให้เกิดรายการซ้ำ · ลองใหม่หลัง ${escapeHtml(a.retry_after)}</p>`;
+      <p class="text-xs text-amber-200/80 mt-1">${frozen ? 'ไม่มีการส่งหนังสือ เปลี่ยนราคา หรือแก้รายการบน KDP อัตโนมัติ' : `พักการสร้างและการส่งคิวเพื่อไม่ให้เกิดรายการซ้ำ · ลองใหม่หลัง ${escapeHtml(a.retry_after)}`}</p>`;
   } else if (data.queue_blocker) {
     alert.classList.remove('hidden');
     alert.innerHTML = `<p class="text-xs font-semibold text-red-300">คิว KDP ติดที่ ${escapeHtml(data.queue_blocker.title)}</p>
@@ -306,11 +317,13 @@ function renderOverview(data) {
   document.getElementById('winner-signal').innerHTML = winner ? `
     <p class="text-sm font-medium text-emerald-300">${escapeHtml(winner.title)}</p>
     <p class="text-xs text-slate-400 mt-1">${winner.units} sale · $${Number(winner.revenue_usd || 0).toFixed(2)} royalty</p>
-    <p class="text-xs text-slate-500 mt-3">Brain จะให้น้ำหนัก niche และภาษาที่ใกล้กับผู้ซื้อจริงในรอบสร้างถัดไป</p>`
-    : '<p class="text-sm text-slate-400">ยังไม่มียอดขาย ระบบจะสำรวจ niche แบบกว้างจนพบสัญญาณแรก</p>';
+    <p class="text-xs text-slate-500 mt-3">${frozen ? 'สัญญาณจากยอดขายเดิม ไม่เปิดการสร้างหรือเผยแพร่เล่มใหม่' : 'Brain จะให้น้ำหนัก niche และภาษาที่ใกล้กับผู้ซื้อจริงในรอบสร้างถัดไป'}</p>`
+    : '<p class="text-sm text-slate-400">ยังไม่พบสัญญาณยอดขายในข้อมูลที่บันทึก</p>';
 
   const adhd = data.adhd_series;
-  if (adhd && Object.keys(adhd).length > 0) {
+  if (frozen) {
+    document.getElementById('active-experiments').innerHTML = '<p class="text-sm text-slate-400">ระงับการทดลอง KDP ทั้งหมด</p>';
+  } else if (adhd && Object.keys(adhd).length > 0) {
     let adhdHtml = '<p class="text-xs font-semibold text-sky-300 mb-1">ADHD KDP Series</p>';
     if (adhd.free_promo) {
       adhdHtml += `<p class="text-xs text-amber-300 bg-amber-500/10 rounded px-2 py-1 mb-2 inline-block">Free Promo: ${escapeHtml(adhd.free_promo.start)} to ${escapeHtml(adhd.free_promo.end)}</p>`;

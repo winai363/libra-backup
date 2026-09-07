@@ -10,6 +10,7 @@ import re
 import subprocess
 import posixpath
 import zipfile
+import unicodedata
 import xml.etree.ElementTree as ET
 import httpx
 from PIL import Image
@@ -246,20 +247,8 @@ def _duplicate_chapter_numbers(content: str) -> list[str]:
 
 
 def _is_fiction(listing: dict) -> bool:
-    text = " ".join(
-        [
-            str(listing.get("title", "")),
-            str(listing.get("subtitle", "")),
-            " ".join(map(str, listing.get("categories", []))),
-            " ".join(map(str, listing.get("keywords", []))),
-        ]
-    ).casefold()
-    return bool(
-        re.search(
-            r"\b(?:fiction|romance|fantasy|romantasy|novel|roman historique)\b",
-            text,
-        )
-    )
+    from editorial_review import is_fiction_listing
+    return is_fiction_listing(listing)
 
 
 # --- Kindle-format suitability -------------------------------------------------
@@ -675,9 +664,12 @@ def validate_book(
         else:
             try:
                 editorial = json.loads(editorial_file.read_text(encoding="utf-8"))
-                report.metrics["editorial_passed"] = bool(editorial.get("passed"))
-                if not editorial.get("passed"):
-                    report.error("AI editorial board did not approve this book.")
+                from editorial_review import editorial_source_hashes, validate_editorial_report
+                evidence = validate_editorial_report(
+                    editorial, fiction=fiction, expected_sources=editorial_source_hashes(book_dir))
+                report.metrics["editorial_passed"] = evidence["passed"]
+                for failure in evidence["score_failures"] + evidence["evidence_failures"]:
+                    report.error("Editorial evidence: " + failure)
             except (OSError, json.JSONDecodeError) as exc:
                 report.error(f"Invalid editorial-review.json: {exc}")
 
@@ -686,10 +678,13 @@ def validate_book(
         report.metrics["instructional_images"] = count
         for error in errors:
             report.error(error)
-        embedded_errors, embedded_count = _epub_instructional_images(book_dir)
-        report.metrics["epub_instructional_images"] = embedded_count
-        for error in embedded_errors:
+    if require_visuals or _promises_illustrations(listing):
+        evidence = _epub_visual_evidence(book_dir, minimum=12 if require_visuals else 1)
+        report.metrics["epub_instructional_images"] = evidence["image_count"]
+        report.metrics["epub_demonstrations"] = evidence["demonstrations"]
+        for error in evidence["errors"]:
             report.error(error)
+        report.warning("Image presence does not verify instructional accuracy or all sales promises.")
     return report
 
 
@@ -714,12 +709,31 @@ VISUAL_SOURCE_KINDS = {
 }
 
 
+def _fold_text(text: str) -> str:
+    return "".join(c for c in unicodedata.normalize("NFKD", text.casefold())
+                   if not unicodedata.combining(c))
+
+
+def _promises_illustrations(listing: dict) -> bool:
+    """Conservative literal promise detector; not a semantic editorial review."""
+    text = _fold_text(" ".join(str(listing.get(key, ""))
+                               for key in ("title", "subtitle", "description")))
+    return bool(re.search(r"\b(?:illustrated|illustre\w*|illustriert\w*|ilustrad\w*|illustrat[oaie]\w*|screenshots?)\b", text))
+
+
 def _epub_instructional_images(book_dir: Path, minimum: int = 12) -> tuple[list[str], int]:
-    """Count manifest images actually used by spine pages, excluding the cover."""
+    evidence = _epub_visual_evidence(book_dir, minimum)
+    return evidence["errors"], evidence["image_count"]
+
+
+def _epub_visual_evidence(book_dir: Path, minimum: int = 0) -> dict:
+    """Inspect used raster images and numbered demonstrations in reading order."""
     ns = {"c": "urn:oasis:names:tc:opendocument:xmlns:container",
           "o": "http://www.idpf.org/2007/opf"}
     used = set()
     errors = []
+    demonstrations = []
+    active = []
 
     def resolve(base, href):
         parsed = urlparse(href)
@@ -750,6 +764,16 @@ def _epub_instructional_images(book_dir: Path, minimum: int = 12) -> tuple[list[
                 page = ET.fromstring(archive.read(page_path))
                 for element in page.iter():
                     tag = element.tag.rsplit("}", 1)[-1]
+                    if re.fullmatch(r"h[1-6]", tag):
+                        level = int(tag[1])
+                        active = [row for row in active if row["level"] < level]
+                        heading = " ".join("".join(element.itertext()).split())
+                        if re.search(r"\b(?:demonstration|demostracion|dimostrazione)\s+\d+\b", _fold_text(heading)):
+                            row = {"heading": heading, "page": page_path,
+                                   "level": level, "images": set()}
+                            demonstrations.append(row)
+                            active.append(row)
+                        continue
                     if tag not in {"img", "image"}:
                         continue
                     href = (element.get("src") if tag == "img" else
@@ -763,11 +787,18 @@ def _epub_instructional_images(book_dir: Path, minimum: int = 12) -> tuple[list[
                         with Image.open(io.BytesIO(archive.read(image_path))) as embedded:
                             embedded.verify()
                         used.add(image_path)
+                        for row in active:
+                            row["images"].add(image_path)
     except (OSError, zipfile.BadZipFile, ET.ParseError, KeyError, ValueError) as exc:
         errors.append(f"EPUB instructional images could not be verified: {exc}")
     if len(used) < minimum:
         errors.append(f"EPUB instructional images: need {minimum} used interior assets; found {len(used)}.")
-    return errors, len(used)
+    coverage = [{"heading": row["heading"], "page": row["page"],
+                 "image_count": len(row["images"])} for row in demonstrations]
+    for row in coverage:
+        if minimum > 0 and row["image_count"] == 0:
+            errors.append("Demonstration without interior image: " + row["heading"] + " (" + row["page"] + ").")
+    return {"errors": errors, "image_count": len(used), "demonstrations": coverage}
 
 
 def _validate_visual_assets(book_dir: Path, minimum: int = 12) -> tuple[list[str], int]:

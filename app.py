@@ -15,7 +15,7 @@ from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, Redirect
 from fastapi.staticfiles import StaticFiles
 
 from business_ledger import record_hub_event
-from kdp_freeze import KDPFrozenError, assert_kdp_mutation_allowed
+from kdp_freeze import KDPFrozenError, assert_kdp_mutation_allowed, freeze_state
 from settings import CommerceConfigError, CommerceSettings, load_env_file
 from content_hub import (
     TrackingConfigError,
@@ -533,7 +533,8 @@ def build_dashboard_overview() -> dict:
     from profit_tracker import build_portfolio
     from winner_signals import get_winners
 
-    portfolio = build_portfolio()
+    portfolio = build_portfolio(today=_profit_now().date())
+    freeze = freeze_state()
     winners = get_winners()
     sales_state_file = KDP_DIR / "sales-sync-state.json"
     sales_state = {}
@@ -606,14 +607,15 @@ def build_dashboard_overview() -> dict:
         },
         "winners": winners[:3],
         "automation": {
-            "generation": ["01:00"],
-            "kdp_upload": ["02:30", "06:30"],
+            "generation": [] if freeze["active"] else ["01:00"],
+            "kdp_upload": [] if freeze["active"] else ["02:30", "06:30"],
             "sales_sync": "09:15",
             "timezone": "Asia/Bangkok",
-            "learning": "ยอดขายจริง → หา niche ใกล้เคียง + เช็กฤดูกาลก่อนสร้าง",
-            "paused": bool(title_limit.get("active")),
-            "pause_reason": "KDP จำกัดการสร้าง title ใหม่ชั่วคราว" if title_limit.get("active") else "",
-            "retry_after": title_limit.get("retry_after", ""),
+            "learning": "ติดตามยอดขายจากเล่มเดิม" if freeze["active"] else "ยอดขายจริง → หา niche ใกล้เคียง + เช็กฤดูกาลก่อนสร้าง",
+            "paused": freeze["active"] or bool(title_limit.get("active")),
+            "freeze_code": freeze["code"] if freeze["active"] else None,
+            "pause_reason": "ระงับการเผยแพร่ KDP ถาวร" if freeze["active"] else "KDP จำกัดการสร้าง title ใหม่ชั่วคราว" if title_limit.get("active") else "",
+            "retry_after": None if freeze["active"] else title_limit.get("retry_after", ""),
         },
     }
 
@@ -1049,6 +1051,13 @@ async def status_page(request: Request):
 async def strategy_board(request: Request):
     """Depth-loop command center: hero books + plan timeline + checkpoint."""
     check_read(request)
+    freeze = freeze_state()
+    if freeze["active"]:
+        return {
+            "strategy_name": "KDP PASSIVE MODE", "freeze": freeze,
+            "checkpoint": None, "days_to_checkpoint": None,
+            "summary": {}, "heroes": [], "timeline": [], "actions_bui": [],
+        }
     cfg_path = Path(__file__).parent / "data" / "strategy_timeline.json"
     cfg = json.loads(cfg_path.read_text())
     today = datetime.now().date()

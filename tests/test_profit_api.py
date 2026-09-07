@@ -101,6 +101,25 @@ def test_primary_dashboard_exposes_verified_royalties_not_estimated_revenue(tmp_
     assert "estimated_revenue_30d_usd" not in sales
 
 
+def test_dashboard_freeze_cannot_be_hidden_by_expired_title_limit(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    automation = client.get("/api/dashboard/overview").json()["automation"]
+    assert automation["paused"] is True
+    assert automation["freeze_code"] == "total_kdp_freeze"
+    assert automation["generation"] == []
+    assert automation["kdp_upload"] == []
+    assert automation["retry_after"] is None
+
+
+def test_strategy_does_not_offer_cancelled_plan_under_freeze(tmp_path, monkeypatch):
+    client = _client(tmp_path, monkeypatch)
+    strategy = client.get("/api/strategy").json()
+    assert strategy["freeze"]["active"] is True
+    assert strategy["checkpoint"] is None
+    assert strategy["timeline"] == []
+    assert strategy["actions_bui"] == []
+
+
 def test_due_checkpoints_require_repeatable_contribution_evidence():
     checkpoints = libra_app._checkpoint_outcomes(
         datetime.fromisoformat("2026-06-01T09:15:09+07:00"),

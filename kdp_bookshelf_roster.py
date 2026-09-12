@@ -120,6 +120,10 @@ def compute_alerts(report: dict) -> dict:
     """Find NEW problems worth pinging Bui about:
        - live_duplicates: a book with ≥2 LIVE rows (active cannibalization)
        - live_orphans:    a LIVE book on KDP with no local listing
+       - blocked:         a tracked book now shown BLOCKED (takedown)
+       - in_review:       a tracked book back in Amazon's content review
+       - unpublished:     a tracked book no longer offered for sale
+       - gone:            a locally-LIVE book absent from the bookshelf
     """
     # Group every entry by the (book, format) it belongs to (winner.slug or
     # duplicate_of). Keep format in the key so an ebook + its paperback edition
@@ -140,6 +144,15 @@ def compute_alerts(report: dict) -> dict:
     blocked = [e for e in report["entries"]
                if e["status"] == "BLOCKED" and (e.get("slug") or e.get("duplicate_of"))]
 
+    # Review watch: BLOCKED is the end of the story, not the start. Every recorded
+    # content block on this account went through Amazon's review first, so a
+    # tracked book showing IN_REVIEW — or already pulled from sale as UNPUBLISHED —
+    # is the earliest visible sign and must not wait for the BLOCKED badge.
+    in_review = [e for e in report["entries"]
+                 if e["status"] == "IN_REVIEW" and (e.get("slug") or e.get("duplicate_of"))]
+    unpublished = [e for e in report["entries"]
+                   if e["status"] == "UNPUBLISHED" and (e.get("slug") or e.get("duplicate_of"))]
+
     # Vanished watch: a book our listing.json records as LIVE that no longer
     # appears on the bookshelf at all (possible silent takedown). Guard against a
     # partial fetch — only trust this when the roster looks complete.
@@ -153,7 +166,8 @@ def compute_alerts(report: dict) -> dict:
                 gone.append({"slug": slug, "asin": d.get("asin"), "title_guess": d.get("title", slug)})
 
     return {"live_duplicates": live_dups, "live_orphans": live_orphans,
-            "blocked": blocked, "gone": gone}
+            "blocked": blocked, "in_review": in_review,
+            "unpublished": unpublished, "gone": gone}
 
 
 # ---------- bookshelf scrape ----------
@@ -415,6 +429,16 @@ def maybe_alert(report: dict) -> None:
         if key not in ack:
             new_lines.append(f"🚫 <b>โดน BLOCKED (Amazon takedown?)</b>: {e['asin']} — {e['title_guess'][:55]}")
             new_asins.add(key)
+    for e in alerts["in_review"]:
+        key = e.get("asin") or e.get("book_id")
+        if key not in ack:
+            new_lines.append(f"🕵️ <b>กลับเข้า IN REVIEW ของ Amazon</b>: {key} — {e['title_guess'][:55]}")
+            new_asins.add(key)
+    for e in alerts["unpublished"]:
+        key = e.get("asin") or e.get("book_id")
+        if key not in ack:
+            new_lines.append(f"⛔ <b>ไม่ได้ขายอยู่แล้ว (UNPUBLISHED)</b>: {key} — {e['title_guess'][:55]}")
+            new_asins.add(key)
     for e in alerts["gone"]:
         key = e.get("asin") or e.get("slug")
         if key not in ack:
@@ -422,7 +446,7 @@ def maybe_alert(report: dict) -> None:
             new_asins.add(key)
 
     if not new_lines:
-        _log("alert: no new live-duplicates / orphans / blocked / vanished")
+        _log("alert: no new live-duplicates / orphans / blocked / in-review / unpublished / vanished")
         return
     msg = "📕 <b>Libra KDP roster เจอปัญหาใหม่</b>\n\n" + "\n".join(new_lines) + \
           "\n\nตรวจ bookshelf / รัน kdp_unpublish.py / สร้าง listing เพื่อแก้"

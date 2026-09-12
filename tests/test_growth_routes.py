@@ -91,6 +91,48 @@ def test_repeated_clicks_are_recorded_as_separate_events(client, ledger):
     assert len(keys) == len(set(keys))
 
 
+def test_crawler_click_redirects_without_recording(client, ledger):
+    """A crawler or link-preview fetcher must still reach Amazon, but must not
+    inflate the click count that the organic experiment is measured on."""
+    init_ledger(ledger)
+    token = make_tracking_token("book-a", "organic-1", "https://www.amazon.com/dp/ASIN")
+
+    response = client.get(
+        f"/growth/out/{token}",
+        follow_redirects=False,
+        headers={"User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)"},
+    )
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "https://www.amazon.com/dp/ASIN"
+    assert count_events(ledger, event_kind="amazon_outbound") == 0
+
+
+def test_click_without_user_agent_is_not_recorded(client, ledger):
+    init_ledger(ledger)
+    token = make_tracking_token("book-a", "organic-1", "https://www.amazon.com/dp/ASIN")
+
+    response = client.get(
+        f"/growth/out/{token}", follow_redirects=False, headers={"User-Agent": ""},
+    )
+
+    assert response.status_code == 307
+    assert count_events(ledger, event_kind="amazon_outbound") == 0
+
+
+def test_in_app_browser_click_is_recorded(client, ledger):
+    """Pinterest/Facebook in-app browsers are readers, not fetchers."""
+    token = make_tracking_token("book-a", "organic-1", "https://www.amazon.com/dp/ASIN")
+
+    client.get(
+        f"/growth/out/{token}",
+        follow_redirects=False,
+        headers={"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 [Pinterest/iOS]"},
+    )
+
+    assert count_events(ledger, event_kind="amazon_outbound") == 1
+
+
 def test_outbound_click_rejects_forged_token(client, ledger):
     init_ledger(ledger)
 
@@ -287,3 +329,61 @@ def test_growth_summary_api_empty(client):
     summary = client.get("/api/growth/summary").json()
 
     assert summary == {"total_events": 0, "by_event_kind": {}, "by_slug": {}}
+
+
+# ── declared campaigns on the book hub page ─────────────────────────────────
+
+@pytest.fixture
+def campaigns_file(tmp_path, monkeypatch):
+    path = tmp_path / "growth_campaigns.json"
+    monkeypatch.setattr(libra_app, "GROWTH_CAMPAIGNS_FILE", path)
+    return path
+
+
+def _campaign_of_cta(body: str) -> str:
+    start = body.index('href="/growth/out/') + len('href="/growth/out/')
+    token = body[start:body.index('"', start)]
+    return resolve_tracking_token(token)["campaign"]
+
+
+def test_declared_campaign_tags_the_click(client, ledger, campaigns_file):
+    campaigns_file.write_text(json.dumps({"campaigns": ["organic-pinterest"]}))
+    _write_listing(libra_app.KDP_DIR, "book-a")
+
+    response = client.get("/growth/books/book-a?c=organic-pinterest")
+
+    assert response.status_code == 200
+    assert _campaign_of_cta(response.text) == "organic-pinterest"
+
+
+def test_undeclared_campaign_falls_back_to_the_default(client, ledger, campaigns_file):
+    campaigns_file.write_text(json.dumps({"campaigns": ["organic-pinterest"]}))
+    _write_listing(libra_app.KDP_DIR, "book-a")
+
+    response = client.get("/growth/books/book-a?c=whatever-a-visitor-typed")
+
+    assert _campaign_of_cta(response.text) == libra_app.GROWTH_HUB_CAMPAIGN
+
+
+def test_missing_campaigns_file_still_serves_the_default(client, ledger, campaigns_file):
+    _write_listing(libra_app.KDP_DIR, "book-a")
+
+    response = client.get("/growth/books/book-a?c=organic-pinterest")
+
+    assert response.status_code == 200
+    assert _campaign_of_cta(response.text) == libra_app.GROWTH_HUB_CAMPAIGN
+
+
+def test_campaign_click_is_recorded_under_its_own_campaign(client, ledger, campaigns_file):
+    campaigns_file.write_text(json.dumps({"campaigns": ["organic-pinterest"]}))
+    _write_listing(libra_app.KDP_DIR, "book-a")
+    body = client.get("/growth/books/book-a?c=organic-pinterest").text
+    start = body.index('href="/growth/out/') + len('href="')
+    cta = body[start:body.index('"', start)]
+
+    client.get(cta, follow_redirects=False,
+               headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0 Safari/537.36"})
+
+    with sqlite3.connect(ledger) as connection:
+        rows = connection.execute("SELECT slug, campaign FROM hub_events").fetchall()
+    assert rows == [("book-a", "organic-pinterest")]

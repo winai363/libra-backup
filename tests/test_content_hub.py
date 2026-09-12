@@ -13,6 +13,7 @@ from content_hub import (
     TrackingConfigError,
     build_outbound_event,
     growth_summary,
+    is_bot_user_agent,
     make_tracking_token,
     paragraphs_html,
     render_hub_page,
@@ -172,3 +173,40 @@ def test_paragraphs_html_escapes_and_splits_on_blank_lines():
     result = paragraphs_html("Hello <b>world</b>\n\nSecond paragraph.")
 
     assert result == "<p>Hello &lt;b&gt;world&lt;/b&gt;</p>\n<p>Second paragraph.</p>"
+
+
+# ── is_bot_user_agent ────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("user_agent", [
+    None,
+    "",
+    "   ",
+    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+    "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+    "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "Pinterest/0.2 (+https://www.pinterest.com/bot.html)",
+    "Twitterbot/1.0",
+    "WhatsApp/2.23.20.0 A",
+    "TelegramBot (like TwitterBot)",
+    "python-requests/2.31.0",
+    "curl/8.5.0",
+    "Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome/120.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)",
+])
+def test_bot_user_agents_are_detected(user_agent):
+    assert is_bot_user_agent(user_agent) is True
+
+
+@pytest.mark.parametrize("user_agent", [
+    # Desktop and mobile browsers.
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    # In-app browsers of the channels we post to: a reader, not a fetcher.
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 [Pinterest/iOS]",
+    "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36 [FB_IAB/FB4A;FBAV/440.0.0.29.109;]",
+    "Mozilla/5.0 (Linux; Android 13; SM-A536B) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36 Instagram 300.0",
+    # The route tests' own synthetic agent must stay countable.
+    "SecretBrowser/1.0 (tracking-me)",
+])
+def test_reader_user_agents_are_not_bots(user_agent):
+    assert is_bot_user_agent(user_agent) is False

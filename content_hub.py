@@ -14,7 +14,9 @@ tampered or hand-crafted token can never redirect anywhere else.
 
 Privacy: the only data ever captured for an outbound click is a random
 event key, the slug, the campaign, and a timestamp. No IP address, user
-agent, cookie, or email is ever read or stored by this module.
+agent, cookie, or email is ever stored by this module. A user agent is
+inspected in memory by is_bot_user_agent() to decide whether a hit counts as
+a reader click, and is never written anywhere.
 """
 from __future__ import annotations
 
@@ -182,6 +184,43 @@ def resolve_tracking_token(token: str, allowed_hosts=None) -> dict:
     payload.setdefault("destination_kind", "amazon")
     payload.setdefault("click_id", "")
     return payload
+
+
+# Crawlers, link-preview fetchers and scripts that hit a posted link without a
+# reader behind them. Markers are matched case-insensitively as substrings and
+# kept specific on purpose: in-app browsers (Pinterest, Facebook, WhatsApp) send
+# an ordinary browser user agent and must stay countable as real clicks.
+BOT_USER_AGENT_MARKERS = (
+    "bot/", "bot ", "bot)", "crawler", "crawl/", "spider", "slurp",
+    "facebookexternalhit", "facebot", "pinterestbot",
+    "twitterbot", "linkedinbot", "telegrambot", "discordbot",
+    "skypeuripreview", "embedly", "quora link preview", "applebot",
+    "ia_archiver", "scrapy", "headlesschrome", "phantomjs",
+    "python-requests", "python-urllib", "aiohttp", "httpx/", "curl/", "wget/",
+    "go-http-client", "okhttp", "axios/", "libwww-perl", "java/",
+    "uptimerobot", "pingdom", "statuscake", "newrelicpinger",
+)
+
+
+def is_bot_user_agent(user_agent) -> bool:
+    """True when a request to a tracked link looks like a crawler, preview
+    fetcher or script instead of a reader. A missing or empty user agent counts
+    as a bot: every real browser sends one. The redirect still happens for these
+    callers — only the click event is withheld, so click counts stay comparable
+    to human traffic."""
+    if not user_agent or not str(user_agent).strip():
+        return True
+    lowered = str(user_agent).lower()
+    if lowered.endswith("bot"):
+        return True
+    if any(marker in lowered for marker in BOT_USER_AGENT_MARKERS):
+        return True
+    # Pinterest and WhatsApp send both a fetcher ("Pinterest/0.2 (+https://…)")
+    # and an in-app browser that carries the app name inside an otherwise normal
+    # Mozilla string. Only the fetcher is a bot.
+    if "mozilla" not in lowered:
+        return any(marker in lowered for marker in ("pinterest/", "whatsapp/"))
+    return False
 
 
 def build_outbound_event(slug: str, campaign: str, *, now: datetime | None = None,

@@ -24,6 +24,7 @@ from content_hub import (
     make_tracking_token,
     render_hub_page,
     escape_text,
+    is_bot_user_agent,
     paragraphs_html,
     resolve_tracking_token,
 )
@@ -1332,16 +1333,44 @@ def _hub_cta_path(slug: str, campaign: str, destination: str) -> str:
     return f"/growth/out/{make_tracking_token(slug, campaign, destination)}"
 
 
+GROWTH_CAMPAIGNS_FILE = Path(__file__).parent / "data" / "growth_campaigns.json"
+
+
+def _declared_campaigns() -> set:
+    """Campaign names an experiment has declared up front, read fresh on every
+    request so a new channel needs no restart. Declared-only on purpose: an
+    undeclared ?c= value would let any visitor write new labels into our own
+    click data, and a label nobody planned measures nothing."""
+    try:
+        declared = json.loads(GROWTH_CAMPAIGNS_FILE.read_text())
+    except (OSError, json.JSONDecodeError):
+        return set()
+    names = declared.get("campaigns") if isinstance(declared, dict) else declared
+    if not isinstance(names, list):
+        return set()
+    return {n for n in names if isinstance(n, str) and _SLUG_ID_RE.fullmatch(n)}
+
+
+def _hub_campaign(requested) -> str:
+    """The campaign to tag a hub click with: the requested one when it was
+    declared, otherwise the default. Never raises on junk input."""
+    if isinstance(requested, str) and requested in _declared_campaigns():
+        return requested
+    return GROWTH_HUB_CAMPAIGN
+
+
 @app.get("/growth/books/{slug}", response_class=HTMLResponse)
-async def growth_book_hub_page(slug: str):
-    """Public book hub page with exactly one tracked Amazon CTA."""
+async def growth_book_hub_page(slug: str, c: str | None = None):
+    """Public book hub page with exactly one tracked Amazon CTA. `?c=` tags the
+    click with a declared campaign so two channels posting the same book stay
+    countable apart; anything undeclared falls back to the default campaign."""
     result = _live_book_asin(slug)
     if result is None:
         return HTMLResponse("<h1>Book not found</h1>", status_code=404)
     listing, asin = result
     destination = f"https://www.amazon.com/dp/{asin}"
     try:
-        cta_path = _hub_cta_path(slug, GROWTH_HUB_CAMPAIGN, destination)
+        cta_path = _hub_cta_path(slug, _hub_campaign(c), destination)
     except TrackingConfigError:
         raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")
     html_path = Path(__file__).parent / "templates" / "hub_book.html"
@@ -1391,15 +1420,19 @@ async def growth_article_hub_page(article_id: str):
 
 
 @app.get("/growth/out/{token}")
-async def growth_outbound_click(token: str):
+async def growth_outbound_click(token: str, request: Request):
     """Verify a signed tracking token, record one privacy-safe
-    amazon_outbound hub event, and redirect to the approved destination."""
+    amazon_outbound hub event, and redirect to the approved destination.
+    A crawler or link-preview fetcher still gets the redirect but is not
+    recorded, so a posted link's click count stays a count of readers."""
     try:
         payload = resolve_tracking_token(token, allowed_hosts=_outbound_allowlists())
     except TrackingConfigError:
         raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")
     except ValueError:
         raise HTTPException(status_code=404, detail="Invalid tracking link")
+    if is_bot_user_agent(request.headers.get("user-agent")):
+        return RedirectResponse(url=payload["destination"], status_code=307)
     kind = payload.get("destination_kind", "amazon")
     if kind in ("payhip", "lemonsqueezy"):
         # A storefront click gets its own event kind and an opaque click id; a

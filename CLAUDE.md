@@ -2,6 +2,14 @@
 
 อ่าน `memory.md` (ท้ายไฟล์ = ล่าสุด) ก่อนเริ่มงานเสมอ. กฎที่ห้ามละเมิด:
 
+## 12 ก.ย. 2026 — การวัดผลคลิก + ด่านเฝ้า takedown (ไม่แตะ KDP)
+- `/growth/out/{token}` ไม่บันทึก event ถ้า user agent เป็นบอท/ตัวดึงพรีวิว/สคริปต์ (`content_hub.is_bot_user_agent`) — ยัง redirect ปกติ. เบราว์เซอร์ในแอป (Pinterest/FB/IG/WhatsApp) นับเป็นคนจริง ห้ามใส่ `pinterest`/`whatsapp` แบบคำกว้างกลับเข้า marker
+- `/growth/books/{slug}?c=<campaign>` ติดป้ายช่องทางได้ แต่ **เฉพาะชื่อที่ประกาศไว้ใน `data/growth_campaigns.json`** ชื่ออื่นตกกลับ `content-hub` (กันคนนอกเขียนป้ายใหม่ลงข้อมูลคลิกของเรา)
+- `kdp_bookshelf_roster.py::compute_alerts` เพิ่ม `in_review` + `unpublished` — BLOCKED คือปลายทาง ทุกเล่มที่เคยโดนบล็อกผ่าน review มาก่อน จึงต้องเตือนตั้งแต่เห็น IN REVIEW (เทสต์ `tests/test_bookshelf_roster_alerts.py`)
+- 🔴 **อีเมลแจ้งเตือนของ KDP เข้าบัญชี iCloud (KDP_EMAIL) ไม่ใช่ Gmail ที่ `mail_watch.py` เฝ้า** — สแกน INBOX ที่เฝ้าอยู่ย้อนถึง 1 มิ.ย. 2026 เจอเมลจาก amazon/kdp **0 ฉบับ** ⇒ ตอนนี้รู้เรื่องบล็อกได้ทางเดียวคือ roster scrape รายวัน 08:45. เติม `kdp` ใน `WATCH_SENDERS` แล้ว รอบุ๋ยตั้ง forward iCloud → winai363@gmail.com เอง (ห้ามไปแตะบัญชี iCloud)
+- เลนทดลอง organic = `data/organic_experiment.json` (`active:false` = ยังไม่เริ่ม) + `scripts/organic_experiment_report.py` (อ่านอย่างเดียว ไม่ตัดสินใจ ไม่ตั้ง cron) + `docs/organic-experiment-2026-09-12.md`. ⛔ ห้ามแปลงตัวรายงานนี้เป็น agent ตัดสินใจ และห้ามผูกคลิกกับยอดขายเป็น conversion (Amazon ไม่ส่ง referrer)
+- cron reconcile เปลี่ยนป้าย `--mode test` → `--mode live` ให้ตรง `LIBRA_COMMERCE_MODE=live` (ป้ายในรายงานเท่านั้น ตัวกรองโหมดจริงอยู่ที่ webhook). ⚠️ ยังไม่มี `STRIPE_SECRET_KEY_LIVE` ⇒ ถ้ามีคนซื้อจริงผ่าน Payhip จะ **พิสูจน์ด้วย Stripe ไม่ได้** (กฎ "Payhip สังเกต / Stripe พิสูจน์") — บุ๋ยต้องใส่คีย์เอง
+
 ## 7 ก.ย. 2026 — ปิดช่องโหว่ด่านตรวจภายใน
 - ผล editorial ต้องมี SHA-256 ของ ebook.md และ listing.json ตรงกับไฟล์ปัจจุบัน โดยจับค่าก่อนเรียก reviewer; ห้ามเติม hash ย้อนหลังให้ผลเก่าเพื่อทำให้ผ่าน
 - Dashboard และ strategy API ต้องสะท้อน freeze_state(): ห้ามแสดงแผนกรกฎาคม ตารางส่งหนังสือ วันลองใหม่ หรือการทดลองที่ยกเลิกเป็นงานปัจจุบัน

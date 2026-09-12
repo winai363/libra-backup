@@ -1,0 +1,63 @@
+{
+  "name": "organic-hub-to-amazon-2026-09",
+  "active": false,
+  "activation_note": "PREPARED ONLY. Flip \"active\": true and set started_on to the first day a link is actually posted. Nothing in Libra posts on its own (owner decision 2026-08-30), so the experiment does not start until Bui posts.",
+  "kill_switch": "set active=false (or delete this file) — organic_experiment_report.py then reports inactive and reads nothing",
+  "books": [
+    "adhd-adults-workbook-es",
+    "ai-workflows-accountants-pt",
+    "bilingual-english-spanish-kids-vocab"
+  ],
+  "books_excluded_after_qa": {
+    "senior-smartphone-french": "top earner but the listing promises interior images and the EPUB has none (catalogue_quality 2026-09-12). Sending traffic to an unmet promise risks returns and reviews, and the fix would need a republish, which is frozen.",
+    "beginner-watercolor-spanish": "visual how-to niche with 0 interior images; its two siblings (acuarela ES, aquarelle FR) are the two books Amazon pulled. Not amplified until the content matches the promise.",
+    "ai-augmented-productivity-toolkit": "25 orders are free-promo downloads, not paid demand; $1.96 lifetime in the most crowded niche in the catalogue."
+  },
+  "planned_window_days": 30,
+  "started_on": null,
+  "ends_on": null,
+  "channels": [
+    {
+      "campaign": "organic-owner-post",
+      "what": "Bui posts the hub page link where the buyer already is (ADHD/productivity groups, accountant communities, bilingual-parent groups) — one post per book per week, no unsolicited DMs, no link drops in unrelated threads.",
+      "executed_by": "owner (manual)"
+    },
+    {
+      "campaign": "organic-pinterest",
+      "what": "Pinterest pins to the hub page. Four pins were posted manually on 2026-07-10 (see data/manual-task-state.json); this reuses that channel with tracked links.",
+      "executed_by": "owner (manual)"
+    }
+  ],
+  "funnel": "useful content on our own hub page -> one tracked CTA -> Amazon listing",
+  "hypothesis": "Tracked organic links to hub pages for the three QA-passed earners produce measurable clicks; royalties for those books over the 30-day window stay at or above the baseline months below.",
+  "primary_metric": "tracked reader clicks per book per campaign (hub_events, crawlers excluded)",
+  "secondary_metric": "royalties_usd per book per month, latest observation per month",
+  "continue_if": "at least 25 tracked reader clicks across the three books in 30 days AND no book drops out of LIVE",
+  "stop_if": "zero tracked clicks by day 14 (the channel is not reaching anyone), or any tracked book appears as IN_REVIEW / BLOCKED / UNPUBLISHED on the bookshelf",
+  "attribution_rule": "Amazon reports no referrer, so a purchase is never attributed to a click. Clicks prove reach; royalties are reported beside them. Insufficient evidence is reported as INCONCLUSIVE, never as success.",
+  "baseline": {
+    "measured_at": "2026-09-12T09:15:10+07:00",
+    "source": "kdp_snapshots / kdp_title_attribution, latest observation per month",
+    "account_royalties_usd": {"2026-07": 16.15, "2026-08": 13.89, "2026-09_mtd": 13.81},
+    "hub_events_rows": 0,
+    "books": {
+      "adhd-adults-workbook-es": {
+        "asin": "B0H6VB1SDX",
+        "2026-08": {"royalties_usd": 1.44, "orders": 0, "kenp": 274},
+        "2026-09_mtd": {"royalties_usd": 7.92, "orders": 3, "kenp": 100}
+      },
+      "ai-workflows-accountants-pt": {
+        "asin": "B0H3WY9M22",
+        "2026-07": {"royalties_usd": 3.32, "orders": 11, "kenp": 70},
+        "2026-08": {"royalties_usd": null, "orders": null, "kenp": null},
+        "2026-09_mtd": {"royalties_usd": null, "orders": null, "kenp": null}
+      },
+      "bilingual-english-spanish-kids-vocab": {
+        "asin": "B0H4V4DRLV",
+        "2026-08": {"royalties_usd": 2.86, "orders": 1, "kenp": 70},
+        "2026-09_mtd": {"royalties_usd": null, "orders": null, "kenp": null}
+      }
+    },
+    "unknown_note": "null means the book had no attributed row in that month's report: unknown, not zero. KDP only attributes titles that appear in the report it serves."
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "note": "Campaigns declared for the organic experiment. A hub link may only tag a click with a name listed here (see app._hub_campaign); anything else records as content-hub.",
+  "campaigns": [
+    "content-hub",
+    "organic-pinterest",
+    "organic-owner-post"
+  ]
+}

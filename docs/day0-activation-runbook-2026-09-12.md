@@ -70,7 +70,7 @@ experiment, a feed that is not RSS 2.0.
 |---|---|---|
 | 1 | Business account (convert if personal — free) | pinterest.com → Settings → Account management |
 | 2 | Claim the subpath `https://newton-winai-klinprasom.incomeinclick.in.th/libra/growth`, method **HTML tag** | Settings → Claimed accounts → Websites |
-| 3 | Paste me the `<meta name="p:domain_verify" …>` tag; I add it to the hub pages and tell you when it is live, then you press Verify | chat → me → Pinterest |
+| 3 | Press Verify — the tag you sent on 2026-09-12 is already live on that page (`<meta name="p:domain_verify" content="b6ff3ac6…">`, verified serving today). Nothing to add, no code change | Pinterest |
 | 4 | Create the boards (below) | Pinterest → profile |
 | 5 | Say the activation phrase → I run `day0` | chat |
 | 6 | Connect the feed: Bulk create Pins → Add RSS feed → `https://newton-winai-klinprasom.incomeinclick.in.th/libra/growth/feed.xml` → board A | Pinterest |

@@ -750,4 +750,4 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - บอร์ด Pinterest: 1 ฟีด = 1 บอร์ด ⇒ แนะนำ 2 บอร์ด (A `Organización en casa · rutinas TDAH` ต่อฟีด, B `Bilingual kids at home`) แล้วบุ๋ยย้าย 3 Pin ของ bilingual ไป B ด้วยมือ. แยกฟีดต่อ campaign = แก้โค้ด = ติด FREEZE
 - ไม่ต้องเพิ่ม cron/ฟีเจอร์สำหรับ day 7/14/30: `organic_experiment_report.py` คำนวณ window จาก publication แรกเอง และ cron 09:55 มีอยู่แล้ว (เงียบตอน inactive)
 - คู่มือ `docs/day0-activation-runbook-2026-09-12.md` (รวม diff authorization ที่เตรียมไว้แต่ยังไม่ apply + ขั้นตอนฝั่งบุ๋ย 8 ข้อ). เทสต์ทั้งโปรเจกต์ 1206 ผ่าน 8 skip
-- ค้างที่บุ๋ยเท่านั้น: business account + claim `/libra/growth` (ส่ง meta tag มาให้ผมใส่) · สร้างบอร์ด · พูดวรรคเปิดใช้ · ต่อ RSS ใน Pinterest · ส่ง URL Pin แรก · โพสต์ LinkedIn เอง
+- ค้างที่บุ๋ยเท่านั้น: business account + กด Verify claim `/libra/growth` (meta `p:domain_verify` ที่บุ๋ยส่งมาอยู่บนหน้านั้นแล้ว ตรวจ 12ก.ย. ยังเสิร์ฟอยู่ ⇒ ไม่ต้องแก้โค้ด) · สร้างบอร์ด · พูดวรรคเปิดใช้ · ต่อ RSS ใน Pinterest · ส่ง URL Pin แรก · โพสต์ LinkedIn เอง

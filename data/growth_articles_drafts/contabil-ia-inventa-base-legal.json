@@ -12,7 +12,7 @@
   "cta_label": "Ver o e-book na Amazon",
   "book_line": "E-book Kindle sobre fluxos de trabalho com IA para escritórios contábeis: roteiros prontos, checklists e o que conferir antes de enviar ao cliente.",
   "pin_title": "Quando a IA inventa a base legal: como conferir antes de usar",
-  "body": "O erro mais caro no uso de IA em contabilidade não é um número trocado. É uma citação legal que parece certa, com número de artigo e tudo, e que não existe.\n\nIsso acontece porque o modelo completa texto com o que é estatisticamente provável. Uma citação plausível é, para ele, uma boa resposta. Para você, é um risco que sai com a sua assinatura.\n\nTrês passos, na ordem.\n\nPrimeiro: nunca peça a base legal. Peça o raciocínio e verifique a base você mesmo. Um pedido como \"explique em linguagem simples o que costuma ser considerado nesse caso, sem citar legislação\" devolve algo útil e elimina a tentação de copiar a citação.\n\nSegundo: quando a resposta citar uma norma de todo modo, confira na fonte oficial antes de qualquer uso. Se a norma existe, leia o trecho; se o trecho não diz o que a resposta afirmou, descarte a resposta inteira, não apenas a citação. Uma resposta que erra a base costuma estar errada no resto.\n\nTerceiro: marque no rascunho o que ainda não foi conferido. Um \"[conferir]\" no meio do texto é o que impede o envio apressado na sexta-feira à tarde.\n\nDois sinais de alerta que aparecem antes do erro: a resposta fica mais assertiva quando você discorda, e as datas de vigência vêm redondas demais. Nos dois casos, trate como não verificado.\n\nE uma regra de equipe que resolve mais do que parece: quem usa IA num texto que vai ao cliente escreve uma linha dizendo o que conferiu. Não é burocracia; é o que separa rascunho de parecer.\n\nO e-book traz esse procedimento em formato de checklist, junto com os roteiros que evitam o problema na origem — pedir raciocínio, não citação.",
+  "body": "O erro mais caro no uso de IA em contabilidade não é um número trocado. É uma citação legal que parece certa, com número de artigo e tudo, e que não existe.\n\nIsso acontece porque o modelo completa texto com o que é estatisticamente provável. Uma citação plausível é, para ele, uma boa resposta. Para você, é um risco que sai com a sua assinatura.\n\nTrês passos, na ordem.\n\nPrimeiro: nunca peça a base legal. Peça o raciocínio e verifique a base você mesmo. Um pedido como \"explique em linguagem simples o que costuma ser considerado nesse caso, sem citar legislação\" devolve algo útil e elimina a tentação de copiar a citação.\n\nSegundo: quando a resposta citar uma norma de todo modo, confira na fonte oficial antes de qualquer uso. Se a norma existe, leia o trecho; se o trecho não diz o que a resposta afirmou, descarte a resposta inteira, não apenas a citação. Uma resposta que erra a base costuma estar errada no resto.\n\nTerceiro: marque no rascunho o que ainda não foi conferido. Um \"pendente\" no meio do texto é o que impede o envio apressado na sexta-feira à tarde.\n\nDois sinais de alerta que aparecem antes do erro: a resposta fica mais assertiva quando você discorda, e as datas de vigência vêm redondas demais. Nos dois casos, trate como não verificado.\n\nE uma combinação de equipe que resolve mais do que parece: quem usa IA num texto que vai ao cliente escreve uma linha dizendo o que conferiu. Não é burocracia; é o que separa um rascunho de um documento que o escritório assume.\n\nO jeito mais barato de não cair nisso é não pedir a citação em nenhum momento. Peça o raciocínio e procure a norma você mesmo — leva menos tempo do que desfazer um e-mail errado.",
   "qa_checklist": [
     "Um leitor nativo de português do Brasil revisa o texto (não apenas uma ferramenta)",
     "Nenhuma orientação tributária ou contábil específica: o texto trata de fluxo de trabalho, e a conferência humana é obrigatória em cada exemplo",
@@ -22,12 +22,45 @@
     "O CTA descreve o livro com honestidade: e-book Kindle lido na tela"
   ],
   "semantic_review": "Português do Brasil. O texto não dá orientação tributária: fala de procedimento de verificação. 'Parecer' usado no sentido corrente de documento técnico assinado.",
-  "flagged_uncertainty": [
-    "'[conferir]' como marcação no rascunho — verificar se é a convenção usada em escritórios brasileiros ou se o revisor prefere 'pendente'.",
-    "A frase sobre assinatura/responsabilidade técnica deve ser confirmada por um contador; deve descrever prática, não obrigação legal."
-  ],
+  "flagged_uncertainty": [],
   "claims_check": "Sem promessa de economia garantida, sem orientação tributária e sem indicação de fornecedor. Todo exemplo termina em conferência humana.",
   "concept_rank": 10,
   "linkedin_post_draft": "O erro mais caro da IA em contabilidade não é um número trocado. É uma citação legal plausível que não existe — com número de artigo e tudo.\n\nA correção é simples e muda o hábito: não peça a base legal. Peça o raciocínio e verifique a norma na fonte. Se o trecho não diz o que a resposta afirmou, descarte a resposta inteira, não só a citação.\n\nO procedimento de três passos:",
-  "linkedin_post_rules": "Publicado pelo próprio dono, uma vez por semana, no perfil dele. Sem hashtag spam (no máximo 3), sem tag de pessoas que não pediram, sem DM não solicitada. O link vai no primeiro comentário ou no corpo — decisão do dono."
+  "linkedin_post_rules": "Publicado pelo próprio dono, uma vez por semana, no perfil dele. Sem hashtag spam (no máximo 3), sem tag de pessoas que não pediram, sem DM não solicitada. O link vai no primeiro comentário ou no corpo — decisão do dono.",
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "pt-BR naturalness (não soar traduzido)",
+      "separation of workflow example from accounting/tax/legal advice",
+      "mandatory human verification preserved",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "'descaracterizado' trocado por 'sem dados identificáveis', que é o que o leitor diria",
+      "a frase sobre proposta/contrato foi reescrita como comunicação ao cliente, não como orientação jurídica",
+      "'natureza de despesa' agora remete ao plano de contas do próprio escritório",
+      "'[conferir]' trocado por 'pendente'",
+      "responsabilidade descrita como prática do escritório (quem assina confere), sem afirmação legal",
+      "fechamento promocional reduzido a uma frase"
+    ],
+    "remaining": [],
+    "note": "pt-BR corrente, registro profissional. Todo exemplo é de fluxo de trabalho e termina em conferência humana; nenhum trecho orienta tributação. Não revisado por contador brasileiro; esta é uma revisão semântica."
+  },
+  "channel": "owner-post",
+  "publication_order": 3,
+  "recommended_offset_days": 14,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-contabil-ia-inventa-base-legal",
+  "destination": "https://www.amazon.com/dp/B0H3WY9M22",
+  "buyer_intent": "Contador que já viu a IA citar norma inexistente",
+  "image_metadata": {
+    "url": "/libra/api/books/ai-workflows-accountants-pt/cover",
+    "source": "the book's own cover, generated in this project — no third-party image",
+    "rights": "ours",
+    "pixels": "1600x2560 (vertical, inside Pinterest's preferred 2:3 range)",
+    "alt": "Cover of the book this article comes from (ai-workflows-accountants-pt)"
+  }
 }

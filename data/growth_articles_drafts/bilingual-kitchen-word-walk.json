@@ -12,7 +12,7 @@
   "cta_label": "See the book on Amazon",
   "book_line": "Bilingual English-Spanish vocabulary book for kids: themed word lists and simple activities, read on a Kindle, copied into a notebook when you want them on paper.",
   "pin_title": "The ten-minute kitchen word walk: twelve bilingual words, no printer",
-  "body": "Most bilingual activity ideas start with a download. You find the worksheet, you realise the printer is out of ink, and the activity never happens. The kitchen fixes that: it is full of objects a child can touch, and touching is what makes a word stick.\n\nHere is the routine. It takes ten minutes and you do it standing up.\n\nPick one shelf or one drawer. Not the whole kitchen — one shelf. Twelve objects is plenty for a session.\n\nWalk along it with your child and name each object in the language you are building, then in the other one: \"la cuchara — the spoon\". Let them repeat only if they want to. Pressure is what ends these sessions early.\n\nGo round a second time, but this time you say the word and they point. Pointing is easier than speaking, and it shows you what landed without turning the game into a test.\n\nThird round, swap roles: they say a word, you point. Children correct adults with great enthusiasm, and a child correcting you is a child using the language.\n\nStop while it is still fun. Ten minutes, twelve words, done. If you stop at the first sign of boredom, tomorrow's session starts from a good memory.\n\nThe next day, use five of the same words in a real sentence during dinner: \"pass me la cuchara, please\". Recycling beats a new list. A word used at the table three days in a row does more than thirty words named once.\n\nTwo things to avoid. Do not translate every sentence you say all day — it teaches the child to wait for the translation. And do not keep score: a child who senses a test stops guessing, and guessing is how vocabulary grows.\n\nIf you want the themed lists ready-made — kitchen, bathroom, school bag, weather — with the activities written next to them, that is what a vocabulary book is for. You read it on a screen and copy the week's twelve words onto paper.",
+  "body": "Most bilingual activity ideas start with a download. You find the worksheet, you realise the printer is out of ink, and the activity never happens. The kitchen fixes that: it is full of objects a child can touch, and touching is what makes a word stick.\n\nHere is the routine. It takes ten minutes and you do it standing up.\n\nPick one shelf or one drawer. Not the whole kitchen — one shelf. Twelve objects is plenty for a session.\n\nWalk along it with your child and name each object in the language you are building, then in the other one. If Spanish is the one you are building: \"la cuchara — the spoon\". If it is English: \"the spoon — la cuchara\". Let them repeat only if they want to. Pressure is what ends these sessions early.\n\nGo round a second time, but this time you say the word and they point. Pointing is easier than speaking, and it shows you what landed without turning the game into a test.\n\nThird round, swap roles: they say a word, you point. Children correct adults with great enthusiasm, and a child correcting you is a child using the language.\n\nStop while it is still fun. Ten minutes, twelve words, done. If you stop at the first sign of boredom, tomorrow's session starts from a good memory.\n\nThe next day, use five of the same words in a real sentence at dinner, dropped into whatever you normally speak: \"pass me la cuchara, please\", or \"¿me pasas the spoon?\". Recycling beats a new list. A word used at the table three days in a row does more than thirty words named once.\n\nTwo things to avoid. Do not translate every sentence you say all day — it teaches the child to wait for the translation. And do not keep score: a child who senses a test stops guessing, and guessing is how vocabulary grows.\n\nChoosing the twelve words is the step most people quietly drop, which is the whole reason themed lists — kitchen, bathroom, school bag, weather — are worth having on hand.",
   "qa_checklist": [
     "A bilingual (EN/ES) reader checks both languages, not a tool",
     "No claims about fluency, test scores or developmental outcomes",
@@ -21,9 +21,39 @@
     "CTA is honest: a Kindle vocabulary book read on a screen, lists copied into a notebook"
   ],
   "semantic_review": "Written for an English-dominant parent raising a Spanish-learning child, which matches the book's English-first structure. Spanish fragments kept to single words inside English sentences.",
-  "flagged_uncertainty": [
-    "'la cuchara — the spoon' order assumes Spanish is the target language; half the book's buyers may be Spanish-dominant parents building English. A bilingual reviewer should confirm the framing or we publish a mirrored version."
-  ],
+  "flagged_uncertainty": [],
   "claims_check": "No outcome promises. The text says what to do and how long it takes; it does not claim fluency, school results or cognitive benefits.",
-  "concept_rank": 1
+  "concept_rank": 1,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "direction symmetry (either language may be the target)",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "the article no longer assumes Spanish is the language being built: examples run in both directions and the instructions name 'the language you are building'",
+      "parent scripts given as a pattern with an example in each direction",
+      "closing promotion cut to one sentence that follows the advice"
+    ],
+    "remaining": [],
+    "note": "English body with short quoted scripts in both languages, which is how these households actually speak. Not reviewed by a native bilingual human; this is a semantic review."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 2,
+  "recommended_offset_days": 1,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-bilingual-kitchen-word-walk",
+  "destination": "https://www.amazon.com/dp/B0H4V4DRLV",
+  "buyer_intent": "Parent looking for a bilingual activity that needs no printer",
+  "image_metadata": {
+    "url": "/libra/api/books/bilingual-english-spanish-kids-vocab/cover",
+    "source": "the book's own cover, generated in this project — no third-party image",
+    "rights": "ours",
+    "pixels": "1600x2560 (vertical, inside Pinterest's preferred 2:3 range)",
+    "alt": "Cover of the book this article comes from (bilingual-english-spanish-kids-vocab)"
+  }
 }

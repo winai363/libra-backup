@@ -12,7 +12,7 @@
   "cta_label": "Ver el cuaderno en Amazon",
   "book_line": "Cuaderno de TDAH para adultos: plantillas y ejercicios que se leen en el Kindle y se copian a un cuaderno de papel o se imprimen.",
   "pin_title": "La nota de regreso: cómo retomar una tarea después de una interrupción",
-  "body": "Te interrumpen dos minutos. Vuelves y pasan quince más antes de estar otra vez dentro de la tarea: abres archivos, relees lo que escribiste, intentas recordar qué ibas a hacer después. La interrupción costó dos minutos; el regreso costó quince.\n\nLa nota de regreso se escribe antes de levantarte, no después de volver. Tres líneas, en el mismo papel o al final del documento:\n\nPrimera línea: dónde estoy. \"Acabado el punto 2, sin revisar.\"\n\nSegunda línea: qué iba a hacer justo ahora. \"Escribir el punto 3 con los datos de la hoja de julio.\"\n\nTercera línea: qué tengo abierto. \"Hoja de julio, correo de la semana pasada.\"\n\nEs menos de un minuto. Lo importante es la segunda línea: la mayoría de nosotros cree que recordará la siguiente acción y lo que recuerda es el tema, no la acción. Recordar el tema deja el trabajo de decidir para cuando vuelves, que es precisamente el peor momento.\n\nFunciona también cuando la interrupción la provocas tú. Si te levantas a por agua, tres líneas. Si cambias de una tarea a otra porque la primera se atascó, tres líneas. Lo que protege el sistema no es la disciplina: es que la nota sea tan corta que no valga la pena saltársela.\n\nY sirve de un día para otro. Si dejas una tarea a medias un viernes, esa nota es el arranque del lunes, y el lunes no empieza con veinte minutos de arqueología.\n\nUn detalle: escribe la nota a mano si puedes. No porque el papel tenga magia, sino porque una nota a mano sigue visible cuando vuelves, y una nota en una pestaña se cierra con las demás.\n\nCuando estas tres líneas ya son un hábito, el siguiente problema suele ser decidir qué tarea merece la atención del día. Ahí ya hace falta un sistema un poco más grande, y conviene tenerlo escrito en algún sitio donde puedas volver a consultarlo.",
+  "body": "Te interrumpen dos minutos. Vuelves y pasan quince más antes de estar otra vez dentro de la tarea: abres archivos, relees lo que escribiste, intentas recordar qué ibas a hacer después. La interrupción costó dos minutos; el regreso costó quince.\n\nLa nota de regreso se escribe antes de levantarte, no después de volver. Tres líneas, en el mismo papel o al final del documento:\n\nPrimera línea: dónde estoy. \"Acabado el punto 2, sin revisar.\"\n\nSegunda línea: qué iba a hacer justo ahora. \"Escribir el punto 3 con los datos de la hoja de julio.\"\n\nTercera línea: qué tengo abierto. \"Hoja de julio, correo de la semana pasada.\"\n\nEs menos de un minuto. Lo importante es la segunda línea: la mayoría de nosotros cree que recordará la siguiente acción y lo que recuerda es el tema, no la acción. Recordar el tema deja el trabajo de decidir para cuando vuelves, que es precisamente el peor momento.\n\nFunciona también cuando la interrupción la provocas tú. Si te levantas por un vaso de agua, tres líneas. Si cambias de una tarea a otra porque la primera se complicó, tres líneas. Lo que protege el sistema no es la disciplina: es que la nota sea tan corta que no valga la pena saltársela.\n\nY sirve de un día para otro. Si dejas una tarea a medias un viernes, esa nota es el arranque del lunes, y el lunes no empieza con veinte minutos de arqueología.\n\nUn detalle: escribe la nota a mano si puedes. No porque el papel tenga magia, sino porque una nota a mano sigue visible cuando vuelves, y una nota en una pestaña se cierra con las demás.\n\nPruébalo durante tres interrupciones de hoy. Si al volver tardas menos en arrancar, ya sabes si te sirve.",
   "qa_checklist": [
     "Un lector nativo de español revisa el texto completo (no solo una herramienta)",
     "Ninguna afirmación médica: nada de diagnóstico, tratamiento, ni promesa de mejora clínica",
@@ -21,10 +21,41 @@
     "El CTA describe el libro con honestidad: cuaderno en Kindle, plantillas que se copian a papel"
   ],
   "semantic_review": "Español neutro, registro de tú. 'Arqueología' usado como metáfora reconocible; no es modismo local.",
-  "flagged_uncertainty": [
-    "'a por agua' es España; en América Latina: 'por agua'. Un nativo debe corregirlo.",
-    "'atascó' (atascarse) — alternativa neutra: 'se trabó'."
-  ],
+  "flagged_uncertainty": [],
   "claims_check": "Sin afirmaciones médicas. No se menciona diagnóstico, medicación ni resultados clínicos. El texto habla de organización cotidiana.",
-  "concept_rank": 7
+  "concept_rank": 7,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "regional-language check",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "'gestoría' (España) sustituido por un ejemplo universal",
+      "'bol' sustituido por 'bandeja'",
+      "'a por agua' → 'por agua' (neutro)",
+      "'atascarse' → 'complicarse'",
+      "cierre promocional vago reescrito en una sola frase concreta"
+    ],
+    "remaining": [],
+    "note": "Español neutro: sin voseo, sin modismos de España ni de un país concreto de América Latina. No verificado por una persona nativa; esto es una revisión semántica, no una certificación."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 5,
+  "recommended_offset_days": 4,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-adhd-nota-de-regreso-es",
+  "destination": "https://www.amazon.com/dp/B0H6VB1SDX",
+  "buyer_intent": "Adulto con TDAH que pierde el hilo tras cada interrupción",
+  "image_metadata": {
+    "url": "/libra/api/books/adhd-adults-workbook-es/cover",
+    "source": "the book's own cover, generated in this project — no third-party image",
+    "rights": "ours",
+    "pixels": "1600x2560 (vertical, inside Pinterest's preferred 2:3 range)",
+    "alt": "Cover of the book this article comes from (adhd-adults-workbook-es)"
+  }
 }

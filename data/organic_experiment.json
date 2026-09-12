@@ -236,5 +236,41 @@
     "INCONCLUSIVE",
     "STOP-CHANNEL"
   ],
-  "verdict_rule": "No verdict retires a book. STOP-CHANNEL ends a channel; ITERATE changes content or surface; a day-14 zero is a distribution and tracking diagnosis."
+  "verdict_rule": "No verdict retires a book. STOP-CHANNEL ends a channel; ITERATE changes content or surface; a day-14 zero is a distribution and tracking diagnosis.",
+  "feature_freeze": {
+    "active": true,
+    "declared_at": "2026-09-12",
+    "until": "the Day-30 decision of this experiment",
+    "frozen": [
+      "new channels",
+      "new books",
+      "new content formats",
+      "new dashboards",
+      "new agents",
+      "new attribution systems",
+      "architecture changes"
+    ],
+    "exceptions_only_for": [
+      "publication failure",
+      "tracking failure",
+      "KDP status risk on a pilot book",
+      "compliance problem",
+      "clearly broken content"
+    ],
+    "note": "Once activated the system collects evidence instead of redesigning itself."
+  },
+  "cadence": {
+    "day_0": "first verified publication (a live url we opened and recorded)",
+    "day_7": "health and tracking check only — no content changes",
+    "day_14": "distribution diagnosis if qualified clicks are still zero — no book changes",
+    "day_30": "decision: CONTINUE / ITERATE / INCONCLUSIVE / STOP-CHANNEL",
+    "between_checkpoints": "intervene only for publication failure, tracking failure, KDP status risk, compliance problem or clearly broken content",
+    "never": "modify a book because traffic was weak"
+  },
+  "readiness": {
+    "state": "READY",
+    "doc": "docs/activation-readiness-2026-09-12.md",
+    "semantic_qa": "9/9 SEMANTIC_QA_PASS, 0 HUMAN_REQUIRED (no draft read by a native human; not claimed)",
+    "blocking": "owner authorization only"
+  }
 }

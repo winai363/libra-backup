@@ -12,7 +12,7 @@
   "cta_label": "See the book on Amazon",
   "book_line": "Bilingual English-Spanish vocabulary book for kids: themed word lists and simple activities, read on a Kindle, copied into a notebook when you want them on paper.",
   "pin_title": "When your child answers in the other language: four things to say instead of pushing",
-  "body": "It happens around the age when school takes over: you speak in one language, your child answers in the other. Understanding is intact. Output has moved.\n\nPushing harder is the reflex, and it is the one thing that reliably backfires: the child learns that the minority language comes with a correction attached.\n\nFour things to say instead.\n\nRepeat, do not correct. The child says \"I want water\"; you answer \"¿quieres agua? Toma.\" They heard the sentence they could have said, without being told they were wrong. This is the one that does most of the work.\n\nAsk a question that cannot be answered with yes or no. \"¿Cuál quieres, el rojo o el azul?\" A forced choice gets a word out, and the word is in the language you offered.\n\nGive the word, then move on. If they stall looking for a word, say it and keep going. Holding the conversation hostage until the right word appears is what teaches children that speaking is expensive.\n\nName the moment, once. \"En casa lo intentamos en español, y si no sale, seguimos igual.\" One sentence, said calmly, once a month. Not a rule recited at every meal.\n\nTwo more things that help, neither of them a conversation. First, make the language useful: one activity the child likes that only happens in it — a call with a grandparent, a cartoon, a game. Usefulness beats encouragement. Second, keep the sessions short and physical; a child naming twelve objects they can touch is doing more than a child sitting through a worksheet.\n\nWhat not to do: do not pretend you did not understand. Children read that instantly, and it turns the language into a negotiation.\n\nIf you want a ready list of words and short activities to use in those ten-minute moments, that is what a themed vocabulary book gives you — read on a screen, copied onto paper when you want it on the fridge.",
+  "body": "It happens around the age when school takes over: you speak in one language, your child answers in the other. Understanding is intact. Output has moved.\n\nPushing harder is the reflex, and it is the one thing that reliably backfires: the child learns that the minority language comes with a correction attached.\n\nFour things to say instead.\n\nRepeat, do not correct. Answer in the language you are building, using the sentence they could have said. Child says \"I want water\", you answer \"¿quieres agua? Toma.\" Building English instead? Child says \"quiero agua\", you answer \"you want water? Here.\" They hear the model without being told they were wrong. This one does most of the work.\n\nAsk a question that cannot be answered with yes or no, in the language you are building: \"¿Cuál quieres, el rojo o el azul?\" — or \"which one, the red or the blue?\" A forced choice gets a word out, and the word comes back in the language you offered.\n\nGive the word, then move on. If they stall looking for a word, say it and keep going. Holding the conversation hostage until the right word appears is what teaches children that speaking is expensive.\n\nName the moment, once, calmly, in your own words: at home we try in this language, and if it does not come out, we carry on anyway. One sentence a month. Not a rule recited at every meal.\n\nTwo more things that help, neither of them a conversation. Make the language useful: one activity the child likes that happens only in it — a call with a grandparent, a cartoon, a game. Usefulness beats encouragement. And keep practice short and physical: a child naming twelve objects they can touch is doing more than a child sitting through a worksheet.\n\nWhat not to do: do not pretend you did not understand. Children read that instantly, and it turns the language into a negotiation.\n\nWhichever direction your household runs in, the pattern is the same: model the sentence, offer a choice, hand over the word, and keep going.",
   "qa_checklist": [
     "A bilingual (EN/ES) reader checks both languages, not a tool",
     "No claims about fluency, test scores or developmental outcomes",
@@ -21,10 +21,39 @@
     "CTA is honest: a Kindle vocabulary book read on a screen, lists copied into a notebook"
   ],
   "semantic_review": "English body with Spanish parent-scripts quoted inline, which is how the buyer actually speaks. Scripts are short, grammatical and neutral Spanish.",
-  "flagged_uncertainty": [
-    "'En casa lo intentamos en español, y si no sale, seguimos igual.' — natural but worth a native check for tone; it must sound calm, not disappointed.",
-    "The article addresses Spanish-as-minority-language households; Spanish-dominant households building English need the mirrored version before we claim the topic is covered."
-  ],
+  "flagged_uncertainty": [],
   "claims_check": "No outcome promises. The text says what to do and how long it takes; it does not claim fluency, school results or cognitive benefits.",
-  "concept_rank": 7
+  "concept_rank": 7,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "direction symmetry (either language may be the target)",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "the article no longer assumes Spanish is the language being built: examples run in both directions and the instructions name 'the language you are building'",
+      "parent scripts given as a pattern with an example in each direction",
+      "closing promotion cut to one sentence that follows the advice"
+    ],
+    "remaining": [],
+    "note": "English body with short quoted scripts in both languages, which is how these households actually speak. Not reviewed by a native bilingual human; this is a semantic review."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 4,
+  "recommended_offset_days": 3,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-bilingual-child-refuses-to-speak",
+  "destination": "https://www.amazon.com/dp/B0H4V4DRLV",
+  "buyer_intent": "Parent whose child understands but answers in the other language",
+  "image_metadata": {
+    "url": "/libra/api/books/bilingual-english-spanish-kids-vocab/cover",
+    "source": "the book's own cover, generated in this project — no third-party image",
+    "rights": "ours",
+    "pixels": "1600x2560 (vertical, inside Pinterest's preferred 2:3 range)",
+    "alt": "Cover of the book this article comes from (bilingual-english-spanish-kids-vocab)"
+  }
 }

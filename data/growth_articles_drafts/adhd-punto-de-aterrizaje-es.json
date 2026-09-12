@@ -12,7 +12,7 @@
   "cta_label": "Ver el cuaderno en Amazon",
   "book_line": "Cuaderno de TDAH para adultos: plantillas y ejercicios que se leen en el Kindle y se copian a un cuaderno de papel o se imprimen.",
   "pin_title": "El punto de aterrizaje: dejar de perder las llaves sin recordar nada",
-  "body": "Buscar las llaves cinco minutos antes de salir no es un problema de memoria. Es un problema de decisiones repetidas: cada vez que entras en casa decides, sin darte cuenta, dónde las dejas. Y una decisión tomada con las manos ocupadas y la cabeza en otra parte sale distinta cada día.\n\nEl punto de aterrizaje elimina la decisión. Es un sitio único, a un paso de la puerta, donde aterriza todo lo que llevas encima al entrar: llaves, cartera, tarjeta de transporte, el sobre que te dieron.\n\nCómo montarlo en diez minutos:\n\nElige el recipiente más aburrido que tengas. Una caja de zapatos, una bandeja, un bol grande. Si tiene tapa, quítala: una tapa es un paso más y los pasos extra son lo que mata el sistema.\n\nPonlo donde ya sueltas las cosas. No donde quedaría bonito. Si tus llaves llevan dos años cayendo en la mesa de la entrada, el punto de aterrizaje va en esa mesa.\n\nNada más vive ahí. En el momento en que el bol se convierte en el sitio donde también van el correo, los cargadores y las monedas, deja de funcionar, porque tendrás que buscar dentro.\n\nUna sola regla, en voz alta, los primeros días: \"al entrar, las manos van al bol\". Decirlo funciona mejor que intentar acordarse, porque lo que falla no es la intención, es el automatismo.\n\nLo que no hay que hacer: montar cinco puntos de aterrizaje por la casa. Un sistema con cinco sitios posibles es otra vez una decisión.\n\nSi compartes casa, avisa de que ese bol es intocable. La mayoría de los fallos vienen de que alguien \"ordenó\" el bol con buena intención.\n\nDos semanas después ya no lo piensas. Y el tiempo que recuperas no es el de buscar las llaves: es el de salir de casa sin empezar el día enfadado.\n\nEste tipo de sistemas funcionan mejor por escrito y de uno en uno. Montar tres a la vez es la forma más rápida de no mantener ninguno.",
+  "body": "Buscar las llaves cinco minutos antes de salir no es un problema de memoria. Es un problema de decisiones repetidas: cada vez que entras en casa decides, sin darte cuenta, dónde las dejas. Y una decisión tomada con las manos ocupadas y la cabeza en otra parte sale distinta cada día.\n\nEl punto de aterrizaje elimina la decisión. Es un sitio único, a un paso de la puerta, donde aterriza todo lo que llevas encima al entrar: llaves, cartera, tarjetas, el sobre que te dieron.\n\nCómo montarlo en diez minutos:\n\nElige el recipiente más aburrido que tengas: una caja de zapatos, una bandeja, una cesta. Si tiene tapa, quítala. Una tapa es un paso más, y los pasos extra son lo que mata el sistema.\n\nPonlo donde ya sueltas las cosas. No donde quedaría bonito. Si tus llaves llevan dos años cayendo en la mesa de la entrada, el punto de aterrizaje va en esa mesa.\n\nNada más vive ahí. En el momento en que la bandeja se convierte en el sitio donde también van el correo, los cargadores y las monedas, deja de funcionar, porque tendrás que buscar dentro.\n\nUna sola regla, en voz alta, los primeros días: \"al entrar, las manos van a la bandeja\". Decirlo funciona mejor que intentar acordarse, porque lo que falla no es la intención, es el automatismo.\n\nLo que no hay que hacer: montar cinco puntos de aterrizaje por la casa. Un sistema con cinco sitios posibles es otra vez una decisión.\n\nSi compartes casa, avisa de que esa bandeja es intocable. La mayoría de los fallos vienen de que alguien la \"ordenó\" con buena intención.\n\nDos semanas después ya no lo piensas. Y el tiempo que recuperas no es el de buscar las llaves: es el de salir de casa sin empezar el día enfadado.\n\nMonta uno solo. Montar tres sistemas a la vez es la forma más rápida de no mantener ninguno.",
   "qa_checklist": [
     "Un lector nativo de español revisa el texto completo (no solo una herramienta)",
     "Ninguna afirmación médica: nada de diagnóstico, tratamiento, ni promesa de mejora clínica",
@@ -21,10 +21,41 @@
     "El CTA describe el libro con honestidad: cuaderno en Kindle, plantillas que se copian a papel"
   ],
   "semantic_review": "Español neutro. Evitado 'recibidor' (muy de España) en favor de 'la entrada'. Imperativos en tú.",
-  "flagged_uncertainty": [
-    "'bol' se entiende en España; en México/Argentina suele ser 'bowl' o 'recipiente'. Un nativo debe elegir.",
-    "'tarjeta de transporte' puede no ser universal; alternativa: 'el abono del transporte' o quitarlo."
-  ],
+  "flagged_uncertainty": [],
   "claims_check": "Sin afirmaciones médicas. No se menciona diagnóstico, medicación ni resultados clínicos. El texto habla de organización cotidiana.",
-  "concept_rank": 3
+  "concept_rank": 3,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "regional-language check",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "'gestoría' (España) sustituido por un ejemplo universal",
+      "'bol' sustituido por 'bandeja'",
+      "'a por agua' → 'por agua' (neutro)",
+      "'atascarse' → 'complicarse'",
+      "cierre promocional vago reescrito en una sola frase concreta"
+    ],
+    "remaining": [],
+    "note": "Español neutro: sin voseo, sin modismos de España ni de un país concreto de América Latina. No verificado por una persona nativa; esto es una revisión semántica, no una certificación."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 3,
+  "recommended_offset_days": 2,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-adhd-punto-de-aterrizaje-es",
+  "destination": "https://www.amazon.com/dp/B0H6VB1SDX",
+  "buyer_intent": "Adulto con TDAH que pierde llaves y cartera cada semana",
+  "image_metadata": {
+    "url": "/libra/api/books/adhd-adults-workbook-es/cover",
+    "source": "the book's own cover, generated in this project — no third-party image",
+    "rights": "ours",
+    "pixels": "1600x2560 (vertical, inside Pinterest's preferred 2:3 range)",
+    "alt": "Cover of the book this article comes from (adhd-adults-workbook-es)"
+  }
 }

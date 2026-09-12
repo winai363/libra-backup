@@ -71,8 +71,8 @@ it after all six and the oldest one may never be pinned.
    `data/posting_authorization.json` yourself: `authorized: true`,
    `authorized_by: "Bui"`, `authorized_at: <today, ISO-8601>`. The feed starts
    serving immediately; until then it is a 404.
-5. **Connect the feed.** Pinterest → your profile → ⋯ / Settings → Bulk create
-   Pins → Add RSS feed → URL
+5. **Connect the feed** (desktop only — mobile cannot do this). ▾ top right →
+   Settings → Create Pins in bulk → under Auto-publish → Connect RSS feed → URL
    `https://newton-winai-klinprasom.incomeinclick.in.th/libra/growth/feed.xml`
    → choose the board (one board is enough; "Rutinas y organización" or similar).
 6. **Send me the first Pin URL** when it appears (within 24 hours). That is Day 0.
@@ -128,7 +128,7 @@ in `data/organic_experiment.json` → `feature_freeze`.
 #    move data/growth_articles_drafts/<id>.json → data/growth_articles/<id>.json
 # 5. verify the feed serves what you expect (read-only, no publishing):
 curl -s https://newton-winai-klinprasom.incomeinclick.in.th/libra/growth/feed.xml | head -40
-# 6. owner: connect that URL in Pinterest → Bulk create Pins
+# 6. owner: connect that URL in Pinterest → Settings → Create Pins in bulk → Auto-publish
 # 7. owner: send me the first Pin URL → I record the verified publication (Day 0)
 # 8. status any time (read-only):
 python3 /root/libra/scripts/organic_experiment_report.py

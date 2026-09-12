@@ -764,3 +764,13 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - สถานะฝั่งเรา ตรวจแล้วตรงกับที่บุ๋ยแจ้ง: claim ต่อแล้ว · authorized=true · feed.xml 200 มี 1 รายการ · ยังไม่มี Pin · active=false · publications=0
 - ⛔ ยังไม่บันทึก publication และยังไม่เริ่มนาฬิกา — รอ URL Pin จริงจากบุ๋ย (Pinterest ดึงฟีดภายใน 24 ชม. เก่าสุดก่อน)
 - ⛔ `<PASTE PIN URL>` ที่ถูกส่งมาก่อนหน้าเป็น placeholder ไม่ใช่ URL — ไม่บันทึกอะไรเลย
+
+### 12 ก.ย. 2026 — บุ๋ยอนุมัติตารางอนุมัติอัตโนมัติ 5 วัน (เลน Pinterest เท่านั้น)
+- cron: `0 9 13-17 9 * cd /root/libra && /usr/bin/python3 scripts/scheduled_pinterest_approval.py >> logs/pinterest-approval.log 2>&1  # libra-pinterest-5day-20260913` (เครื่อง TZ = +07 ⇒ 09:00 เวลาไทย 13-17 ก.ย.)
+- ตัวห่อบาง ๆ รอบ `approve_next(lane="pinterest-rss")` เพิ่มแค่ 3 อย่าง: หน้าต่างวันที่ตายตัว 13-17 ก.ย. 2026 (นอกช่วง = no-op ⇒ ปีหน้าไม่ยิงซ้ำ ไม่ใช้ท่า cron ลบตัวเองที่เคยพัง) · flock กันรันซ้อน (ซ้อน = ปฏิเสธ ไม่เข้าคิว) · พยายามอนุมัติครั้งเดียวต่อรอบ ⇒ วันที่ล้มไม่ถูกชดเชยภายหลัง
+- ด่านเดิมทั้งหมดยังบังคับ: qa · เล่มต้อง LIVE · campaign ที่ประกาศ · ลำดับ · 1 บทความ/เลน/วัน · published_at ห้ามอนาคต. เลน LinkedIn ไม่แตะ ไม่สร้างคอนเทนต์ใหม่ ไม่ยุ่ง KDP
+- ล้มเหลว = log + Telegram เตือน (ผ่าน `organic_experiment_report.send_telegram`) exit 1 ไม่ทำอะไรชดเชย
+- เทสต์ใหม่ 14 ตัว `tests/test_scheduled_pinterest_approval.py` (autouse fixture ปิดการยิง Telegram จริง)
+- ⚠️ รอบทดสอบรอบแรกก่อนใส่ fixture นั้น เทสต์ที่เดินเส้น refused เรียก `send_telegram` จริง 2 ครั้ง → อาจมีข้อความ "⚠️ Libra Pinterest schedule 2026-09-12: no article approved — …" เข้า Telegram บุ๋ย ไม่มีผลกับข้อมูล/การเผยแพร่ใด ๆ
+- แก้เทสต์ที่ล็อกสถานะเก่า 3 ตัวให้เป็นค่าคงที่ที่จริงทั้งก่อน/หลังเปิดใช้: แผนอ่านทั้ง draft + ที่เสิร์ฟแล้ว · `test_the_shipped_authorization_file_...` เปลี่ยนเป็นตรวจกฎ fail-closed (เปิดต้องมี by+at) แทนการยืนยันว่าปิดอยู่
+- แก้เอกสารเส้นทาง UI ให้ตรงของจริง: **Settings → Create Pins in bulk → Auto-publish → Connect RSS feed** (เดสก์ท็อปเท่านั้น) ทั้ง runbook, activation-readiness, pinterest-rss-workflow

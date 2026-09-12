@@ -31,7 +31,23 @@ APPROVED_ON = datetime(2026, 9, 15, 9, 0, tzinfo=timezone.utc)  # a stand-in Day
 
 @pytest.fixture(scope="module")
 def plan():
-    return activation.prepared_articles(activation.Paths(LIBRA_DIR, KDP_DIR))
+    """The whole prepared batch — the drafts still waiting plus the ones already
+    approved and served. Reading both keeps these checks true before activation
+    and after it: approving an article moves its file, it does not leave the
+    batch."""
+    paths = activation.Paths(LIBRA_DIR, KDP_DIR)
+    rows = activation.prepared_articles(paths)
+    served = paths.served
+    for file in sorted(served.glob("*.json")) if served.is_dir() else []:
+        data = json.loads(file.read_text())
+        rows.append({"file": file, "id": data["id"], "lane": data["channel"],
+                     "order": data["publication_order"], "campaign": data["campaign"],
+                     "slug": data["target_slug"], "title": data["title"],
+                     "data": data, "approved": True})
+    for row in rows:
+        row.setdefault("approved", False)
+    rows.sort(key=lambda row: (activation.LANES.index(row["lane"]), row["order"]))
+    return rows
 
 
 @pytest.fixture(scope="module")
@@ -103,11 +119,18 @@ def test_campaigns_are_declared_and_mapped_to_the_articles_own_lane(plan):
         assert CAMPAIGNS["channels"][row["campaign"]] == row["lane"], row["id"]
 
 
-def test_drafts_are_still_unapproved_in_the_repository(plan):
+def test_an_article_is_either_an_unapproved_draft_or_a_published_one(plan):
+    """No half state: a draft carries no published_at, and anything approved
+    carries a real one that is not in the future."""
     for row in plan:
-        assert row["data"]["qa_approved"] is False, row["id"]
-        assert row["data"]["published_at"] is None, row["id"]
         assert row["data"]["flagged_uncertainty"] == [], row["id"]
+        if row["approved"]:
+            assert row["data"]["qa_approved"] is True, row["id"]
+            published = datetime.fromisoformat(row["data"]["published_at"])
+            assert published <= datetime.now(timezone.utc), row["id"]
+        else:
+            assert row["data"]["qa_approved"] is False, row["id"]
+            assert row["data"]["published_at"] is None, row["id"]
 
 
 @pytest.mark.parametrize("day", list(range(0, 15)))

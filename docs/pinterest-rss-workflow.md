@@ -79,7 +79,7 @@ is still gated, because a served feed is a public distribution channel.
    `qa_approved: true` and a real `published_at`.
 4. Authorize the channel in `data/posting_authorization.json`:
    `authorized: true`, `authorized_by`, `authorized_at`. The feed starts serving.
-5. In Pinterest: Settings → Bulk create Pins → add the feed URL
+5. In Pinterest (desktop): Settings → Create Pins in bulk → Auto-publish → Connect RSS feed → add the feed URL
    `https://newton-winai-klinprasom.incomeinclick.in.th/libra/growth/feed.xml`
    and pick the board.
 6. When a Pin actually appears, give me its URL. I record it in

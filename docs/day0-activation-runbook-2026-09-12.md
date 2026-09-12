@@ -1,8 +1,14 @@
 # Day-0 activation runbook — Libra organic experiment (prepared 2026-09-12)
 
-Status: **PREPARED, NOT EXECUTED.** The channel is closed, `/libra/growth/feed.xml`
-returns 404 in production, no article is approved, `data/growth_articles` does not
-exist, and KDP is untouched. Nothing in this document has been run.
+Status: **EXECUTED 2026-09-12.** The channel is authorized, the feed serves, article 1
+of each lane is published, and the owner has connected the feed in Pinterest. Still
+open: the first auto-published Pin, and with it the Day-0 record that starts the
+clock (`organic_experiment.json` is `active: false`, `publications: 0`). KDP remains
+untouched. The steps below are kept as written so the sequence stays auditable.
+
+Articles 2-6 of the Pinterest lane are approved by the owner-authorized schedule in
+`scripts/scheduled_pinterest_approval.py` (cron `0 9 13-17 9 *`, 09:00 +07, one
+article per run, no catch-up). The LinkedIn lane stays manual.
 
 The trigger is the owner saying, in chat:
 
@@ -73,7 +79,7 @@ experiment, a feed that is not RSS 2.0.
 | 3 | Press Verify — the tag you sent on 2026-09-12 is already live on that page (`<meta name="p:domain_verify" content="b6ff3ac6…">`, verified serving today). Nothing to add, no code change | Pinterest |
 | 4 | Create the boards (below) | Pinterest → profile |
 | 5 | Say the activation phrase → I run `day0` | chat |
-| 6 | Connect the feed: Bulk create Pins → Add RSS feed → `https://newton-winai-klinprasom.incomeinclick.in.th/libra/growth/feed.xml` → board A | Pinterest |
+| 6 | Connect the feed (desktop only): **▾ top right → Settings → Create Pins in bulk → Auto-publish → Connect RSS feed** → `https://newton-winai-klinprasom.incomeinclick.in.th/libra/growth/feed.xml` → "Save Pins to" → board A → Save. Done by the owner 2026-09-12; the page now shows the feed URL and an "Add another" button | Pinterest |
 | 7 | Send me the first Pin URL when it appears (≤24h) → I record the verified publication; the clock starts there | chat → me |
 | 8 | Post LinkedIn article 1 (`contabil-o-que-nunca-colar-na-ia`) from your own profile | LinkedIn |
 

@@ -214,10 +214,18 @@ def test_unknown_channel_is_never_authorized(tmp_path):
     assert auth.channel_authorized("facebook-groups", path=path) is False
 
 
-def test_the_shipped_authorization_file_is_closed():
-    """The repository must never ship an open channel."""
-    assert auth.channel_authorized("pinterest-rss") is False
-    assert auth.authorization_state()["pinterest-rss"]["authorized"] is False
+def test_the_shipped_authorization_file_never_opens_a_channel_anonymously():
+    """The channel was closed until the owner opened it on 2026-09-12, so this can
+    no longer assert `false`. What must hold in both states is the fail-closed
+    rule: an open channel always says who opened it and when, and a channel is
+    open only if the owner's own record says so."""
+    record = auth.channel_record("pinterest-rss")
+    if record.get("authorized") is True:
+        assert str(record.get("authorized_by") or "").strip()
+        assert str(record.get("authorized_at") or "").strip()
+    assert auth.channel_authorized("pinterest-rss") is (record.get("authorized") is True
+                                                        and bool(record.get("authorized_by"))
+                                                        and bool(record.get("authorized_at")))
 
 
 # ── one channel's feed carries only that channel's articles ─────────────────

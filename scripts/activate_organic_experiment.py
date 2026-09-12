@@ -118,6 +118,19 @@ def _served_ids(paths: Paths) -> dict:
     return published
 
 
+def paused_slugs(paths: Paths) -> dict:
+    """Books whose campaigns the safety watcher has paused, slug → reason. Written
+    by scripts/organic_autopilot.py when a shelf row turns IN_REVIEW / BLOCKED /
+    UNPUBLISHED / DRAFT; read here so a paused book can never take its next slot."""
+    path = paths.data / "organic_pauses.json"
+    try:
+        data = _read_json(path)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    paused = data.get("paused") if isinstance(data, dict) else None
+    return paused if isinstance(paused, dict) else {}
+
+
 def _book_is_live(paths: Paths, slug) -> bool:
     try:
         listing = _read_json(paths.kdp / str(slug) / "listing.json")
@@ -198,13 +211,19 @@ def approve_next(paths: Paths, *, lane: str, at: datetime | None = None) -> dict
     if not pending:
         raise Refused(f"{lane}: every prepared article is already approved")
     row = pending[0]
+    # Book-level safety first: if the book must not be promoted at all, that is
+    # the reason worth reporting, not the cadence rule.
+    if not _book_is_live(paths, row["slug"]):
+        raise Refused(f"{row['id']}: target book {row['slug']!r} is not Live — not approving")
+    paused = paused_slugs(paths)
+    if row["slug"] in paused:
+        raise Refused(f"{row['id']}: {row['slug']!r} is paused "
+                      f"({paused[row['slug']].get('reason', 'no reason recorded')}) — not approving")
     already_today = [i for i, record in served.items()
                      if record["day"] == str(at.date()) and record["lane"] == lane]
     if already_today:
         raise Refused(f"{lane}: {already_today[0]} was already approved today — "
                       "one article per lane per day keeps Pinterest from pinning a batch")
-    if not _book_is_live(paths, row["slug"]):
-        raise Refused(f"{row['id']}: target book {row['slug']!r} is not Live — not approving")
 
     entry = dict(row["data"])
     entry["qa_approved"] = True
@@ -239,7 +258,7 @@ def feed_check(url: str = LOCAL_FEED_URL) -> dict:
 
 
 def record_publication(paths: Paths, *, channel: str, slug: str, url: str, evidence: str,
-                       observed_at: str | None = None) -> dict:
+                       observed_at: str | None = None, extra: dict | None = None) -> dict:
     """Record a publication we actually saw, and start the clock on the first one.
     The window starts here and nowhere else — never on a typed date, never on a
     prepared file, never on the first click."""
@@ -256,9 +275,15 @@ def record_publication(paths: Paths, *, channel: str, slug: str, url: str, evide
     if any(record.get("url") == url for record in publications):
         return {"changed": False, "publications": len(publications),
                 "active": bool(experiment.get("active"))}
-    publications.append({"channel": channel, "slug": slug, "url": url,
-                         "observed_at": observed_at or _now().isoformat(),
-                         "evidence": evidence.strip()})
+    record = {"channel": channel, "slug": slug, "url": url,
+              "observed_at": observed_at or _now().isoformat(),
+              "evidence": evidence.strip()}
+    # Extra fields say how the publication was established (a Pin we opened, or
+    # server-side rendering evidence). They never overwrite the five that make a
+    # record valid.
+    for key, value in (extra or {}).items():
+        record.setdefault(key, value)
+    publications.append(record)
     experiment["publications"] = publications
     started = False
     if not experiment.get("active"):

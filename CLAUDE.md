@@ -2,6 +2,15 @@
 
 อ่าน `memory.md` (ท้ายไฟล์ = ล่าสุด) ก่อนเริ่มงานเสมอ. กฎที่ห้ามละเมิด:
 
+## 12 ก.ย. 2026 (รอบหก) — 🤖 ออโต้ไพลอต: Day 0 = 12 ก.ย. 2026 เริ่มเอง
+- **Day 0 เริ่มอัตโนมัติจาก log ของเราเอง** ไม่ใช่จาก URL Pin: Pinterestbot ไต่หน้าบทความ + `Pinterest/0.2` ดึงรูปปก หลังเวลาเผยแพร่ = Pinterest สร้าง Pin แล้ว (`scripts/pinterest_evidence.py` อ่าน nginx log อย่างเดียว ไม่ล็อกอิน ไม่เรียก API ไม่ scrape ไม่เก็บ IP)
+- ⛔ **`pin_url` ต้องเป็น null เสมอ** สำหรับหลักฐานชนิดนี้ · `evidence_type: pinterest_render_logs` · ห้ามเขียนว่าเราเปิดหน้า Pin แล้ว (เราไม่ได้เปิด) · ถ้าอยากได้ URL Pin จริงต้องใช้ Pinterest API + OAuth ของบุ๋ย
+- cron: `7 * * * *` `organic_autopilot.py --all` (verify+Day0 · pause เล่มเสี่ยง · สุขภาพการดึงฟีด · ถามอีเมล iCloud ครั้งเดียว · checkpoint 7/14/30) · `0 9 13-17 9 *` อนุมัติบทความวันละ 1
+- ⛔ เล่มเสี่ยง (IN_REVIEW/BLOCKED/UNPUBLISHED/DRAFT) = พักเฉพาะแคมเปญฝั่งเรา (`data/organic_pauses.json` บังคับใน `approve_next`) · **ห้ามแตะหน้า KDP ห้าม resubmit ห้ามอุทธรณ์ ห้ามเปลี่ยนราคา**
+- Day 30 STOP-CHANNEL = ปิดช่องทาง (`authorized:false`) เท่านั้น · ไม่มีคำตัดสินใดแตะหนังสือ
+- Telegram เฉพาะ: Day 0 · เล่มถูกพัก · ฟีดไม่ถูกดึง · step ล้ม 3 รอบติด · day 7/14/30 · ขอตั้งค่า iCloud ครั้งเดียว
+- ⛔ ยังไม่สร้างเครื่องผลิตคอนเทนต์อัตโนมัติและ new-book research (ข้อ 7-8) — ติด FREEZE และเงื่อนไขของบุ๋ยเอง "หลัง day 30 และต้อง CONTINUE" · ดู `docs/autopilot-2026-09-12.md`
+
 ## 12 ก.ย. 2026 (รอบห้า) — 🚦 ทางเข้าเดียวของการเปิดใช้ (ยังไม่ได้เปิด)
 - เปิดใช้ทั้งหมดผ่าน `scripts/activate_organic_experiment.py` เท่านั้น (`preflight` → `day0` → `approve-next` → `record-publication` → `status`) · คู่มือ `docs/day0-activation-runbook-2026-09-12.md`
 - `day0` ต้องมี `--confirm "PINTEREST VERIFIED — ACTIVATE LIBRA ORGANIC EXPERIMENT"` เป๊ะ ไม่ตรง = ไม่เขียนอะไรเลย · preflight ไม่ผ่าน = ไม่เปิดช่อง

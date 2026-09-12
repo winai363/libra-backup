@@ -1,6 +1,6 @@
 {
   "name": "organic-hub-to-amazon-2026-09",
-  "active": false,
+  "active": true,
   "activation_note": "PREPARED ONLY. Two separate switches: `active` turns the report on, and a record in `publications` (url + observed_at + evidence) is what starts the measurement window. A scheduled task, a written RSS file or a prepared post is never a publication.",
   "kill_switch": "set active=false (or delete this file) — organic_experiment_report.py then reports inactive and reads nothing",
   "books": [
@@ -107,7 +107,19 @@
     "unknown_note": "null means the book had no attributed row in that month's report: unknown, not zero. KDP only attributes titles that appear in the report it serves."
   },
   "window_start_rule": "first verified publication in `publications`, never a typed date and never the first click",
-  "publications": [],
+  "publications": [
+    {
+      "channel": "pinterest-rss",
+      "slug": "adhd-adults-workbook-es",
+      "url": "https://newton-winai-klinprasom.incomeinclick.in.th/libra/growth/articles/adhd-lista-dos-columnas-es",
+      "observed_at": "2026-09-12T13:45:50+07:00",
+      "evidence": "server-side evidence only: Pinterest crawled /libra/growth/articles/adhd-lista-dos-columnas-es at 2026-09-12T13:45:39+07:00 and its image fetcher pulled the article's cover at 2026-09-12T13:45:50+07:00, both after publication — Pinterest materialised a Pin from the feed item. The Pin's own URL is not observable to a publisher without the Pinterest API, so no Pin page was opened and pin_url stays null.",
+      "slug_article": "adhd-lista-dos-columnas-es",
+      "pin_url": null,
+      "evidence_type": "pinterest_render_logs",
+      "url_kind": "destination article on our own site, not the Pin"
+    }
+  ],
   "publication_record_shape": {
     "channel": "pinterest-rss | owner-post",
     "slug": "book slug the post points at",
@@ -272,5 +284,6 @@
     "doc": "docs/activation-readiness-2026-09-12.md",
     "semantic_qa": "9/9 SEMANTIC_QA_PASS, 0 HUMAN_REQUIRED (no draft read by a native human; not claimed)",
     "blocking": "owner authorization only"
-  }
+  },
+  "activated_at": "2026-09-12T07:04:09.521961+00:00"
 }

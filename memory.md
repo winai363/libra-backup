@@ -774,3 +774,16 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - ⚠️ รอบทดสอบรอบแรกก่อนใส่ fixture นั้น เทสต์ที่เดินเส้น refused เรียก `send_telegram` จริง 2 ครั้ง → อาจมีข้อความ "⚠️ Libra Pinterest schedule 2026-09-12: no article approved — …" เข้า Telegram บุ๋ย ไม่มีผลกับข้อมูล/การเผยแพร่ใด ๆ
 - แก้เทสต์ที่ล็อกสถานะเก่า 3 ตัวให้เป็นค่าคงที่ที่จริงทั้งก่อน/หลังเปิดใช้: แผนอ่านทั้ง draft + ที่เสิร์ฟแล้ว · `test_the_shipped_authorization_file_...` เปลี่ยนเป็นตรวจกฎ fail-closed (เปิดต้องมี by+at) แทนการยืนยันว่าปิดอยู่
 - แก้เอกสารเส้นทาง UI ให้ตรงของจริง: **Settings → Create Pins in bulk → Auto-publish → Connect RSS feed** (เดสก์ท็อปเท่านั้น) ทั้ง runbook, activation-readiness, pinterest-rss-workflow
+
+### 12 ก.ย. 2026 (รอบหก) — ออโต้ไพลอต + Day 0 เริ่มเองจริง
+- **Day 0 = 2026-09-12T13:45:50+07** เริ่มอัตโนมัติ หน้าต่าง 12ก.ย.-12ต.ค. · ไม่ได้ใช้ URL Pin จากบุ๋ยเลย
+- หลักฐานที่ใช้ = nginx log ของเราเอง: `Domain Verifier` เปิด /libra/growth · `Pinterestbot` ดึง feed.xml 3 ครั้ง · `Pinterestbot` ไต่หน้าบทความ 13:45:39 · `Pinterest/0.2` ดึงรูปปก 13:45:50 (ทั้งคู่หลังเผยแพร่ 13:18) = Pinterest สร้าง Pin จากฟีดแล้ว
+- ⛔ `pin_url: null` + `evidence_type: pinterest_render_logs` + `url_kind` บอกชัดว่า url ที่เก็บคือหน้าบทความของเรา ไม่ใช่หน้า Pin — **ห้ามเขียนว่าเราเปิดหน้า Pin** ไม่มีทางรู้ URL Pin ถ้าไม่ใช้ Pinterest API + OAuth
+- ของใหม่: `scripts/pinterest_evidence.py` (อ่าน log อย่างเดียว ไม่เก็บ IP ไม่ล็อกอิน ไม่ scrape) · `scripts/organic_autopilot.py` (verify+Day0 · safety pause · feed health · mailbox nag · checkpoint 7/14/30 · `--status`)
+- cron ใหม่ `7 * * * * organic_autopilot.py --all  # libra-organic-autopilot` (รายชั่วโมง) — รันจริงแล้ว 1 ครั้ง เริ่ม Day 0 + ส่ง Telegram 2 ฉบับ (Day 0, ขอตั้งค่า iCloud)
+- pause เล่มเสี่ยง: roster → `data/organic_pauses.json` → `approve_next` ปฏิเสธ (ลำดับตรวจใหม่: live → paused → 1 ต่อวัน) · ⛔ ไม่แตะ KDP · ปล่อยคืนเองเมื่อ shelf กลับ LIVE
+- Day 30 STOP-CHANNEL = เขียน `authorized:false` เท่านั้น + บันทึก `decisions[]` · verdict อื่นไม่ทำอะไรกับช่องทาง · ไม่มีอะไรแตะหนังสือ
+- Telegram: คีย์กันซ้ำต่อเหตุการณ์ · step ล้มต้องครบ 3 รอบติดถึงเตือน · ฟีดกลับมาปกติจะรีเซ็ตคีย์เพื่อเตือนได้อีกครั้ง
+- เทสต์ใหม่ 49 ตัว (`test_pinterest_evidence.py` 14 · `test_organic_autopilot.py` 35) ทั้งชุด 1269 ผ่าน 8 skip
+- ⛔ ยังไม่ทำข้อ 7 (เครื่องผลิตคอนเทนต์) และข้อ 8 (research เล่มใหม่) — ติด FREEZE + เงื่อนไขบุ๋ยเอง "หลัง day 30 และต้อง CONTINUE" · ถ้าเปิดตอนนี้ = เปลี่ยนของที่กำลังวัดกลางหน้าต่าง
+- งานที่ยังเป็นของบุ๋ย: โพสต์ LinkedIn วัน 7/14 (บุ๋ยห้ามออโต้เอง) · ย้าย 3 Pin bilingual ไปบอร์ด B · ตั้งค่า iCloud/forward · ทุกอย่างที่ย้อนไม่ได้บน KDP

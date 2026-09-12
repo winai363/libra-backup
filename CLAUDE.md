@@ -2,6 +2,15 @@
 
 อ่าน `memory.md` (ท้ายไฟล์ = ล่าสุด) ก่อนเริ่มงานเสมอ. กฎที่ห้ามละเมิด:
 
+## 12 ก.ย. 2026 (รอบสาม) — โหมดผู้ดำเนินการ organic: ช่องทาง คอนเทนต์ และประตูเล่มใหม่
+- **1 เล่ม = 1 campaign** (`pin-adhd-es` · `pin-bilingual-kids` · `li-contab-pt`) และ `data/growth_campaigns.json` มี map `channels` (campaign → ช่องทาง) · ฟีด Pinterest เสิร์ฟเฉพาะ campaign ที่ map เป็น `pinterest-rss` ⇒ ⛔ บทความของเลน LinkedIn ห้ามกลายเป็น Pin
+- campaign ในไฟล์บทความต้องเป็นชื่อที่ประกาศไว้ (ผ่าน `_hub_campaign` เหมือน `?c=`) · **บทความที่ `qa_approved` ไม่เป็น true = 404** (ไฟล์ที่วางในโฟลเดอร์ไม่ใช่การตัดสินใจเผยแพร่)
+- ดราฟต์อยู่ `data/growth_articles_drafts/` (ไม่ถูก serve ไม่เข้าฟีด) · อนุมัติ = ตรวจตาม qa_checklist + แก้ทุกข้อใน `flagged_uncertainty` โดยเจ้าของภาษา → ตั้ง qa_approved/published_at → ย้ายเข้า `data/growth_articles` · ⛔ ตั้ง published_at ไล่วันละ 1 เล่ม (Pinterest ดันของเก่าก่อน ภายใน 24 ชม.) กัน Pin ถล่ม
+- ⛔ ภาษาต่างประเทศต้องมีรีวิวเชิงความหมายจากเจ้าของภาษา ห้ามใช้การสแกนคำแทน · ห้ามเขียนคำโฆษณาทางการแพทย์ (ADHD) · ห้ามให้คำแนะนำภาษี (PT ต้องจบที่คนตรวจ) · ห้ามสัญญาผลการเรียน (bilingual)
+- ช่องทางที่เลือกจากการให้คะแนน (intent × discoverability × fit × automation × compliance): Pinterest RSS = 2 เล่มผู้บริโภค · LinkedIn บุ๋ยโพสต์เอง = เล่ม PT · ⛔ Pinterest ไม่ใช่คำตอบสำหรับทุกเล่ม (เล่ม PT ได้ 13 คะแนน) · เหตุผลเต็ม `docs/organic-content-backlog-2026-09-12.md`
+- รายงานคืน 4 คำตัดสินเท่านั้น: CONTINUE / ITERATE / INCONCLUSIVE / STOP-CHANNEL · ⛔ ไม่มีคำตัดสินใดปลดเล่มออกจากแคตตาล็อก · เทียบค่าลิขสิทธิ์แบบทิศทางเท่านั้น (up/down/flat/unknown)
+- ⛔ **ประตูเล่มใหม่ปิดและบังคับในโค้ด**: `new_book_gate.py` + `data/new_book_gate.json` · `auto-generate.sh` exit 73 · `POST /api/books` ตอบ 423 · เปิดได้เมื่อประตู A (ดีมานด์จากเล่มเดิมพิสูจน์แล้ว) หรือ B (โอกาสแรงกว่าจากงานวิจัย) **และ** คอนเซปต์มีหลักฐาน 6 ข้อครบ (buyer_evidence · differentiated_promise · competitive_gap · acquisition_plan · compliance_review · expected_economics) · ⛔ ห้ามเพิ่ม env override · แยกจาก KDP freeze ซึ่งห้าม publish อยู่แล้วเสมอ
+
 ## 12 ก.ย. 2026 (รอบสอง) — ท่ออีเมลแจ้งเตือน + เลน Pinterest RSS + การวัดผลที่พิสูจน์ได้
 - `scripts/mail_watch.py` อ่านได้หลายกล่อง: ทุกไฟล์ `*.env` ใน `/root/.config/mail-watch/` = 1 กล่อง (คีย์ `IMAP_HOST` รองรับ iCloud `imap.mail.me.com`) · กล่องเดิม (`imap.env` = Gmail) ยังใช้ state ไฟล์เดิม cursor ไม่รีเซ็ต · dedup ข้ามกล่องด้วย Message-ID (`data/mail-watch-seen.json`) เผื่อ forward ซ้ำ · `redact()` ลบรหัสผ่านออกจาก state/log/Telegram ทุกจุด
 - ⛔ ยังไม่มีหลักฐานว่าเคยเห็นประกาศ KDP จริง — เทสต์ 20 ตัวเป็น **transport test กับ IMAP ปลอม** เท่านั้น. ต้องให้บุ๋ยทำอย่างใดอย่างหนึ่ง: สร้าง app-specific password ของ Apple ID ใส่ `icloud.env` (ดู `icloud.env.example`) หรือ ตั้ง rule ใน iCloud Mail ให้ forward เมลที่มี kdp/amazon ไป winai363@gmail.com

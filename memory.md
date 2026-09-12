@@ -721,6 +721,16 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - `scripts/mail_watch.py` (IMAP) **เก็บไว้เป็นตัวสำรอง ไม่มี cron** — ใช้เมื่อ connector มีปัญหา ต้องเติม App password ใน `/root/.config/mail-watch/imap.env` ก่อน
 - ⚠️ เจอ cron ของโปรเจกต์อื่นที่น่าจะพัง (ไม่ได้แก้ ไม่ใช่งานนี้): `5 8 * * * /usr/bin/python3 watch.py digest >> /root/toeic-sale/data/watch.log` — ไม่มี `cd /root/toeic-sale` นำหน้า จะรันจาก /root แล้วหาไฟล์ไม่เจอ
 
+### แก้ 26 ส.ค. (20:xx) — สลับออกจาก Claude connector เพราะติด weekly limit → กลับมาใช้ IMAP
+- Telegram เตือน `อ่านกล่องอีเมลไม่ได้ 3 ครั้งติด: claude exited 1` เพราะ cron `scripts/mail_watch_connector.py` เรียก Claude CLI แล้วติด weekly limit (`resets Aug 29, 8am Asia/Bangkok`)
+- GPT API แทนตรงๆ ไม่ได้ เพราะ GPT API ไม่มีสิทธิ์อ่าน Gmail connector; ถ้าไม่มี Gmail API/IMAP credential เพิ่ม โมเดลช่วยได้แค่สรุป/แปลงข้อความหลังจากมีอีเมลแล้ว
+- สลับ crontab แล้ว:
+  - disabled: `*/20 * * * * /usr/bin/python3 /root/libra/scripts/mail_watch_connector.py ...`
+  - active: `*/10 * * * * /usr/bin/python3 /root/libra/scripts/mail_watch.py >> /root/libra/logs/mail-watch.log 2>&1  # libra-mail-watch-imap`
+- บุ๋ยให้ Gmail App Password แล้ว; ใส่ใน `/root/.config/mail-watch/imap.env` แบบไม่พิมพ์ secret ออกมา. `scripts/mail_watch.py --check` login ผ่านกับ `winai363@gmail.com`
+- กับดักรอบแรก: `last_uid=0` ทำให้ `mail_watch.py` อ่าน inbox ตั้งแต่เมลแรกและช้ามาก; หยุดรอบนั้นแล้วตั้ง baseline จาก UID ล่าสุดโดยตรง (`last_uid=6064`) เพื่อไม่ยิงเมลเก่าย้อนหลัง
+- เทสต์: `pytest tests/test_mail_watch.py tests/test_mail_watch_connector.py -q` ผ่าน 21 ตัว; หลังตั้ง baseline รัน `scripts/mail_watch.py` สำเร็จ ไม่มี error
+
 ## 2026-09-07 — ปิดงานรื้อระบบตรวจคุณภาพและรายงานภายใน
 - ยืนยันสิทธิ์ ai-work ว่างก่อนเริ่ม. ปิดงานค้าง editorial/visual/catalogue; ผูกผลreviewกับhashต้นฉบับก่อนเรียกโมเดล, ตรวจคะแนน/คำตัดสิน/URLซ้ำ, fictionอาศัยประเภทที่ประกาศ. ไม่เชื่อ passedเก่าหรือเติมhashให้ผลเก่าย้อนหลัง
 - ตรวจ64เล่ม: LIVE38 BLOCKED5 UNKNOWN21 ตามไฟล์ท้องถิ่น. ทุกเล่มมีข้อแก้หรือหลักฐานขาด; 60เล่มขาดhashผลreview ไม่ใช่ข้อพิสูจน์ว่าเนื้อหาทั้ง64เล่มผิด. เทียบhash1359ไฟล์ก่อนหลังไม่เปลี่ยน
@@ -729,3 +739,15 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - Restartlibraแล้วactive; browserdesktop/mobileไม่มีJSerror/overflow. แผนเก่าซ่อนและKDPFROZENชัด. ตรวจโค้ดแยก2รอบไม่พบmaterialbug
 - รายงาน /root/downloads/libra-audit-2026-09-07-final/; สรุป docs/libra-rebuild-completion-2026-09-07.md. ไม่แก้ต้นฉบับ/ไม่ยิงKDP/ไม่เปิดcronผลิต/ไม่ใช้APIโมเดลเสียเงินทดสอบ
 - KDP TOTAL FREEZEคงเดิม. งานระบบภายในจบ แต่การแก้เนื้อหา/ตรวจภาษา-ความจริง-สิทธิ์รายเล่มยังไม่ได้ทำ และเป้ารายได้ใหม่ยังไม่ระบุ
+
+## 2026-09-12 (รอบห้า) — เตรียมเปิดใช้ organic ให้ครบ ยังไม่เปิด (รอ Pinterest verify)
+- ทำเฉพาะงานก่อนเปิดใช้: ไม่เผยแพร่ ไม่เปิด RSS ไม่แตะ KDP ไม่สร้างเล่ม ไม่เพิ่มช่องทาง ไม่เปลี่ยนกลยุทธ์. หลังทำเสร็จ production ยังเหมือนเดิมทุกจุด: `feed.xml` 404 · หน้าบทความ 404 · `posting_authorization` authorized=false · ไม่มี `data/growth_articles` · draft 10 ไฟล์ qa_approved=false ทั้งหมด · experiment active=false
+- ทางเข้าเดียวของการเปิดใช้: `scripts/activate_organic_experiment.py` (preflight / authorize / approve-next / feed-check / record-publication / status / day0). `day0` ต้องมีวรรค confirm เป๊ะ; preflight ไม่ผ่าน = ไม่เขียนอะไร; `day0` ไม่เริ่มนาฬิกา — `active:true` เกิดที่ `record-publication` ที่ต้องมี url https + หลักฐาน
+- ด่านที่เขียนเป็นเทสต์แล้ว (26 ตัว `tests/test_activate_organic_experiment.py`): วรรค confirm ผิด · เล่มไม่ LIVE · 2 บทความเลนเดียวกันวันเดียว · ข้ามลำดับ · เลนหมด · url ไม่ใช่ https · หลักฐานว่าง · เล่มนอกการทดลอง · ฟีดไม่ใช่ RSS 2.0
+- `tests/test_organic_activation_plan.py` (26 ตัว) ตรวจแผนจริงกับ catalogue จริง + จำลองฟีดวันต่อวัน 0–14 จากสำเนาใน tmp: RSS 2.0 · ≤5 รายการ · เฉพาะ campaign ของ Pinterest · guid นิ่ง/ไม่ซ้ำ · ไม่มีรายการอนาคต · ลิงก์/รูปอยู่โดเมนเรา · draft ไม่หลุด · เลน LinkedIn ไม่ถูก pin · หลังวัน 5 ฟีดนิ่งที่ 5 บทความใหม่สุด
+- จำลองเพิ่มผ่าน TestClient (1167 checks, scratchpad): ปิดช่อง=404 · เปิดช่อง=200 application/rss+xml 5 รายการ · ทุกหน้าบทความ 200 และ token CTA แกะได้ตรง ASIN+campaign ของเล่มนั้น ⇒ เปิดใช้ไม่ต้องแก้โค้ดและไม่ต้อง restart (auth/campaign/บทความอ่านใหม่ทุก request)
+- กำหนดการ: Pinterest 6 บทความ offset 0-5 (สลับ ADHD ES / bilingual) · LinkedIn 3 บทความ offset 0,7,14 · `published_at` = เวลาที่อนุมัติจริง ห้ามตั้งล่วงหน้า (ฟีดทิ้งรายการอนาคต)
+- บอร์ด Pinterest: 1 ฟีด = 1 บอร์ด ⇒ แนะนำ 2 บอร์ด (A `Organización en casa · rutinas TDAH` ต่อฟีด, B `Bilingual kids at home`) แล้วบุ๋ยย้าย 3 Pin ของ bilingual ไป B ด้วยมือ. แยกฟีดต่อ campaign = แก้โค้ด = ติด FREEZE
+- ไม่ต้องเพิ่ม cron/ฟีเจอร์สำหรับ day 7/14/30: `organic_experiment_report.py` คำนวณ window จาก publication แรกเอง และ cron 09:55 มีอยู่แล้ว (เงียบตอน inactive)
+- คู่มือ `docs/day0-activation-runbook-2026-09-12.md` (รวม diff authorization ที่เตรียมไว้แต่ยังไม่ apply + ขั้นตอนฝั่งบุ๋ย 8 ข้อ). เทสต์ทั้งโปรเจกต์ 1206 ผ่าน 8 skip
+- ค้างที่บุ๋ยเท่านั้น: business account + claim `/libra/growth` (ส่ง meta tag มาให้ผมใส่) · สร้างบอร์ด · พูดวรรคเปิดใช้ · ต่อ RSS ใน Pinterest · ส่ง URL Pin แรก · โพสต์ LinkedIn เอง

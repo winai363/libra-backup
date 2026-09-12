@@ -118,6 +118,18 @@ def _served_ids(paths: Paths) -> dict:
     return published
 
 
+def lanes_on_hold(paths: Paths) -> dict:
+    """Lanes withdrawn from the active experiment, lane → record. A held lane
+    publishes nothing: its prepared content stays exactly as it is, and no owner
+    action is expected for it either."""
+    try:
+        experiment = _read_json(paths.experiment)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    holds = experiment.get("lanes_on_hold") if isinstance(experiment, dict) else None
+    return holds if isinstance(holds, dict) else {}
+
+
 def paused_slugs(paths: Paths) -> dict:
     """Books whose campaigns the safety watcher has paused, slug → reason. Written
     by scripts/organic_autopilot.py when a shelf row turns IN_REVIEW / BLOCKED /
@@ -204,6 +216,10 @@ def approve_next(paths: Paths, *, lane: str, at: datetime | None = None) -> dict
     draft moved into the served directory. One per lane per day."""
     if lane not in LANES:
         raise Refused(f"unknown lane {lane!r}")
+    held = lanes_on_hold(paths).get(lane)
+    if held:
+        raise Refused(f"{lane}: lane is on hold since {held.get('since', 'an unrecorded date')} "
+                      f"({held.get('reason', 'no reason recorded')}) — nothing is approved for it")
     at = at or _now()
     served = _served_ids(paths)
     lane_rows = [row for row in prepared_articles(paths) if row["lane"] == lane]

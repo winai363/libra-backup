@@ -38,8 +38,8 @@
         "ai-workflows-accountants-pt"
       ],
       "how": "The owner posts the article link on his own LinkedIn, once a week. Brazilian accounting content lives on LinkedIn and vendor blogs, not on Pinterest.",
-      "status": "drafts ready (3 posts) — nothing is scheduled or automated",
-      "executed_by": "owner (manual)"
+      "status": "HOLD / FUTURE_CHANNEL — removed from the active hands-off experiment 2026-09-12 by owner decision. The PT content stays prepared and unchanged; no owner post is scheduled or expected, and this lane is not counted in routine autonomy.",
+      "executed_by": "nobody during this experiment"
     }
   ],
   "funnel": "useful content on our own hub page -> one tracked CTA -> Amazon listing",
@@ -285,5 +285,14 @@
     "semantic_qa": "9/9 SEMANTIC_QA_PASS, 0 HUMAN_REQUIRED (no draft read by a native human; not claimed)",
     "blocking": "owner authorization only"
   },
-  "activated_at": "2026-09-12T07:04:09.521961+00:00"
+  "activated_at": "2026-09-12T07:04:09.521961+00:00",
+  "lanes_on_hold": {
+    "owner-post": {
+      "since": "2026-09-12",
+      "reason": "LinkedIn needs an owner to press post, which is a recurring owner action. The lane is held rather than replaced: no substitute channel is introduced during the experiment.",
+      "content": "data/growth_articles_drafts/contabil-*.json stay prepared, SEMANTIC_QA_PASS, unpublished. contabil-o-que-nunca-colar-na-ia is already served from the 2026-09-12 activation and stays served; nothing more is approved.",
+      "release_rule": "owner says so, or a Day-30 CONTINUE brings the lane back on purpose"
+    }
+  },
+  "board_policy": "All Pins of this experiment land on the connected board. Board tidiness is cosmetic and never an operational dependency. A second native feed/board may be proposed after Day 30."
 }

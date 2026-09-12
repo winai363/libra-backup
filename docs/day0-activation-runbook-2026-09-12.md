@@ -80,8 +80,7 @@ experiment, a feed that is not RSS 2.0.
 | 4 | Create the boards (below) | Pinterest → profile |
 | 5 | Say the activation phrase → I run `day0` | chat |
 | 6 | Connect the feed (desktop only): **▾ top right → Settings → Create Pins in bulk → Auto-publish → Connect RSS feed** → `https://newton-winai-klinprasom.incomeinclick.in.th/libra/growth/feed.xml` → "Save Pins to" → board A → Save. Done by the owner 2026-09-12; the page now shows the feed URL and an "Add another" button | Pinterest |
-| 7 | Send me the first Pin URL when it appears (≤24h) → I record the verified publication; the clock starts there | chat → me |
-| 8 | Post LinkedIn article 1 (`contabil-o-que-nunca-colar-na-ia`) from your own profile | LinkedIn |
+| 7 | ~~Send the first Pin URL~~ — **no longer needed.** Day 0 started itself on 2026-09-12T13:45:50+07 from our own access log (see `docs/autopilot-2026-09-12.md`) | automatic |
 
 I do not log into Pinterest, do not use the Pinterest API and run no browser
 automation on the account.
@@ -104,13 +103,10 @@ freeze rules out until the Day-30 decision. So: two boards, one connected.
   use what is already in the house — no printing, no apps."
 - Language: English. Holds the three `pin-bilingual-kids` articles.
 
-**The one manual step this costs:** when a `pin-bilingual-kids` Pin appears on
-board A (days 1, 3 and 5 — three Pins in total), move it to board B from the Pin's
-⋯ menu. Three moves over six days is cheaper than a code change, and it keeps each
-board in one language and one topic, which is what Pinterest's distribution reads.
-
-Do not create more boards than this for two pilot books: an empty or thin board is
-a weaker signal than a board with three coherent Pins.
+**Superseded 2026-09-12 (owner decision): no manual Pin movement during the
+experiment.** All Pins land on the connected board A. Board tidiness is cosmetic
+and must not become an operational dependency. If Pinterest proves valuable at Day
+30, the system may propose a second native feed/board architecture then.
 
 ## The publication schedule
 
@@ -127,9 +123,11 @@ a day.
 | 3 | Pinterest | `bilingual-child-refuses-to-speak` | pin-bilingual-kids | Bilingual kids |
 | 4 | Pinterest | `adhd-nota-de-regreso-es` | pin-adhd-es | ADHD ES |
 | 5 | Pinterest | `bilingual-same-story-two-languages` | pin-bilingual-kids | Bilingual kids |
-| 0 | LinkedIn | `contabil-o-que-nunca-colar-na-ia` | li-contab-pt | Accountants PT |
-| 7 | LinkedIn | `contabil-tres-roteiros-conciliacao` | li-contab-pt | Accountants PT |
-| 14 | LinkedIn | `contabil-ia-inventa-base-legal` | li-contab-pt | Accountants PT |
+
+LinkedIn lane: **HOLD / FUTURE_CHANNEL since 2026-09-12.** Article 1 stays served
+from the activation; articles 2 and 3 stay prepared and unpublished. No owner post
+is scheduled or expected, and `approve_next --lane owner-post` refuses while the
+lane is held.
 
 After day 5 the feed settles on the five newest Pinterest articles; article 1 has
 been fetched long before it rolls out of the window, which is why the feed must be

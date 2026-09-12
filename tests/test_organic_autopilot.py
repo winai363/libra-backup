@@ -289,7 +289,7 @@ def test_any_other_day30_verdict_leaves_the_channel_open(env, alerts, verdict):
                               paths=env)
     assert json.loads(env.authorization.read_text())["channels"]["pinterest-rss"]["authorized"] \
         is True
-    assert experiment(env)["decisions"][0]["applied"] == "none"
+    assert experiment(env)["decisions"][0]["applied"] != "channel paused"
 
 
 # ── the hourly run ──────────────────────────────────────────────────────────
@@ -370,3 +370,54 @@ def test_a_configured_mailbox_is_silent(env, alerts, tmp_path):
     assert autopilot.mailbox_check(autopilot.load_state(),
                                    icloud_env=configured)["state"] == "configured"
     assert alerts == []
+
+
+# ── lanes on hold and the day-30 branches ───────────────────────────────────
+
+def test_a_held_lane_approves_nothing_and_keeps_its_content(env):
+    data = json.loads(env.experiment.read_text())
+    data["lanes_on_hold"] = {"owner-post": {"since": "2026-09-12", "reason": "held"}}
+    env.experiment.write_text(json.dumps(data))
+    (env.drafts / "li-one.json").write_text(json.dumps({
+        "id": "li-one", "channel": "owner-post", "campaign": "li-contab-pt",
+        "target_slug": "book-a", "qa_approved": False, "published_at": None,
+        "publication_order": 1, "title": "t", "semantic_qa": {"status": "SEMANTIC_QA_PASS"}}))
+    with pytest.raises(activation.Refused, match="on hold"):
+        activation.approve_next(env, lane="owner-post")
+    assert (env.drafts / "li-one.json").exists()
+
+
+def test_day30_continue_unlocks_phase_two_as_a_flag_only(env, alerts):
+    autopilot.run_checkpoints(autopilot.load_state(), report=_report(30, verdict="CONTINUE",
+                                                                    clicks=40), paths=env)
+    data = experiment(env)
+    assert data["phase2_unlocked"]["by"].endswith("CONTINUE")
+    assert "no new book" in data["phase2_unlocked"]["scope"]
+    assert json.loads(env.authorization.read_text())["channels"]["pinterest-rss"]["authorized"]
+
+
+def test_day30_iterate_writes_a_local_plan_without_scaling(env, alerts):
+    report = _report(30, verdict="ITERATE", clicks=9)
+    report["books"] = [{"slug": "book-a", "clicks_by_campaign": {"pin-adhd-es": {"amazon": 9}}},
+                       {"slug": "book-b", "clicks_by_campaign": {}}]
+    autopilot.run_checkpoints(autopilot.load_state(), report=report, paths=env)
+    plan = experiment(env)["iteration_plan"]
+    assert plan["keep"] == ["book-a"]
+    assert plan["rework"] == ["book-b"]
+    assert "do not add a platform" in plan["rule"]
+
+
+def test_day30_inconclusive_scales_nothing(env, alerts):
+    autopilot.run_checkpoints(autopilot.load_state(), report=_report(30, verdict="INCONCLUSIVE"),
+                              paths=env)
+    data = experiment(env)
+    assert "phase2_unlocked" not in data
+    assert data["decisions"][0]["applied"].startswith("bounded observation")
+
+
+def test_status_counts_every_routine_step_as_automated(env, monkeypatch):
+    view = autopilot.status(paths=env)
+    assert view["routine_autonomy"]["automated"] == view["routine_autonomy"]["steps"]
+    assert view["routine_autonomy"]["owner_executed"] == []
+    assert view["routine_owner_actions_required"] == []
+    assert view["exception_gates"]

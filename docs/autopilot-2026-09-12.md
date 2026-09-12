@@ -76,23 +76,34 @@ nothing can double-publish or double-record. Alerts are keyed, so a persistent
 condition produces one message, not one per hour. Recovery is "the next run does
 the right thing", never a burst.
 
-## Still the owner's, and why
+## Routine owner actions: none (2026-09-12, second pass)
 
-1. **LinkedIn posts** (days 7 and 14). The owner's own rule: no LinkedIn
-   auto-posting. The articles publish themselves; pressing post does not.
-2. **Moving the three bilingual Pins from board A to board B.** Pinterest's native
-   RSS sends one feed to one board. Splitting feeds is a code change under the
-   feature freeze.
-3. **The iCloud credential or forward rule** for KDP notices. Asked once; until
-   then the daily shelf scrape is the KDP signal, and it already pauses a risky
-   book by itself.
-4. **Anything irreversible on KDP** — republish, metadata, price, new title,
-   appeal, rights. Permanently exception-gated, never automatic.
+Two recurring dependencies were removed by owner decision rather than by writing
+more automation:
+
+- **LinkedIn is out of the active experiment.** The lane is `HOLD /
+  FUTURE_CHANNEL` in `data/organic_experiment.json`; `approve_next` refuses a held
+  lane. The prepared PT content is preserved untouched, and no substitute channel
+  is introduced during the experiment.
+- **No manual Pin movement.** Every Pin lands on the connected board. Board
+  organisation is cosmetic; a second feed/board may be *proposed* after Day 30.
+
+`ONE_TIME_SETUP_PENDING`: the iCloud credential or forward rule for KDP notices —
+asked once, never repeated. Until it exists the daily shelf scrape is the KDP
+safety source, and the KDP freeze is not weakened because email is missing.
+
+`EXCEPTION_GATES` (never automated, always fail closed, and not counted against
+routine autonomy): MFA · CAPTCHA · forced reauthentication · platform ownership
+verification · account restriction · legal or policy dispute · irreversible KDP
+action · initial secret provisioning.
 
 ## Deliberately not built yet
 
-Bounded automatic content generation and new-book research (items 7 and 8 of the
-autopilot brief) are **not** implemented. Both are post-Day-30 by the owner's own
+Bounded automatic content generation and new-book research are **not**
+implemented. Day 30 only sets a flag: CONTINUE writes `phase2_unlocked`, ITERATE
+writes a local `iteration_plan` (which books got reach, which did not — no model
+call, no new platform), INCONCLUSIVE scales nothing, STOP-CHANNEL closes the
+channel. Both are post-Day-30 by the owner's own
 condition ("only if CONTINUE is supported by evidence") and by the feature freeze
 recorded in `CLAUDE.md` and `data/organic_experiment.json → feature_freeze`, which
 forbids new content formats, agents and architecture until the Day-30 decision.

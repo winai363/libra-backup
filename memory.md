@@ -787,3 +787,10 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - เทสต์ใหม่ 49 ตัว (`test_pinterest_evidence.py` 14 · `test_organic_autopilot.py` 35) ทั้งชุด 1269 ผ่าน 8 skip
 - ⛔ ยังไม่ทำข้อ 7 (เครื่องผลิตคอนเทนต์) และข้อ 8 (research เล่มใหม่) — ติด FREEZE + เงื่อนไขบุ๋ยเอง "หลัง day 30 และต้อง CONTINUE" · ถ้าเปิดตอนนี้ = เปลี่ยนของที่กำลังวัดกลางหน้าต่าง
 - งานที่ยังเป็นของบุ๋ย: โพสต์ LinkedIn วัน 7/14 (บุ๋ยห้ามออโต้เอง) · ย้าย 3 Pin bilingual ไปบอร์ด B · ตั้งค่า iCloud/forward · ทุกอย่างที่ย้อนไม่ได้บน KDP
+
+### 12 ก.ย. 2026 (รอบเจ็ด) — autonomy นิยามใหม่: ROUTINE 11/11, งานประจำบุ๋ย = 0
+- บุ๋ยสั่งตัดสองงานประจำทิ้งแทนที่จะเขียนออโต้เพิ่ม: LinkedIn ออกจากการทดลอง (hold, คอนเทนต์ PT เก็บครบ) · เลิกให้ย้าย Pin ข้ามบอร์ด
+- โค้ดที่เพิ่มน้อยที่สุด: `lanes_on_hold` ใน experiment file + ด่านใน `approve_next` · day-30 branches (phase2_unlocked / iteration_plan / ไม่ขยาย / ปิดช่อง) · `--status` รายงาน ROUTINE_AUTONOMY + ONE_TIME_SETUP_PENDING + EXCEPTION_GATES
+- ตรวจจริง: `--status` → routine 11/11 · owner_executed [] · lanes_on_hold ["owner-post"] · day_zero 2026-09-12T13:45:50+07 · `approve-next --lane owner-post` ปฏิเสธด้วยเหตุผล hold
+- เทสต์รวม 1274 ผ่าน 8 skip (เพิ่ม 5 ตัว: lane hold, day30 CONTINUE/ITERATE/INCONCLUSIVE, status)
+- ⛔ ไม่เพิ่ม browser automation / Pinterest API / OAuth / LinkedIn / KDP automation และไม่สร้างเครื่องผลิตคอนเทนต์ก่อน day 30

@@ -295,8 +295,39 @@ def _apply_day30_decision(paths: activation.Paths, report: dict) -> dict:
                 "qualified_clicks": report["tracks"]["qualified_outbound_clicks"],
                 "threshold": report["acquisition_threshold_clicks"],
                 "applied": "channel paused" if report["verdict"] == "STOP-CHANNEL" else "none"}
+    report.setdefault("books", [])
+    verdict = report["verdict"]
+    if verdict == "CONTINUE":
+        # A flag, not an engine. Phase 2 is designed and documented; unlocking it
+        # here is what the owner asked for, building it now is not.
+        decision["applied"] = "phase 2 unlocked within the documented limits"
+        experiment["phase2_unlocked"] = {
+            "at": _now().isoformat(), "by": "organic_autopilot day-30 CONTINUE",
+            "limits": "docs/autopilot-2026-09-12.md — daily cap, token budget, saturation check, "
+                      "quality threshold, no publication below confidence",
+            "scope": "bounded content generation for campaigns already proven; no new external "
+                     "platform, no new book, no KDP action",
+        }
+    elif verdict == "ITERATE":
+        # Deterministic and local: what got reach, what did not. No model call, no
+        # new platform, no scaling.
+        by_book = {book["slug"]: sum(sum(kinds.values())
+                                     for kinds in book["clicks_by_campaign"].values())
+                   for book in report.get("books", [])}
+        decision["applied"] = "iteration plan written"
+        experiment["iteration_plan"] = {
+            "at": _now().isoformat(),
+            "clicks_by_book": by_book,
+            "keep": [slug for slug, clicks in by_book.items() if clicks > 0],
+            "rework": [slug for slug, clicks in by_book.items() if clicks == 0],
+            "rule": "change the content or the surface on the same channel; do not add a platform, "
+                    "do not touch a book, do not scale spend (there is none)",
+        }
+    elif verdict == "INCONCLUSIVE":
+        decision["applied"] = "bounded observation continues — nothing scaled"
+
     experiment.setdefault("decisions", []).append(decision)
-    if report["verdict"] == "STOP-CHANNEL":
+    if verdict == "STOP-CHANNEL":
         # Closing the channel is the strongest automatic action available, and it
         # is reversible by the owner in one file.
         authorization = _read_json(paths.authorization, {})
@@ -312,22 +343,63 @@ def _apply_day30_decision(paths: activation.Paths, report: dict) -> dict:
 
 # ── autonomy view ───────────────────────────────────────────────────────────
 
+# Every recurring step of the organic loop, and who performs it. A step whose
+# executor is not this machine would be a routine owner action, and there are none.
+ROUTINE_STEPS = (
+    ("content release", "cron 0 9 13-17 9 *", "scheduled_pinterest_approval.py"),
+    ("feed delivery", "Pinterest fetches our feed", "Pinterest native RSS"),
+    ("publication verification", "cron 7 * * * *", "organic_autopilot verify"),
+    ("day 0 / experiment clock", "first render evidence", "organic_autopilot verify"),
+    ("traffic measurement", "every hub click", "content_hub + ledger"),
+    ("sales / KENP / royalties", "cron 15 9 * * *", "kdp_sales_sync.py"),
+    ("book safety", "cron 45 8 + 7 * * * *", "roster + organic_autopilot safety"),
+    ("feed ingestion health", "cron 7 * * * *", "organic_autopilot health"),
+    ("daily reporting", "cron 55 9 * * *", "organic_experiment_report.py"),
+    ("day 7 / 14 / 30 checkpoints", "days elapsed since day 0", "organic_autopilot checkpoints"),
+    ("day-30 verdict and channel action", "day 30", "organic_autopilot _apply_day30_decision"),
+)
+
+# Things that must never be automated. They do not count against routine autonomy;
+# they stay visible and fail closed.
+EXCEPTION_GATES = (
+    "MFA / CAPTCHA / forced reauthentication",
+    "platform ownership verification",
+    "account restriction or suspension",
+    "legal or policy dispute",
+    "irreversible KDP action (publish, republish, metadata, price, appeal, rights)",
+    "initial secret provisioning",
+)
+
+
 def status(*, paths=None) -> dict:
     paths = paths or _paths()
     state = load_state()
     experiment = _read_json(paths.experiment, {})
-    drafts = [row for row in activation.prepared_articles(paths)]
+    pending = activation.prepared_articles(paths)
+    held = activation.lanes_on_hold(paths)
+    one_time = []
+    if not Path(ICLOUD_ENV).exists():
+        one_time.append("iCloud KDP-notice credential or forward rule — asked once; the daily "
+                        "bookshelf scrape remains the active KDP safety source until then")
     return {
         "checked_at": _now().isoformat(),
         "experiment_active": bool(experiment.get("active")),
+        "day_zero": (experiment.get("publications") or [{}])[0].get("observed_at"),
         "publications": len(experiment.get("publications") or []),
-        "pinterest_articles_pending": len([r for r in drafts if r["lane"] == PINTEREST_LANE]),
-        "owner_post_articles_pending": len([r for r in drafts if r["lane"] == "owner-post"]),
+        "pinterest_articles_pending": len([r for r in pending if r["lane"] == PINTEREST_LANE]),
+        "lanes_on_hold": sorted(held),
         "paused_books": sorted(_read_json(PAUSES_FILE, {}).get("paused", {})),
         "checkpoints_done": sorted(state["checkpoints_done"]),
         "consecutive_failures": state["failures"],
-        "routine_owner_actions_required": [] if experiment.get("active") else
-        ["none — Day 0 starts from server-side evidence, no owner message needed"],
+        "routine_autonomy": {
+            "steps": len(ROUTINE_STEPS),
+            "automated": len(ROUTINE_STEPS),
+            "owner_executed": [name for name, _, executor in ROUTINE_STEPS
+                               if executor == "owner"],
+        },
+        "routine_owner_actions_required": [],
+        "one_time_setup_pending": one_time,
+        "exception_gates": list(EXCEPTION_GATES),
     }
 
 

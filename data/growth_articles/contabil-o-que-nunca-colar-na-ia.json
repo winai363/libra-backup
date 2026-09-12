@@ -1,0 +1,67 @@
+{
+  "qa_approved": true,
+  "published_at": "2026-09-12T06:18:12.196145+00:00",
+  "id": "contabil-o-que-nunca-colar-na-ia",
+  "language": "pt",
+  "title": "O que nunca colar em uma IA — e o que colar no lugar",
+  "description": "Antes de usar IA no escritório contábil, vale definir o que não sai da sua base. Uma lista curta do que nunca colar, e como reescrever o pedido sem dados do cliente.",
+  "link": "/libra/growth/articles/contabil-o-que-nunca-colar-na-ia",
+  "image_url": "/libra/api/books/ai-workflows-accountants-pt/cover",
+  "target_slug": "ai-workflows-accountants-pt",
+  "campaign": "li-contab-pt",
+  "cta_label": "Ver o e-book na Amazon",
+  "book_line": "E-book Kindle sobre fluxos de trabalho com IA para escritórios contábeis: roteiros prontos, checklists e o que conferir antes de enviar ao cliente.",
+  "pin_title": "O que nunca colar em uma IA — e o que colar no lugar",
+  "body": "A primeira decisão sobre IA num escritório contábil não é qual ferramenta usar. É o que não entra nela.\n\nFerramentas de uso geral processam o que você cola e, em muitas configurações, guardam o conteúdo. Tratar cada colagem como um envio para fora do escritório é a postura segura, e é também a que evita discussões desconfortáveis com o cliente depois.\n\nO que não colar:\n\nDados que identificam uma pessoa: CPF, endereço, data de nascimento, nome completo junto de valores. Contratos e procurações na íntegra. Folha de pagamento com nomes. Extratos bancários completos com número de conta. Qualquer documento que você não enviaria por e-mail para um desconhecido.\n\nO que colar no lugar:\n\nO mesmo pedido, sem dados identificáveis. Em vez do extrato inteiro, cole cinco linhas com valores e descrições, sem conta e sem nome. Em vez do contrato, descreva a cláusula em uma frase. Em vez da folha, use \"funcionário A, funcionário B\".\n\nNa prática, isso costuma melhorar a resposta: um pedido curto e específico rende mais do que um documento longo colado sem contexto.\n\nTrês hábitos que sustentam isso no dia a dia:\n\nUm lugar combinado para registrar o que foi usado. Uma planilha com data, tarefa e se os dados foram retirados já resolve. Sem registro, ninguém do escritório sabe responder quando o cliente pergunta.\n\nAvisar o cliente antes, do jeito que o escritório já comunica mudança de processo: ferramentas de apoio podem ser usadas em tarefas internas, sem dados identificáveis. Avisar antes é mais simples do que explicar depois. Se for virar cláusula de contrato, isso é conversa com o advogado do escritório, não assunto desta página.\n\nRevisão humana combinada e visível. A IA rascunha; quem assina confere, sempre. Na prática do escritório, é essa conferência que separa rascunho de documento enviado.\n\nE o ponto que costuma passar batido: o risco maior não é a ferramenta errada, é o hábito de colar o documento inteiro porque é mais rápido. Isso se resolve com um padrão combinado na equipe, não com uma ferramenta nova.\n\nComece por uma tarefa só, com cinco linhas sem dados identificáveis, e veja se a resposta aguenta a sua conferência. Se aguentar, aí vale padronizar para a equipe.",
+  "qa_checklist": [
+    "Um leitor nativo de português do Brasil revisa o texto (não apenas uma ferramenta)",
+    "Nenhuma orientação tributária ou contábil específica: o texto trata de fluxo de trabalho, e a conferência humana é obrigatória em cada exemplo",
+    "Nenhuma menção a fornecedor, ERP ou produto de software",
+    "Nenhum dado de cliente real aparece em exemplo algum",
+    "Texto original escrito para esta página, não extraído do livro",
+    "O CTA descreve o livro com honestidade: e-book Kindle lido na tela"
+  ],
+  "semantic_review": "Português do Brasil, registro profissional e direto. 'Descaracterizado' usado no sentido de remover dados identificáveis; evitei o termo jurídico 'anonimização' para não sugerir conformidade técnica com a LGPD.",
+  "flagged_uncertainty": [],
+  "claims_check": "Sem promessa de economia garantida, sem orientação tributária e sem indicação de fornecedor. Todo exemplo termina em conferência humana.",
+  "concept_rank": 3,
+  "linkedin_post_draft": "A primeira decisão sobre IA no escritório não é qual ferramenta usar. É o que não entra nela.\n\nExtrato inteiro, contrato na íntegra, folha com nomes, CPF: nada disso precisa ser colado para a tarefa funcionar. Cinco linhas descaracterizadas resolvem — e normalmente a resposta fica melhor, porque o pedido fica específico.\n\nEscrevi a lista do que não colar e como reescrever o pedido sem dado de cliente:",
+  "linkedin_post_rules": "Publicado pelo próprio dono, uma vez por semana, no perfil dele. Sem hashtag spam (no máximo 3), sem tag de pessoas que não pediram, sem DM não solicitada. O link vai no primeiro comentário ou no corpo — decisão do dono.",
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "pt-BR naturalness (não soar traduzido)",
+      "separation of workflow example from accounting/tax/legal advice",
+      "mandatory human verification preserved",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "'descaracterizado' trocado por 'sem dados identificáveis', que é o que o leitor diria",
+      "a frase sobre proposta/contrato foi reescrita como comunicação ao cliente, não como orientação jurídica",
+      "'natureza de despesa' agora remete ao plano de contas do próprio escritório",
+      "'[conferir]' trocado por 'pendente'",
+      "responsabilidade descrita como prática do escritório (quem assina confere), sem afirmação legal",
+      "fechamento promocional reduzido a uma frase"
+    ],
+    "remaining": [],
+    "note": "pt-BR corrente, registro profissional. Todo exemplo é de fluxo de trabalho e termina em conferência humana; nenhum trecho orienta tributação. Não revisado por contador brasileiro; esta é uma revisão semântica."
+  },
+  "channel": "owner-post",
+  "publication_order": 1,
+  "recommended_offset_days": 0,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-contabil-o-que-nunca-colar-na-ia",
+  "destination": "https://www.amazon.com/dp/B0H3WY9M22",
+  "buyer_intent": "Dono de escritório contábil preocupado com dados do cliente na IA",
+  "image_metadata": {
+    "url": "/libra/api/books/ai-workflows-accountants-pt/cover",
+    "source": "the book's own cover, generated in this project — no third-party image",
+    "rights": "ours",
+    "pixels": "1600x2560 (vertical, inside Pinterest's preferred 2:3 range)",
+    "alt": "Cover of the book this article comes from (ai-workflows-accountants-pt)"
+  },
+  "approved_by": "owner batch approval (activation runbook)"
+}

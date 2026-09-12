@@ -1,0 +1,62 @@
+{
+  "qa_approved": true,
+  "published_at": "2026-09-12T06:18:12.195014+00:00",
+  "id": "adhd-lista-dos-columnas-es",
+  "language": "es",
+  "title": "La lista de dos columnas: planificar la mañana con TDAH en cinco minutos",
+  "description": "Una hoja partida en dos: lo que pasa hoy quieras o no, y una sola cosa que quieres mover. Por qué funciona mejor que una lista de doce tareas cuando tienes TDAH.",
+  "link": "/libra/growth/articles/adhd-lista-dos-columnas-es",
+  "image_url": "/libra/api/books/adhd-adults-workbook-es/cover",
+  "target_slug": "adhd-adults-workbook-es",
+  "campaign": "pin-adhd-es",
+  "cta_label": "Ver el cuaderno en Amazon",
+  "book_line": "Cuaderno de TDAH para adultos: plantillas y ejercicios que se leen en el Kindle y se copian a un cuaderno de papel o se imprimen.",
+  "pin_title": "La lista de dos columnas: planificar la mañana con TDAH en cinco minutos",
+  "body": "Las listas de tareas largas fallan por un motivo simple: piden priorizar justo cuando menos atención tienes. A las siete de la mañana, doce tareas no son un plan, son doce decisiones.\n\nLa lista de dos columnas quita esa decisión del medio. Toma media hoja y divídela con una línea.\n\nEn la columna izquierda escribe lo que va a pasar hoy quieras o no: el trabajo, recoger a alguien, una cita, la comida. No son tareas; son hechos. Verlos escritos evita la sensación de que el día está vacío y luego se llena de golpe.\n\nEn la columna derecha escribe una sola cosa que quieres mover. Una. Si escribes tres, la columna vuelve a ser una lista de tareas y el efecto desaparece.\n\nTres detalles que cambian el resultado:\n\nLa hoja va en un sitio fijo y visible. Si vive en una app que hay que abrir, compite con todo lo demás que hay en el teléfono. Si vive en la mesa donde desayunas, la lees sin buscarla.\n\nLa cosa de la derecha tiene que caber en el día real, no en el día ideal. \"Pedir la cita del dentista\" cabe. \"Ordenar toda la casa\" no cabe y se queda ahí una semana, recordándote cada mañana que no la hiciste.\n\nAl final del día, tacha y escribe la hoja de mañana. Dos minutos. Esto es lo que evita empezar desde cero cada mañana, que es la parte que más cansa.\n\nSi un día no mueves la cosa de la derecha, la copias tal cual al día siguiente. No pasa nada. Lo que se mide aquí no es la productividad; es que dejes de empezar el día decidiendo.\n\nDale una semana antes de juzgarlo. Si la hoja sigue en la mesa el lunes siguiente, ya está funcionando: lo demás son detalles.",
+  "qa_checklist": [
+    "Un lector nativo de español revisa el texto completo (no solo una herramienta)",
+    "Ninguna afirmación médica: nada de diagnóstico, tratamiento, ni promesa de mejora clínica",
+    "Cada consejo es practicable hoy, sin comprar nada y sin imprimir",
+    "El texto es original y escrito para esta página, no extraído del libro",
+    "El CTA describe el libro con honestidad: cuaderno en Kindle, plantillas que se copian a papel"
+  ],
+  "semantic_review": "Escrito en español neutro, sin voseo ni modismos regionales. Registro de tú, informal pero no coloquial. Frases cortas a propósito: el lector objetivo lee con atención dispersa.",
+  "flagged_uncertainty": [],
+  "claims_check": "Sin afirmaciones médicas. No se menciona diagnóstico, medicación ni resultados clínicos. El texto habla de organización cotidiana.",
+  "concept_rank": 1,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "regional-language check",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "'gestoría' (España) sustituido por un ejemplo universal",
+      "'bol' sustituido por 'bandeja'",
+      "'a por agua' → 'por agua' (neutro)",
+      "'atascarse' → 'complicarse'",
+      "cierre promocional vago reescrito en una sola frase concreta"
+    ],
+    "remaining": [],
+    "note": "Español neutro: sin voseo, sin modismos de España ni de un país concreto de América Latina. No verificado por una persona nativa; esto es una revisión semántica, no una certificación."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 1,
+  "recommended_offset_days": 0,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-adhd-lista-dos-columnas-es",
+  "destination": "https://www.amazon.com/dp/B0H6VB1SDX",
+  "buyer_intent": "Adulto con TDAH que busca cómo organizar la mañana sin una app",
+  "image_metadata": {
+    "url": "/libra/api/books/adhd-adults-workbook-es/cover",
+    "source": "the book's own cover, generated in this project — no third-party image",
+    "rights": "ours",
+    "pixels": "1600x2560 (vertical, inside Pinterest's preferred 2:3 range)",
+    "alt": "Cover of the book this article comes from (adhd-adults-workbook-es)"
+  },
+  "approved_by": "owner batch approval (activation runbook)"
+}

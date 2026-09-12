@@ -3,9 +3,9 @@
   "how_to_authorize": "Set authorized true and fill authorized_by and authorized_at (ISO-8601) for the one channel being opened. Remove them to close it again.",
   "channels": {
     "pinterest-rss": {
-      "authorized": false,
-      "authorized_by": null,
-      "authorized_at": null,
+      "authorized": true,
+      "authorized_by": "Bui",
+      "authorized_at": "2026-09-12T06:18:12.194720+00:00",
       "scope": "Serve /libra/growth/feed.xml so Pinterest's native RSS auto-publishing can create Pins from QA-approved hub articles. Covers serving the feed only: it does not authorize ads, paid promotion, DMs, posting to any other network, or any KDP action.",
       "preconditions": [
         "Pinterest business account exists and the owner is signed in",

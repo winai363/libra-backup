@@ -751,3 +751,10 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - ไม่ต้องเพิ่ม cron/ฟีเจอร์สำหรับ day 7/14/30: `organic_experiment_report.py` คำนวณ window จาก publication แรกเอง และ cron 09:55 มีอยู่แล้ว (เงียบตอน inactive)
 - คู่มือ `docs/day0-activation-runbook-2026-09-12.md` (รวม diff authorization ที่เตรียมไว้แต่ยังไม่ apply + ขั้นตอนฝั่งบุ๋ย 8 ข้อ). เทสต์ทั้งโปรเจกต์ 1206 ผ่าน 8 skip
 - ค้างที่บุ๋ยเท่านั้น: business account + กด Verify claim `/libra/growth` (meta `p:domain_verify` ที่บุ๋ยส่งมาอยู่บนหน้านั้นแล้ว ตรวจ 12ก.ย. ยังเสิร์ฟอยู่ ⇒ ไม่ต้องแก้โค้ด) · สร้างบอร์ด · พูดวรรคเปิดใช้ · ต่อ RSS ใน Pinterest · ส่ง URL Pin แรก · โพสต์ LinkedIn เอง
+
+### เปิดใช้จริง 12 ก.ย. 2026 13:18 (+07) — บุ๋ยพูดวรรคเปิดใช้ หลัง Pinterest verified
+- รัน `scripts/activate_organic_experiment.py day0 --owner Bui` สำเร็จ: `pinterest-rss` authorized=true by Bui at 2026-09-12T06:18:12Z · อนุมัติ 2 บทความแรก (`adhd-lista-dos-columnas-es` เลน Pinterest, `contabil-o-que-nunca-colar-na-ia` เลน LinkedIn) · ย้ายเข้า `data/growth_articles` เหลือ draft 8 ไฟล์
+- ตรวจจริงหลังเปิด: `/libra/growth/feed.xml` = 200 application/rss+xml RSS 2.0 มี 1 รายการ (guid `libra-adhd-lista-dos-columnas-es`, รูป = cover ของเล่มเอง) · หน้าบทความทั้งสอง 200 · `bilingual-kitchen-word-walk` ยัง 404 (ยังไม่ถึงคิว) · บทความ LinkedIn ไม่อยู่ในฟีด
+- แกะ token CTA จากหน้าเว็บจริงโดยไม่กดลิงก์ (กด = เกิด hub_event): ADHD → B0H6VB1SDX campaign pin-adhd-es · PT → B0H3WY9M22 campaign li-contab-pt ตรงทั้งคู่
+- ⛔ นาฬิกายังไม่เริ่ม: `organic_experiment.json` active=false publications=0 — รอ URL Pin แรกจากบุ๋ย แล้วรัน `record-publication`
+- คิวถัดไป: `approve-next --lane pinterest-rss` วันละ 1 (13-17 ก.ย.) · `approve-next --lane owner-post` วันที่ +7 และ +14

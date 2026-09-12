@@ -758,3 +758,9 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - แกะ token CTA จากหน้าเว็บจริงโดยไม่กดลิงก์ (กด = เกิด hub_event): ADHD → B0H6VB1SDX campaign pin-adhd-es · PT → B0H3WY9M22 campaign li-contab-pt ตรงทั้งคู่
 - ⛔ นาฬิกายังไม่เริ่ม: `organic_experiment.json` active=false publications=0 — รอ URL Pin แรกจากบุ๋ย แล้วรัน `record-publication`
 - คิวถัดไป: `approve-next --lane pinterest-rss` วันละ 1 (13-17 ก.ย.) · `approve-next --lane owner-post` วันที่ +7 และ +14
+
+### 12 ก.ย. 2026 — บุ๋ยต่อ RSS ใน Pinterest เองสำเร็จ (ยังไม่มี Pin)
+- บุ๋ยรายงาน: Settings → Bulk create Pins → Auto-publish แสดง URL ฟีดของเราแล้ว ปุ่ม "Connect RSS Feed" กลายเป็นสถานะเชื่อมแล้ว + "Add another" ⇒ ทางเข้าที่ถูกต้องคือ **Settings** ไม่ใช่เมนูโปรไฟล์/Business Hub (แก้ที่เคยเขียนผิดในคู่มือ)
+- สถานะฝั่งเรา ตรวจแล้วตรงกับที่บุ๋ยแจ้ง: claim ต่อแล้ว · authorized=true · feed.xml 200 มี 1 รายการ · ยังไม่มี Pin · active=false · publications=0
+- ⛔ ยังไม่บันทึก publication และยังไม่เริ่มนาฬิกา — รอ URL Pin จริงจากบุ๋ย (Pinterest ดึงฟีดภายใน 24 ชม. เก่าสุดก่อน)
+- ⛔ `<PASTE PIN URL>` ที่ถูกส่งมาก่อนหน้าเป็น placeholder ไม่ใช่ URL — ไม่บันทึกอะไรเลย

@@ -387,3 +387,75 @@ def test_campaign_click_is_recorded_under_its_own_campaign(client, ledger, campa
     with sqlite3.connect(ledger) as connection:
         rows = connection.execute("SELECT slug, campaign FROM hub_events").fetchall()
     assert rows == [("book-a", "organic-pinterest")]
+
+
+# ── gated RSS feed ──────────────────────────────────────────────────────────
+
+@pytest.fixture
+def authorization_file(tmp_path, monkeypatch):
+    path = tmp_path / "posting_authorization.json"
+    monkeypatch.setattr(libra_app.posting_authorization, "AUTHORIZATION_FILE", path)
+    return path
+
+
+def _authorize(path, channel="pinterest-rss"):
+    path.write_text(json.dumps({"channels": {channel: {
+        "authorized": True, "authorized_by": "Bui",
+        "authorized_at": "2026-09-12T18:00:00+07:00"}}}))
+
+
+def _approved_article(articles_dir):
+    (articles_dir / "adhd-routines-es.json").write_text(json.dumps({
+        "qa_approved": True,
+        "title": "Tres rutinas cortas para el TDAH adulto",
+        "description": "Una rutina de cinco minutos, una lista de dos columnas y un recordatorio "
+                       "visible para empezar el dia sin perder el hilo.",
+        "link": "/libra/growth/articles/adhd-routines-es",
+        "image_url": "/libra/api/books/adhd-adults-workbook-es/cover",
+        "published_at": "2026-09-10T08:00:00+00:00",
+    }))
+
+
+def test_feed_is_404_while_the_channel_is_not_authorized(client, authorization_file):
+    _approved_article(libra_app.GROWTH_ARTICLES_DIR)
+
+    response = client.get("/growth/feed.xml")
+
+    assert response.status_code == 404
+
+
+def test_feed_serves_rss_once_the_owner_authorized_the_channel(client, authorization_file):
+    _approved_article(libra_app.GROWTH_ARTICLES_DIR)
+    _authorize(authorization_file)
+
+    response = client.get("/growth/feed.xml")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/rss+xml")
+    assert "<rss version=\"2.0\"" in response.text
+    assert "/libra/growth/articles/adhd-routines-es" in response.text
+
+
+def test_authorized_feed_omits_articles_that_are_not_qa_approved(client, authorization_file):
+    (libra_app.GROWTH_ARTICLES_DIR / "draft.json").write_text(json.dumps({
+        "qa_approved": False, "title": "A draft that must not be pinned",
+        "description": "This description is long enough to pass the length rule on its own.",
+        "link": "/libra/growth/articles/draft",
+        "image_url": "/libra/api/books/adhd-adults-workbook-es/cover",
+        "published_at": "2026-09-10T08:00:00+00:00",
+    }))
+    _authorize(authorization_file)
+
+    response = client.get("/growth/feed.xml")
+
+    assert response.status_code == 200
+    assert "<item>" not in response.text
+
+
+def test_feed_for_an_unknown_channel_name_stays_closed(client, authorization_file):
+    _approved_article(libra_app.GROWTH_ARTICLES_DIR)
+    _authorize(authorization_file, channel="pinterest")
+
+    response = client.get("/growth/feed.xml")
+
+    assert response.status_code == 404

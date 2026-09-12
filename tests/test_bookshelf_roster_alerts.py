@@ -140,3 +140,46 @@ def test_partial_fetch_does_not_claim_books_vanished(telegram, isolated_paths):
     roster.maybe_alert(report([entry("B0H0000015", "LIVE")], total_rows=3))
 
     assert telegram == []
+
+
+# ── Live vs Live–Updates in review ───────────────────────────────────────────
+
+@pytest.mark.parametrize("badge,expected", [
+    ("Live Submitted on July 5, 2026 $9.99 USD", "LIVE"),
+    ("Live With unpublished changes", "LIVE"),
+    ("In review Submitted on August 22, 2026", "IN_REVIEW"),
+    ("Live - Updates in review", "LIVE_UPDATES_IN_REVIEW"),
+    ("Live – Updates in review Submitted on Sep 1, 2026", "LIVE_UPDATES_IN_REVIEW"),
+    ("Blocked", "BLOCKED"),
+    ("Draft", "DRAFT"),
+    ("Unpublishing", "UNPUBLISHED"),
+])
+def test_status_badges_are_classified(badge, expected):
+    assert roster.classify_status(badge) == expected
+
+
+def test_updates_in_review_is_separated_from_plain_in_review():
+    alerts = roster.compute_alerts(report([
+        entry("B0H0000016", "LIVE_UPDATES_IN_REVIEW"),
+        entry("B0H0000017", "IN_REVIEW", slug="book-b"),
+    ]))
+
+    assert [e["asin"] for e in alerts["updates_in_review"]] == ["B0H0000016"]
+    assert [e["asin"] for e in alerts["in_review"]] == ["B0H0000017"]
+
+
+def test_updates_in_review_alert_says_the_book_is_still_selling(telegram):
+    roster.maybe_alert(report([entry("B0H0000018", "LIVE_UPDATES_IN_REVIEW")]))
+
+    assert len(telegram) == 1
+    assert "ยังขายอยู่" in telegram[0]
+    assert "B0H0000018" in telegram[0]
+
+
+def test_updates_in_review_is_not_counted_as_a_live_duplicate():
+    alerts = roster.compute_alerts(report([
+        entry("B0H0000019", "LIVE"),
+        entry("B0H0000020", "LIVE_UPDATES_IN_REVIEW"),
+    ]))
+
+    assert alerts["live_duplicates"] == {}

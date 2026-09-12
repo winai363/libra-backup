@@ -1,0 +1,18 @@
+{
+  "note": "Channel-scoped authorization for publishing outside this server. The standing rule (owner decision 2026-08-30) is that Libra posts nothing automatically. This file does not lift that rule; it lets the owner open exactly one channel. Fail closed: authorized requires authorized_by AND authorized_at.",
+  "how_to_authorize": "Set authorized true and fill authorized_by and authorized_at (ISO-8601) for the one channel being opened. Remove them to close it again.",
+  "channels": {
+    "pinterest-rss": {
+      "authorized": false,
+      "authorized_by": null,
+      "authorized_at": null,
+      "scope": "Serve /libra/growth/feed.xml so Pinterest's native RSS auto-publishing can create Pins from QA-approved hub articles. Covers serving the feed only: it does not authorize ads, paid promotion, DMs, posting to any other network, or any KDP action.",
+      "preconditions": [
+        "Pinterest business account exists and the owner is signed in",
+        "https://newton-winai-klinprasom.incomeinclick.in.th/libra/growth claimed on that Pinterest account (HTML tag, HTML file or DNS TXT)",
+        "at least one article in data/growth_articles with qa_approved true",
+        "owner has read docs/pinterest-rss-workflow.md"
+      ]
+    }
+  }
+}

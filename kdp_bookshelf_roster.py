@@ -47,7 +47,8 @@ from kdp_sales_sync import build_indexes, _load_json, _tokens  # noqa: E402
 
 # Status priority when several bookshelf rows resolve to the same local book
 # (duplicate uploads): keep the most "real" one's ASIN.
-_STATUS_RANK = {"LIVE": 4, "IN_REVIEW": 3, "DRAFT": 2, "UNPUBLISHED": 1, "UNKNOWN": 0}
+_STATUS_RANK = {"LIVE": 4, "LIVE_UPDATES_IN_REVIEW": 4, "IN_REVIEW": 3, "DRAFT": 2,
+                "UNPUBLISHED": 1, "UNKNOWN": 0}
 
 ASIN_RE = re.compile(r"\bB0[A-Z0-9]{8}\b")
 
@@ -72,7 +73,11 @@ def classify_status(text: str) -> str:
     """
     t = " ".join((text or "").lower().split())
     if "in review" in t:
-        return "IN_REVIEW"
+        # "Live - Updates in review" is a book that is still selling while an
+        # edit waits for Amazon. That is a different fact from a book whose only
+        # state is review, and it earns a different response: watch the title,
+        # do not pause it.
+        return "LIVE_UPDATES_IN_REVIEW" if "live" in t else "IN_REVIEW"
     if "blocked" in t or "quality issue" in t or "needs your attention" in t:
         return "BLOCKED"
     # "Live With unpublished changes" = the book IS live (selling); it just has a
@@ -122,6 +127,7 @@ def compute_alerts(report: dict) -> dict:
        - live_orphans:    a LIVE book on KDP with no local listing
        - blocked:         a tracked book now shown BLOCKED (takedown)
        - in_review:       a tracked book back in Amazon's content review
+       - updates_in_review: a tracked book still selling with an edit in review
        - unpublished:     a tracked book no longer offered for sale
        - gone:            a locally-LIVE book absent from the bookshelf
     """
@@ -152,6 +158,11 @@ def compute_alerts(report: dict) -> dict:
                  if e["status"] == "IN_REVIEW" and (e.get("slug") or e.get("duplicate_of"))]
     unpublished = [e for e in report["entries"]
                    if e["status"] == "UNPUBLISHED" and (e.get("slug") or e.get("duplicate_of"))]
+    # Still selling, so not a takedown — reported separately so the response can
+    # be proportionate (watch the title rather than pull it out of a campaign).
+    updates_in_review = [e for e in report["entries"]
+                         if e["status"] == "LIVE_UPDATES_IN_REVIEW"
+                         and (e.get("slug") or e.get("duplicate_of"))]
 
     # Vanished watch: a book our listing.json records as LIVE that no longer
     # appears on the bookshelf at all (possible silent takedown). Guard against a
@@ -167,6 +178,7 @@ def compute_alerts(report: dict) -> dict:
 
     return {"live_duplicates": live_dups, "live_orphans": live_orphans,
             "blocked": blocked, "in_review": in_review,
+            "updates_in_review": updates_in_review,
             "unpublished": unpublished, "gone": gone}
 
 
@@ -434,6 +446,11 @@ def maybe_alert(report: dict) -> None:
         if key not in ack:
             new_lines.append(f"🕵️ <b>กลับเข้า IN REVIEW ของ Amazon</b>: {key} — {e['title_guess'][:55]}")
             new_asins.add(key)
+    for e in alerts["updates_in_review"]:
+        key = e.get("asin") or e.get("book_id")
+        if key not in ack:
+            new_lines.append(f"📝 <b>ยังขายอยู่ แต่มีการแก้รออนุมัติ (Live - Updates in review)</b>: {key} — {e['title_guess'][:50]}")
+            new_asins.add(key)
     for e in alerts["unpublished"]:
         key = e.get("asin") or e.get("book_id")
         if key not in ack:
@@ -446,7 +463,7 @@ def maybe_alert(report: dict) -> None:
             new_asins.add(key)
 
     if not new_lines:
-        _log("alert: no new live-duplicates / orphans / blocked / in-review / unpublished / vanished")
+        _log("alert: no new live-duplicates / orphans / blocked / in-review / updates-in-review / unpublished / vanished")
         return
     msg = "📕 <b>Libra KDP roster เจอปัญหาใหม่</b>\n\n" + "\n".join(new_lines) + \
           "\n\nตรวจ bookshelf / รัน kdp_unpublish.py / สร้าง listing เพื่อแก้"

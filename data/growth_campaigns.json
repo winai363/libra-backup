@@ -3,6 +3,8 @@
   "campaigns": [
     "content-hub",
     "organic-pinterest",
-    "organic-owner-post"
-  ]
+    "organic-owner-post",
+    "synthetic-verification"
+  ],
+  "synthetic_note": "synthetic-verification tags our own end-to-end checks of the click path. Rows written under it are registered in /root/shared/synthetic_events.json and subtracted by organic_experiment_report.py, so a verification click never counts as a reader."
 }

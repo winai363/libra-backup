@@ -2,6 +2,18 @@
 
 อ่าน `memory.md` (ท้ายไฟล์ = ล่าสุด) ก่อนเริ่มงานเสมอ. กฎที่ห้ามละเมิด:
 
+## 12 ก.ย. 2026 (รอบสอง) — ท่ออีเมลแจ้งเตือน + เลน Pinterest RSS + การวัดผลที่พิสูจน์ได้
+- `scripts/mail_watch.py` อ่านได้หลายกล่อง: ทุกไฟล์ `*.env` ใน `/root/.config/mail-watch/` = 1 กล่อง (คีย์ `IMAP_HOST` รองรับ iCloud `imap.mail.me.com`) · กล่องเดิม (`imap.env` = Gmail) ยังใช้ state ไฟล์เดิม cursor ไม่รีเซ็ต · dedup ข้ามกล่องด้วย Message-ID (`data/mail-watch-seen.json`) เผื่อ forward ซ้ำ · `redact()` ลบรหัสผ่านออกจาก state/log/Telegram ทุกจุด
+- ⛔ ยังไม่มีหลักฐานว่าเคยเห็นประกาศ KDP จริง — เทสต์ 20 ตัวเป็น **transport test กับ IMAP ปลอม** เท่านั้น. ต้องให้บุ๋ยทำอย่างใดอย่างหนึ่ง: สร้าง app-specific password ของ Apple ID ใส่ `icloud.env` (ดู `icloud.env.example`) หรือ ตั้ง rule ใน iCloud Mail ให้ forward เมลที่มี kdp/amazon ไป winai363@gmail.com
+- `classify_status` แยก **`LIVE_UPDATES_IN_REVIEW`** ("Live - Updates in review" = ยังขายอยู่ แค่มีการแก้รออนุมัติ) ออกจาก `IN_REVIEW` · ตอบสนองตามสัดส่วน: IN_REVIEW/BLOCKED/UNPUBLISHED/DRAFT = พักแคมเปญเล่มนั้น · updates-in-review = เฝ้า ไม่พัก · ไม่อยู่ใน roster = hold ห้ามเดาว่า LIVE
+- **เลน Pinterest RSS (ยังปิด)**: `growth_feed.py` + route `/growth/feed.xml` ปิดด้วย `posting_authorization.channel_authorized("pinterest-rss")` — ⛔ fail closed, `authorized:true` ไม่พอ ต้องมี `authorized_by` + `authorized_at`, ชื่อช่องทางนอก `KNOWN_CHANNELS` ไม่เคยผ่าน, ปิดอยู่ = 404. ⛔ ห้ามเพิ่ม env override / ห้ามเปิดช่องอื่นด้วยไฟล์นี้ (กฎ "ไม่โพสต์อัตโนมัติ" 30ส.ค. ยังมีผลทั้งหมด — ไฟล์นี้แค่เปิดช่องเดียวแบบระบุชื่อ)
+- ฟีดรับเฉพาะบทความ `qa_approved: true` ใน `data/growth_articles/` · ลิงก์/รูปต้องอยู่ใต้ `/libra/growth/` และ `/libra/api/books/` · ห้ามมีคีย์ที่พาเนื้อหนังสือไปด้วย (`manuscript/ebook_md/sample_text/epub/pdf`) · เพดาน 5 รายการ (hard cap 20) กัน Pin ถล่ม · ดราฟต์เก็บที่ `data/growth_articles_drafts/` (ไม่ถูก serve)
+- Pinterest ต้องมี **business account + claim โดเมน/ซับพาธ** (อ้างเอกสารทางการ 12ก.ย. ใน `docs/pinterest-rss-workflow.md`) → งานของบุ๋ย ห้าม login/ทำแทน
+- รายงาน organic: หน้าต่างวัดผลเริ่มที่ **publication ที่พิสูจน์แล้ว** (url https + เวลาที่เห็น + หลักฐาน) เท่านั้น — ⛔ ไฟล์ RSS, cron, หรือโพสต์ที่เตรียมไว้ ไม่ใช่การเผยแพร่ · 25 คลิก = เกณฑ์ acquisition ชั่วคราว (reach) ⛔ ไม่ใช่การพิสูจน์ยอดขาย · คลิก 0 ที่วัน 14 = ไปตรวจ distribution/tracking ⛔ ห้ามปลดเล่ม · ห้ามอนุมานยอดซื้อจากคลิก และห้ามคำนวณ read-through จาก KENP
+- คลิกทดสอบของเราเองลงทะเบียนใน `/root/shared/synthetic_events.json` (table `hub_events`, column `event_key`) แล้วรายงานหักออกด้วย `synthetic_events.sql_exclusion` — แถวดิบคงไว้เสมอ
+- cron ใหม่ 09:55 `scripts/organic_experiment_report.py --send` (อ่านอย่างเดียว เงียบสนิทตอน experiment inactive) · rollback = ลบบรรทัด cron
+- ⛔ ขายตรง (Payhip/Stripe) แยกออกจากเลน Amazon: **เก็บเงินได้ แต่พิสูจน์ไม่ได้** เพราะไม่มี `STRIPE_SECRET_KEY_LIVE` — ห้ามใส่คีย์แทนบุ๋ย ห้ามผ่อนการพิสูจน์ · เล่มเก่า 3 เล่มในทดลองนี้ยัง **Enrolled KDP Select** (ตามไฟล์ มิ.ย./ก.ค.) ⇒ ห้ามเอา EPUB ไปขายตรงจนอ่านสถานะจากหน้า KDP ใหม่ (KENP ย้อนหลังไม่ใช่หลักฐานสิทธิ์) ดู `docs/direct-sales-blockers-2026-09-12.md`
+
 ## 12 ก.ย. 2026 — การวัดผลคลิก + ด่านเฝ้า takedown (ไม่แตะ KDP)
 - `/growth/out/{token}` ไม่บันทึก event ถ้า user agent เป็นบอท/ตัวดึงพรีวิว/สคริปต์ (`content_hub.is_bot_user_agent`) — ยัง redirect ปกติ. เบราว์เซอร์ในแอป (Pinterest/FB/IG/WhatsApp) นับเป็นคนจริง ห้ามใส่ `pinterest`/`whatsapp` แบบคำกว้างกลับเข้า marker
 - `/growth/books/{slug}?c=<campaign>` ติดป้ายช่องทางได้ แต่ **เฉพาะชื่อที่ประกาศไว้ใน `data/growth_campaigns.json`** ชื่ออื่นตกกลับ `content-hub` (กันคนนอกเขียนป้ายใหม่ลงข้อมูลคลิกของเรา)

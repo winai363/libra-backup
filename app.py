@@ -17,6 +17,8 @@ from fastapi.staticfiles import StaticFiles
 from business_ledger import record_hub_event
 from kdp_freeze import KDPFrozenError, assert_kdp_mutation_allowed, freeze_state
 from settings import CommerceConfigError, CommerceSettings, load_env_file
+import posting_authorization
+from growth_feed import build_rss, load_entries
 from content_hub import (
     TrackingConfigError,
     build_outbound_event,
@@ -1334,6 +1336,10 @@ def _hub_cta_path(slug: str, campaign: str, destination: str) -> str:
 
 
 GROWTH_CAMPAIGNS_FILE = Path(__file__).parent / "data" / "growth_campaigns.json"
+# The public origin our hub pages are served from; the Pinterest-claimed location
+# is the /libra/growth subpath of it.
+GROWTH_SITE_BASE = ENV.get("LIBRA_PUBLIC_BASE", "https://newton-winai-klinprasom.incomeinclick.in.th")
+GROWTH_FEED_PATH = "/libra/growth/feed.xml"
 
 
 def _declared_campaigns() -> set:
@@ -1445,6 +1451,23 @@ async def growth_outbound_click(token: str, request: Request):
         event = build_outbound_event(payload["slug"], payload["campaign"])
     record_hub_event(PROFIT_LEDGER_FILE, event)
     return RedirectResponse(url=payload["destination"], status_code=307)
+
+
+@app.get("/growth/feed.xml")
+async def growth_feed(request: Request):
+    """RSS 2.0 feed of QA-approved hub articles for Pinterest's native
+    auto-publishing. Served only while the owner has authorized that one
+    channel (posting_authorization), so the standing no-auto-posting rule stays
+    in force for everything else — and for this channel too until it is opened.
+    Unauthorized is a 404: an unannounced feed cannot be connected by accident."""
+    if not posting_authorization.channel_authorized("pinterest-rss"):
+        return Response("Not found", status_code=404, media_type="text/plain")
+    xml, report = build_rss(load_entries(GROWTH_ARTICLES_DIR), site_base=GROWTH_SITE_BASE,
+                            feed_path=GROWTH_FEED_PATH)
+    if report["rejected"]:
+        logger.warning("growth feed skipped %d entr(y/ies): %s",
+                       len(report["rejected"]), report["rejected"])
+    return Response(xml, media_type="application/rss+xml")
 
 
 def _payhip_hosts() -> frozenset:

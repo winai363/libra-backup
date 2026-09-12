@@ -1,0 +1,21 @@
+{
+  "id": "adhd-tres-rutinas-es",
+  "qa_approved": false,
+  "qa_checklist": [
+    "Spanish read by a fluent reader (not a marker scan)",
+    "every claim in the text is either common-sense advice or carries a source",
+    "no medical claim, no diagnosis, no treatment promise",
+    "the text is ours, written for this page — not an extract from the book",
+    "the CTA describes the ebook honestly: a screen-read workbook whose templates are copied into a notebook"
+  ],
+  "title": "Tres rutinas cortas para empezar el día con TDAH",
+  "description": "Tres rutinas de cinco minutos para ordenar la mañana cuando la atención se dispersa: una lista de dos columnas, un recordatorio visible y un cierre del día.",
+  "link": "/libra/growth/articles/adhd-tres-rutinas-es",
+  "image_url": "/libra/api/books/adhd-adults-workbook-es/cover",
+  "published_at": null,
+  "target_slug": "adhd-adults-workbook-es",
+  "campaign": "organic-pinterest",
+  "cta_label": "Ver el cuaderno en Amazon",
+  "body": "La mañana es donde se decide el día cuando vives con TDAH. No porque haya que madrugar más, sino porque las primeras decisiones son las que consumen más atención.\n\n**Una lista de dos columnas.** A la izquierda, lo que pasa hoy quieras o no: trabajo, recoger a alguien, una cita. A la derecha, una sola cosa que quieres mover. Dos columnas caben en media hoja y no piden priorizar doce tareas a las siete de la mañana.\n\n**Un recordatorio visible.** Un papel en la puerta con tres palabras funciona mejor que una alarma más: la alarma se silencia sin leerse, el papel se lee porque está en el camino.\n\n**Un cierre de dos minutos.** Al terminar el día, escribe qué se movió y qué se quedó. No es un diario; es el punto de partida de la lista de mañana, y evita empezar desde cero.\n\nSi quieres las plantillas completas y los ejercicios para sostenerlo durante semanas, están en el cuaderno: se lee en pantalla y las plantillas se copian a un cuaderno de papel o se imprimen.",
+  "draft_note": "DRAFT. Stored outside data/growth_articles on purpose: files in that directory are served publicly and are eligible for the Pinterest feed. Move it there only after the QA checklist above is done, qa_approved is set to true and published_at carries a real date."
+}

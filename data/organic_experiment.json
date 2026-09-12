@@ -1,7 +1,7 @@
 {
   "name": "organic-hub-to-amazon-2026-09",
   "active": false,
-  "activation_note": "PREPARED ONLY. Flip \"active\": true and set started_on to the first day a link is actually posted. Nothing in Libra posts on its own (owner decision 2026-08-30), so the experiment does not start until Bui posts.",
+  "activation_note": "PREPARED ONLY. Two separate switches: `active` turns the report on, and a record in `publications` (url + observed_at + evidence) is what starts the measurement window. A scheduled task, a written RSS file or a prepared post is never a publication.",
   "kill_switch": "set active=false (or delete this file) — organic_experiment_report.py then reports inactive and reads nothing",
   "books": [
     "adhd-adults-workbook-es",
@@ -9,13 +9,11 @@
     "bilingual-english-spanish-kids-vocab"
   ],
   "books_excluded_after_qa": {
-    "senior-smartphone-french": "top earner but the listing promises interior images and the EPUB has none (catalogue_quality 2026-09-12). Sending traffic to an unmet promise risks returns and reviews, and the fix would need a republish, which is frozen.",
+    "senior-smartphone-french": "top earner but the listing promises interior images and the EPUB has none (catalogue_quality 2026-09-12). Sending traffic to an unmet promise risks returns and reviews, and the fix would need a republish, which is frozen. Zero sales is not claimed for it — it is the top earner; the exclusion is about the unmet image promise only.",
     "beginner-watercolor-spanish": "visual how-to niche with 0 interior images; its two siblings (acuarela ES, aquarelle FR) are the two books Amazon pulled. Not amplified until the content matches the promise.",
     "ai-augmented-productivity-toolkit": "25 orders are free-promo downloads, not paid demand; $1.96 lifetime in the most crowded niche in the catalogue."
   },
   "planned_window_days": 30,
-  "started_on": null,
-  "ends_on": null,
   "channels": [
     {
       "campaign": "organic-owner-post",
@@ -32,32 +30,152 @@
   "hypothesis": "Tracked organic links to hub pages for the three QA-passed earners produce measurable clicks; royalties for those books over the 30-day window stay at or above the baseline months below.",
   "primary_metric": "tracked reader clicks per book per campaign (hub_events, crawlers excluded)",
   "secondary_metric": "royalties_usd per book per month, latest observation per month",
-  "continue_if": "at least 25 tracked reader clicks across the three books in 30 days AND no book drops out of LIVE",
-  "stop_if": "zero tracked clicks by day 14 (the channel is not reaching anyone), or any tracked book appears as IN_REVIEW / BLOCKED / UNPUBLISHED on the bookshelf",
+  "continue_if": "at least 25 qualified clicks across the three books inside the 30-day window AND every tracked book still Live on the shelf. Meeting it justifies continuing the channel, not claiming sales.",
+  "stop_if": "a tracked book's shelf row turns IN_REVIEW / BLOCKED / UNPUBLISHED (pause that book only), or the owner stops the experiment. Zero clicks at day 14 triggers diagnosis, not a stop.",
   "attribution_rule": "Amazon reports no referrer, so a purchase is never attributed to a click. Clicks prove reach; royalties are reported beside them. Insufficient evidence is reported as INCONCLUSIVE, never as success.",
   "baseline": {
     "measured_at": "2026-09-12T09:15:10+07:00",
     "source": "kdp_snapshots / kdp_title_attribution, latest observation per month",
-    "account_royalties_usd": {"2026-07": 16.15, "2026-08": 13.89, "2026-09_mtd": 13.81},
+    "account_royalties_usd": {
+      "2026-07": 16.15,
+      "2026-08": 13.89,
+      "2026-09_mtd": 13.81
+    },
     "hub_events_rows": 0,
     "books": {
       "adhd-adults-workbook-es": {
         "asin": "B0H6VB1SDX",
-        "2026-08": {"royalties_usd": 1.44, "orders": 0, "kenp": 274},
-        "2026-09_mtd": {"royalties_usd": 7.92, "orders": 3, "kenp": 100}
+        "2026-08": {
+          "royalties_usd": 1.44,
+          "orders": 0,
+          "kenp": 274
+        },
+        "2026-09_mtd": {
+          "royalties_usd": 7.92,
+          "orders": 3,
+          "kenp": 100
+        }
       },
       "ai-workflows-accountants-pt": {
         "asin": "B0H3WY9M22",
-        "2026-07": {"royalties_usd": 3.32, "orders": 11, "kenp": 70},
-        "2026-08": {"royalties_usd": null, "orders": null, "kenp": null},
-        "2026-09_mtd": {"royalties_usd": null, "orders": null, "kenp": null}
+        "2026-07": {
+          "royalties_usd": 3.32,
+          "orders": 11,
+          "kenp": 70
+        },
+        "2026-08": {
+          "royalties_usd": null,
+          "orders": null,
+          "kenp": null
+        },
+        "2026-09_mtd": {
+          "royalties_usd": null,
+          "orders": null,
+          "kenp": null
+        }
       },
       "bilingual-english-spanish-kids-vocab": {
         "asin": "B0H4V4DRLV",
-        "2026-08": {"royalties_usd": 2.86, "orders": 1, "kenp": 70},
-        "2026-09_mtd": {"royalties_usd": null, "orders": null, "kenp": null}
+        "2026-08": {
+          "royalties_usd": 2.86,
+          "orders": 1,
+          "kenp": 70
+        },
+        "2026-09_mtd": {
+          "royalties_usd": null,
+          "orders": null,
+          "kenp": null
+        }
       }
     },
     "unknown_note": "null means the book had no attributed row in that month's report: unknown, not zero. KDP only attributes titles that appear in the report it serves."
-  }
+  },
+  "window_start_rule": "first verified publication in `publications`, never a typed date and never the first click",
+  "publications": [],
+  "publication_record_shape": {
+    "channel": "pinterest-rss | owner-post",
+    "slug": "book slug the post points at",
+    "url": "https:// live url of the published post or pin",
+    "observed_at": "ISO-8601 when we saw it live",
+    "evidence": "what was checked (e.g. 'opened the pin url, it resolves to the hub page')"
+  },
+  "acquisition_threshold_clicks": 25,
+  "threshold_meaning": "25 qualified clicks is a provisional acquisition signal (the channel reaches readers). It is not sales validation and must never be reported as one.",
+  "exposure_source": null,
+  "exposure_note": "Impressions/saves exist only inside Pinterest analytics, which we do not read. Exposure stays null unless the owner reports figures; null is 'not measured', not zero.",
+  "day14_rule": "Zero qualified clicks at day 14 triggers a distribution and tracking diagnosis (is the pin/post live? does the link resolve? are events recorded?). It never retires a book.",
+  "shelf_rule": "Pause a book's campaign only when its shelf row is IN_REVIEW, BLOCKED, UNPUBLISHED or DRAFT. 'Live - Updates in review' is still selling: watch it, do not pause it.",
+  "metric_tracks": [
+    "content_published (verified)",
+    "exposure (from owner, usually unavailable)",
+    "qualified_outbound_clicks (bot-filtered, synthetic excluded)",
+    "paid_orders",
+    "kenp",
+    "royalties_usd",
+    "costs_usd (paid spend is 0 — no paid channel authorized)",
+    "human_interventions"
+  ],
+  "interventions": [],
+  "no_inference_rule": "Do not attribute a purchase to a click and do not derive a read-through rate from KENP. Clicks, orders, KENP and royalties are reported as separate observations.",
+  "qualification": {
+    "checked_at": "2026-09-12",
+    "method": "listing.json + bookshelf roster (exact ASIN/format/price), ebook.md and ebook.epub file inspection (tables, write-in blanks, images, claim phrases), epubcheck result from catalogue_quality 2026-09-12, language-marker scan",
+    "books": {
+      "adhd-adults-workbook-es": {
+        "ebook_asin": "B0H6VB1SDX",
+        "ebook_price_usd": 2.99,
+        "paperback_asin": "B0H7PP17YX",
+        "paperback_price_usd": 9.99,
+        "epubcheck": "0 fatals 0 errors",
+        "interior_images": 0,
+        "image_promise_in_listing": false,
+        "kindle_layout_risk": "195 table rows, up to 8 columns — wide tables reflow badly on a phone",
+        "write_in_handling": "templates tell the reader to copy the table into a notebook or print it; no blank lines to write on inside the ebook",
+        "kdp_select": "Enrolled, term 2026-06-28 → 2026-09-25 (source: KDP promotion-manager verified 2026-06-28)",
+        "promote": true,
+        "promote_note": "link to the ebook ASIN; mention the paperback only as an alternative, never as the same product",
+        "formats_live": {
+          "ebook": "LIVE",
+          "paperback": "LIVE"
+        }
+      },
+      "ai-workflows-accountants-pt": {
+        "ebook_asin": "B0H3WY9M22",
+        "ebook_price_usd": 2.99,
+        "paperback_asin": null,
+        "epubcheck": "0 fatals 0 errors",
+        "interior_images": 0,
+        "image_promise_in_listing": false,
+        "kindle_layout_risk": "25 table rows, max 4 columns — acceptable",
+        "write_in_handling": "none claimed",
+        "kdp_select": "Enrolled, term 2026-07-02 → 2026-09-29 (source: kdp_enroll_batch retry live-title)",
+        "promote": true,
+        "formats_live": {
+          "ebook": "LIVE"
+        }
+      },
+      "bilingual-english-spanish-kids-vocab": {
+        "ebook_asin": "B0H4V4DRLV",
+        "ebook_price_usd": 3.49,
+        "paperback_asin": null,
+        "epubcheck": "0 fatals 0 errors",
+        "interior_images": 0,
+        "image_promise_in_listing": false,
+        "kindle_layout_risk": "163 table rows, max 3 columns — reflows acceptably",
+        "write_in_handling": "'write your answers' lines address a notebook, not the ebook page; no blanks inside the ebook",
+        "kdp_select": "Enrolled, term 2026-07-02 → 2026-09-29 (source: kdp_enroll_batch 2026-07-02)",
+        "promote": true,
+        "promote_note": "a vocabulary book for bilingual parents: say plainly that it is read on a screen",
+        "formats_live": {
+          "ebook": "LIVE"
+        }
+      }
+    },
+    "unverified": [
+      "Semantic correctness of the Spanish, Portuguese and English text is UNTESTED — a marker scan found no wrong-language content, which is not the same as a native reading.",
+      "Kindle on-device rendering of the wide ADHD tables is UNTESTED (no Previewer run; a republish is frozen, so this is a caveat to the claim, not a fix).",
+      "KDP Select status comes from listing.json records of June/July. Re-read the KDP page before any direct-sale decision."
+    ]
+  },
+  "zero_sales_note": "The 30 live books with no royalties are not called unmarketable: with no exposure data and no tracked traffic ever sent to them, nothing has been tested. Blocked and removed titles are not called irrecoverable either — no recovery route has been attempted or ruled out with evidence."
 }

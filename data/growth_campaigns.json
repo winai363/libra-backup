@@ -4,7 +4,21 @@
     "content-hub",
     "organic-pinterest",
     "organic-owner-post",
-    "synthetic-verification"
+    "synthetic-verification",
+    "pin-adhd-es",
+    "pin-bilingual-kids",
+    "li-contab-pt"
   ],
-  "synthetic_note": "synthetic-verification tags our own end-to-end checks of the click path. Rows written under it are registered in /root/shared/synthetic_events.json and subtracted by organic_experiment_report.py, so a verification click never counts as a reader."
+  "synthetic_note": "synthetic-verification tags our own end-to-end checks of the click path. Rows written under it are registered in /root/shared/synthetic_events.json and subtracted by organic_experiment_report.py, so a verification click never counts as a reader.",
+  "per_book_note": "One campaign per book per channel, so qualified clicks and later royalty movement can be compared per book: pin-adhd-es, pin-bilingual-kids (Pinterest RSS), li-contab-pt (owner-posted LinkedIn).",
+  "channels": {
+    "pin-adhd-es": "pinterest-rss",
+    "pin-bilingual-kids": "pinterest-rss",
+    "li-contab-pt": "owner-post",
+    "organic-pinterest": "pinterest-rss",
+    "organic-owner-post": "owner-post",
+    "content-hub": "none",
+    "synthetic-verification": "none"
+  },
+  "channels_note": "campaign → channel. The Pinterest feed serves only campaigns mapped to pinterest-rss, so an approved LinkedIn article is never turned into a Pin. 'none' means the campaign is not a channel: content-hub is the default label and synthetic-verification is our own testing."
 }

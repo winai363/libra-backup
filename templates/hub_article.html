@@ -1,9 +1,16 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{LANG}}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{TITLE}}</title>
+  <meta name="description" content="{{SUMMARY}}">
+  <link rel="canonical" href="{{CANONICAL}}">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="{{TITLE}}">
+  <meta property="og:description" content="{{SUMMARY}}">
+  <meta property="og:image" content="{{OG_IMAGE}}">
+  <meta property="og:url" content="{{CANONICAL}}">
   <style>
     :root { color-scheme: light; }
     body {
@@ -14,19 +21,38 @@
     .wrap { max-width: 720px; margin: 0 auto; padding: 3rem 1.5rem 5rem; }
     h1 { font-size: 2rem; font-weight: 700; color: #f8fafc; margin: 0 0 1.5rem; }
     .body p { color: #cbd5e1; font-size: 1.05rem; margin: 0 0 1.1rem; }
+    /* The book card exists so the reader knows what the button leads to before
+       they press it: same cover, same title, honest format line. */
+    .book {
+      display: flex; gap: 1.1rem; align-items: flex-start; margin: 2.5rem 0 0;
+      padding: 1.1rem; background: #1e293b; border-radius: 10px;
+    }
+    .book img { width: 96px; height: auto; border-radius: 6px; flex: none; }
+    .book h2 { font-size: 1.05rem; color: #f8fafc; margin: 0 0 0.4rem; }
+    .book p { color: #94a3b8; font-size: 0.95rem; margin: 0 0 0.3rem; }
+    .book .format { color: #cbd5e1; font-size: 0.9rem; }
     .cta {
-      display: inline-block; margin-top: 1.5rem; padding: 0.9rem 1.8rem;
+      display: inline-block; margin-top: 1.25rem; padding: 0.9rem 1.8rem;
       background: #f59e0b; color: #0f172a; font-weight: 700; text-decoration: none;
       border-radius: 8px; font-size: 1.05rem;
     }
     .cta:hover { background: #fbbf24; }
+    @media (max-width: 480px) { .book { flex-direction: column; } .book img { width: 120px; } }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>{{TITLE}}</h1>
     <div class="body">{{BODY}}</div>
-    <a class="cta" href="{{CTA_URL}}" rel="nofollow sponsored">{{CTA_LABEL}}</a>
+    <div class="book">
+      <img src="{{BOOK_COVER}}" alt="{{BOOK_TITLE}}" width="96" loading="lazy">
+      <div>
+        <h2>{{BOOK_TITLE}}</h2>
+        <p>{{BOOK_LINE}}</p>
+        <p class="format">{{BOOK_FORMAT}}</p>
+        <a class="cta" href="{{CTA_URL}}" rel="nofollow sponsored">{{CTA_LABEL}}</a>
+      </div>
+    </div>
   </div>
 </body>
 </html>

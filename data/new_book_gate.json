@@ -1,0 +1,17 @@
+{
+  "note": "Autonomous new-book production is OFF. 38 live ebooks, 30 of them with no royalties, and five titles blocked by Amazon: the constraint is acquisition, not supply. Enforced by new_book_gate.py, not by convention.",
+  "autonomous_new_books": false,
+  "existing_book_demand_demonstrated": false,
+  "stronger_opportunity_found": false,
+  "how_to_open": "Set autonomous_new_books true AND one of the two doors true, then add the concept under 'concepts' with all six evidence fields filled. Both are owner decisions.",
+  "required_evidence": [
+    "buyer_evidence",
+    "differentiated_promise",
+    "competitive_gap",
+    "acquisition_plan",
+    "compliance_review",
+    "expected_economics"
+  ],
+  "concepts": {},
+  "independent_of": "the KDP freeze, which blocks publishing regardless of this gate. An open gate means a book may be researched or written, never that it may be uploaded."
+}

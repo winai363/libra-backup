@@ -258,7 +258,7 @@ def test_threshold_met_is_reported_as_reach_not_sales(tmp_path, ledger, kdp_dir)
 
     result = build(tmp_path, ledger, kdp_dir)
 
-    assert result["verdict"] == "ACQUISITION_THRESHOLD_MET"
+    assert result["verdict"] == "CONTINUE"
     assert "not sales validation" in result["action"]
     assert result["threshold_meaning"].startswith("provisional acquisition signal")
 
@@ -365,3 +365,98 @@ def test_human_interventions_are_counted(tmp_path, ledger, kdp_dir):
     ])
 
     assert result["tracks"]["human_interventions"] == 2
+
+
+# ── the four verdicts ───────────────────────────────────────────────────────
+
+def test_window_closed_with_some_clicks_below_threshold_iterates(tmp_path, ledger, kdp_dir):
+    for _ in range(4):
+        record_hub_event(ledger, build_outbound_event("book-one", "organic-pinterest"))
+
+    result = build(tmp_path, ledger, kdp_dir, today=date(2026, 10, 5))
+
+    assert result["window_closed"] is True
+    assert result["verdict"] == "ITERATE"
+    assert "not the catalogue" in result["action"]
+
+
+def test_window_closed_with_no_clicks_stops_the_channel_not_the_books(tmp_path, ledger, kdp_dir):
+    result = build(tmp_path, ledger, kdp_dir, today=date(2026, 10, 5))
+
+    assert result["verdict"] == "STOP-CHANNEL"
+    assert "The books stay" in result["action"]
+    assert result["paused_books"] == []
+
+
+def test_day_14_zero_stays_inconclusive_inside_the_window(tmp_path, ledger, kdp_dir):
+    result = build(tmp_path, ledger, kdp_dir, today=date(2026, 9, 16))
+
+    assert result["verdict"] == "INCONCLUSIVE"
+    assert "diagnose distribution and tracking" in result["action"]
+
+
+@pytest.mark.parametrize("today,clicks,expected", [
+    (date(2026, 9, 3), 0, "INCONCLUSIVE"),
+    (date(2026, 9, 3), 30, "CONTINUE"),
+    (date(2026, 10, 5), 30, "CONTINUE"),
+])
+def test_verdict_vocabulary_is_only_these_four(tmp_path, ledger, kdp_dir, today, clicks, expected):
+    for _ in range(clicks):
+        record_hub_event(ledger, build_outbound_event("book-one", "organic-pinterest"))
+
+    result = build(tmp_path, ledger, kdp_dir, today=today)
+
+    assert result["verdict"] == expected
+    assert result["verdict"] in {"CONTINUE", "ITERATE", "INCONCLUSIVE", "STOP-CHANNEL"}
+
+
+# ── channel rollup and directional comparison ───────────────────────────────
+
+def test_clicks_roll_up_per_channel_using_the_declared_map(tmp_path, ledger, kdp_dir):
+    record_hub_event(ledger, build_outbound_event("book-one", "pin-book-one"))
+    record_hub_event(ledger, build_outbound_event("book-one", "pin-book-one"))
+    record_hub_event(ledger, build_outbound_event("book-one", "li-book-one"))
+
+    result = build(tmp_path, ledger, kdp_dir, campaign_channels={
+        "pin-book-one": "pinterest-rss", "li-book-one": "owner-post"})
+
+    assert result["by_channel"]["pinterest-rss"]["clicks"] == 2
+    assert result["by_channel"]["owner-post"]["clicks"] == 1
+
+
+def test_an_undeclared_campaign_is_shown_not_dropped(tmp_path, ledger, kdp_dir):
+    record_hub_event(ledger, build_outbound_event("book-one", "content-hub"))
+
+    result = build(tmp_path, ledger, kdp_dir, campaign_channels={})
+
+    assert result["by_channel"]["undeclared"]["clicks"] == 1
+
+
+def test_royalty_comparison_is_directional_and_unknown_without_data(tmp_path, ledger, kdp_dir):
+    result = build(tmp_path, ledger, kdp_dir)
+    book_one = next(b for b in result["books"] if b["slug"] == "book-one")
+    book_two = next(b for b in result["books"] if b["slug"] == "book-two")
+
+    # book-one has only a 2026-09 row, and the window starts in 2026-09: nothing
+    # before it to compare against.
+    assert book_one["vs_baseline"]["direction"] == "unknown"
+    assert book_two["vs_baseline"]["direction"] == "unknown"
+
+
+def test_royalty_direction_reads_up_when_a_later_month_is_higher(tmp_path, ledger, kdp_dir):
+    with sqlite3.connect(ledger) as connection:
+        connection.execute(
+            "INSERT INTO kdp_snapshots(id, observed_at, month, royalties_usd, "
+            "orders_all_types, kenp, raw_json, source_key, content_hash) "
+            "VALUES (3, '2026-08-31T09:00:00+07:00', '2026-08', 5.0, 1, 50, '{}', 'k3', 'h3')")
+        connection.execute(
+            "INSERT INTO kdp_title_attribution(snapshot_id, asin, royalties_usd, orders_count, kenp) "
+            "VALUES (3, 'B0BOOKONE01', 1.44, 0, 274)")
+
+    result = build(tmp_path, ledger, kdp_dir)
+    book_one = next(b for b in result["books"] if b["slug"] == "book-one")
+
+    assert book_one["vs_baseline"]["direction"] == "up"
+    assert book_one["vs_baseline"]["months_before"] == ["2026-08"]
+    assert book_one["vs_baseline"]["months_during"] == ["2026-09"]
+    assert "no attribution" in book_one["vs_baseline"]["note"]

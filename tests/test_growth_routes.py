@@ -57,10 +57,14 @@ def _write_listing(kdp_dir, slug, **overrides):
 
 def _write_article(articles_dir, article_id, **overrides):
     article = {
+        "qa_approved": True,
         "title": "Test Article Title",
         "body": "First paragraph.\n\nSecond paragraph.",
         "target_slug": "book-a",
         "campaign": "article-1",
+        "language": "es",
+        "description": "A one-line summary of the test article.",
+        "book_line": "A short honest line about the book.",
     }
     article.update(overrides)
     (articles_dir / f"{article_id}.json").write_text(json.dumps(article))
@@ -241,7 +245,8 @@ def test_book_hub_page_escapes_html_in_listing_data(client):
 
 # ── /growth/articles/{article_id} ───────────────────────────────────────────
 
-def test_article_hub_page_renders_with_one_tracked_cta(client, ledger):
+def test_article_hub_page_renders_with_one_tracked_cta(client, ledger, campaigns_file):
+    campaigns_file.write_text(json.dumps({"campaigns": ["article-1"]}))
     _write_listing(libra_app.KDP_DIR, "book-a")
     _write_article(libra_app.GROWTH_ARTICLES_DIR, "article-1")
 
@@ -404,9 +409,15 @@ def _authorize(path, channel="pinterest-rss"):
         "authorized_at": "2026-09-12T18:00:00+07:00"}}}))
 
 
+def _declare_feed_campaign(campaigns_file, campaign="pin-adhd-es", channel="pinterest-rss"):
+    campaigns_file.write_text(json.dumps({
+        "campaigns": [campaign], "channels": {campaign: channel}}))
+
+
 def _approved_article(articles_dir):
     (articles_dir / "adhd-routines-es.json").write_text(json.dumps({
         "qa_approved": True,
+        "campaign": "pin-adhd-es",
         "title": "Tres rutinas cortas para el TDAH adulto",
         "description": "Una rutina de cinco minutos, una lista de dos columnas y un recordatorio "
                        "visible para empezar el dia sin perder el hilo.",
@@ -416,7 +427,8 @@ def _approved_article(articles_dir):
     }))
 
 
-def test_feed_is_404_while_the_channel_is_not_authorized(client, authorization_file):
+def test_feed_is_404_while_the_channel_is_not_authorized(client, authorization_file, campaigns_file):
+    _declare_feed_campaign(campaigns_file)
     _approved_article(libra_app.GROWTH_ARTICLES_DIR)
 
     response = client.get("/growth/feed.xml")
@@ -424,7 +436,9 @@ def test_feed_is_404_while_the_channel_is_not_authorized(client, authorization_f
     assert response.status_code == 404
 
 
-def test_feed_serves_rss_once_the_owner_authorized_the_channel(client, authorization_file):
+def test_feed_serves_rss_once_the_owner_authorized_the_channel(client, authorization_file,
+                                                               campaigns_file):
+    _declare_feed_campaign(campaigns_file)
     _approved_article(libra_app.GROWTH_ARTICLES_DIR)
     _authorize(authorization_file)
 
@@ -436,9 +450,12 @@ def test_feed_serves_rss_once_the_owner_authorized_the_channel(client, authoriza
     assert "/libra/growth/articles/adhd-routines-es" in response.text
 
 
-def test_authorized_feed_omits_articles_that_are_not_qa_approved(client, authorization_file):
+def test_authorized_feed_omits_articles_that_are_not_qa_approved(client, authorization_file,
+                                                                 campaigns_file):
+    _declare_feed_campaign(campaigns_file)
     (libra_app.GROWTH_ARTICLES_DIR / "draft.json").write_text(json.dumps({
-        "qa_approved": False, "title": "A draft that must not be pinned",
+        "qa_approved": False, "campaign": "pin-adhd-es",
+        "title": "A draft that must not be pinned",
         "description": "This description is long enough to pass the length rule on its own.",
         "link": "/libra/growth/articles/draft",
         "image_url": "/libra/api/books/adhd-adults-workbook-es/cover",
@@ -452,10 +469,113 @@ def test_authorized_feed_omits_articles_that_are_not_qa_approved(client, authori
     assert "<item>" not in response.text
 
 
-def test_feed_for_an_unknown_channel_name_stays_closed(client, authorization_file):
+def test_feed_for_an_unknown_channel_name_stays_closed(client, authorization_file, campaigns_file):
+    _declare_feed_campaign(campaigns_file)
     _approved_article(libra_app.GROWTH_ARTICLES_DIR)
     _authorize(authorization_file, channel="pinterest")
 
     response = client.get("/growth/feed.xml")
 
     assert response.status_code == 404
+
+
+# ── article page conversion path ────────────────────────────────────────────
+
+def test_article_without_qa_approval_is_404(client, ledger):
+    _write_listing(libra_app.KDP_DIR, "book-a")
+    _write_article(libra_app.GROWTH_ARTICLES_DIR, "draft-1", qa_approved=False)
+
+    assert client.get("/growth/articles/draft-1").status_code == 404
+
+
+def test_article_page_declares_its_own_language(client, ledger):
+    _write_listing(libra_app.KDP_DIR, "book-a")
+    _write_article(libra_app.GROWTH_ARTICLES_DIR, "article-1", language="pt")
+
+    body = client.get("/growth/articles/article-1").text
+
+    assert '<html lang="pt">' in body
+
+
+def test_article_page_shows_what_the_button_leads_to(client, ledger):
+    _write_listing(libra_app.KDP_DIR, "book-a", title="Cuaderno de Test")
+    _write_article(libra_app.GROWTH_ARTICLES_DIR, "article-1")
+
+    body = client.get("/growth/articles/article-1").text
+
+    assert "Cuaderno de Test" in body
+    assert "/libra/api/books/book-a/cover" in body
+    assert "A short honest line about the book." in body
+    # Still exactly one tracked link: the cover is an image, not a second CTA.
+    assert body.count("/growth/out/") == 1
+
+
+def test_article_page_carries_canonical_and_og_tags(client, ledger):
+    _write_listing(libra_app.KDP_DIR, "book-a")
+    _write_article(libra_app.GROWTH_ARTICLES_DIR, "article-1")
+
+    body = client.get("/growth/articles/article-1").text
+
+    assert f'rel="canonical" href="{libra_app.GROWTH_SITE_BASE}/libra/growth/articles/article-1"' in body
+    assert 'property="og:image"' in body and "/cover" in body
+
+
+def test_article_campaign_must_be_declared(client, ledger, campaigns_file):
+    """An article file may not invent a campaign label either."""
+    campaigns_file.write_text(json.dumps({"campaigns": ["pin-book-a"]}))
+    _write_listing(libra_app.KDP_DIR, "book-a")
+    _write_article(libra_app.GROWTH_ARTICLES_DIR, "article-1", campaign="made-up-label")
+
+    body = client.get("/growth/articles/article-1").text
+    start = body.index('href="/growth/out/') + len('href="/growth/out/')
+    token = body[start:body.index('"', start)]
+
+    assert resolve_tracking_token(token)["campaign"] == libra_app.GROWTH_HUB_CAMPAIGN
+
+
+def test_declared_article_campaign_is_used(client, ledger, campaigns_file):
+    campaigns_file.write_text(json.dumps({"campaigns": ["pin-book-a"]}))
+    _write_listing(libra_app.KDP_DIR, "book-a")
+    _write_article(libra_app.GROWTH_ARTICLES_DIR, "article-1", campaign="pin-book-a")
+
+    body = client.get("/growth/articles/article-1").text
+    start = body.index('href="/growth/out/') + len('href="/growth/out/')
+    token = body[start:body.index('"', start)]
+
+    assert resolve_tracking_token(token)["campaign"] == "pin-book-a"
+
+
+def test_format_line_comes_from_the_roster_and_is_omitted_when_unknown(client, ledger, tmp_path):
+    _write_listing(libra_app.KDP_DIR, "book-a")
+    _write_article(libra_app.GROWTH_ARTICLES_DIR, "article-1")
+    (libra_app.KDP_DIR / "bookshelf-roster.json").write_text(json.dumps({"entries": [
+        {"slug": "book-a", "format": "ebook", "status": "LIVE", "price": 2.99, "currency": "USD"},
+    ]}))
+
+    assert "Kindle ebook · 2.99 USD" in client.get("/growth/articles/article-1").text
+
+    (libra_app.KDP_DIR / "bookshelf-roster.json").write_text(json.dumps({"entries": []}))
+
+    assert "Kindle ebook" not in client.get("/growth/articles/article-1").text
+
+
+def test_feed_carries_only_its_own_channels_articles(client, authorization_file, campaigns_file):
+    """An approved LinkedIn article must never turn into a Pin."""
+    campaigns_file.write_text(json.dumps({
+        "campaigns": ["pin-adhd-es", "li-contab-pt"],
+        "channels": {"pin-adhd-es": "pinterest-rss", "li-contab-pt": "owner-post"}}))
+    _approved_article(libra_app.GROWTH_ARTICLES_DIR)
+    (libra_app.GROWTH_ARTICLES_DIR / "contabil.json").write_text(json.dumps({
+        "qa_approved": True, "campaign": "li-contab-pt",
+        "title": "Tres roteiros de IA para o escritorio contabil",
+        "description": "Um texto em portugues que pertence ao canal do LinkedIn e nao ao Pinterest.",
+        "link": "/libra/growth/articles/contabil",
+        "image_url": "/libra/api/books/ai-workflows-accountants-pt/cover",
+        "published_at": "2026-09-10T08:00:00+00:00",
+    }))
+    _authorize(authorization_file)
+
+    body = client.get("/growth/feed.xml").text
+
+    assert "adhd-routines-es" in body
+    assert "contabil" not in body

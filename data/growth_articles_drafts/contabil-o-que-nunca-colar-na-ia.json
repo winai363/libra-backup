@@ -1,0 +1,33 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "contabil-o-que-nunca-colar-na-ia",
+  "language": "pt",
+  "title": "O que nunca colar em uma IA — e o que colar no lugar",
+  "description": "Antes de usar IA no escritório contábil, vale definir o que não sai da sua base. Uma lista curta do que nunca colar, e como reescrever o pedido sem dados do cliente.",
+  "link": "/libra/growth/articles/contabil-o-que-nunca-colar-na-ia",
+  "image_url": "/libra/api/books/ai-workflows-accountants-pt/cover",
+  "target_slug": "ai-workflows-accountants-pt",
+  "campaign": "li-contab-pt",
+  "cta_label": "Ver o e-book na Amazon",
+  "book_line": "E-book Kindle sobre fluxos de trabalho com IA para escritórios contábeis: roteiros prontos, checklists e o que conferir antes de enviar ao cliente.",
+  "pin_title": "O que nunca colar em uma IA — e o que colar no lugar",
+  "body": "A primeira decisão sobre IA num escritório contábil não é qual ferramenta usar. É o que não entra nela.\n\nFerramentas de uso geral processam o que você cola e, em muitas configurações, guardam o conteúdo. Tratar cada colagem como um envio para fora do escritório é a postura segura, e é também a que evita discussões desconfortáveis com o cliente depois.\n\nO que não colar:\n\nDados que identificam uma pessoa: CPF, endereço, data de nascimento, nome completo junto de valores. Contratos e procurações na íntegra. Folha de pagamento com nomes. Extratos bancários completos com número de conta. Qualquer documento que você não enviaria por e-mail para um desconhecido.\n\nO que colar no lugar:\n\nO mesmo pedido, descaracterizado. Em vez do extrato inteiro, cole cinco linhas com os valores e as descrições, sem conta e sem nome. Em vez do contrato, descreva a cláusula em uma frase. Em vez da folha, use \"funcionário A, funcionário B\".\n\nNa prática, isso costuma melhorar a resposta: um pedido curto e específico rende mais do que um documento longo colado sem contexto.\n\nTrês hábitos que sustentam isso no dia a dia:\n\nUm lugar combinado para registrar o que foi usado. Uma planilha com data, tarefa e se houve descaracterização basta. Sem registro, ninguém sabe responder ao cliente que pergunta.\n\nUma frase na proposta ou no contrato de serviço dizendo que ferramentas de apoio podem ser usadas em tarefas internas, sem dados identificáveis. Escrever isso antes é mais simples do que explicar depois.\n\nRevisão humana declarada. A IA rascunha; quem assina confere. Isso não é formalidade: a responsabilidade técnica continua sendo de quem assina.\n\nE o ponto que costuma passar batido: o risco maior não é a ferramenta errada, é o hábito de colar o documento inteiro porque é mais rápido. Isso se resolve com um padrão combinado na equipe, não com uma ferramenta nova.\n\nOs roteiros prontos para cada tarefa — com a versão descaracterizada do pedido e o que conferir antes de enviar — são o conteúdo do e-book.",
+  "qa_checklist": [
+    "Um leitor nativo de português do Brasil revisa o texto (não apenas uma ferramenta)",
+    "Nenhuma orientação tributária ou contábil específica: o texto trata de fluxo de trabalho, e a conferência humana é obrigatória em cada exemplo",
+    "Nenhuma menção a fornecedor, ERP ou produto de software",
+    "Nenhum dado de cliente real aparece em exemplo algum",
+    "Texto original escrito para esta página, não extraído do livro",
+    "O CTA descreve o livro com honestidade: e-book Kindle lido na tela"
+  ],
+  "semantic_review": "Português do Brasil, registro profissional e direto. 'Descaracterizado' usado no sentido de remover dados identificáveis; evitei o termo jurídico 'anonimização' para não sugerir conformidade técnica com a LGPD.",
+  "flagged_uncertainty": [
+    "'descaracterizado' pode soar informal para alguns contadores; alternativa: 'sem dados identificáveis'. Revisor nativo decide.",
+    "A frase sobre proposta/contrato de serviço beira orientação jurídica. Um revisor deve confirmar que soa como prática de escritório e não como recomendação legal — ou a removemos."
+  ],
+  "claims_check": "Sem promessa de economia garantida, sem orientação tributária e sem indicação de fornecedor. Todo exemplo termina em conferência humana.",
+  "concept_rank": 3,
+  "linkedin_post_draft": "A primeira decisão sobre IA no escritório não é qual ferramenta usar. É o que não entra nela.\n\nExtrato inteiro, contrato na íntegra, folha com nomes, CPF: nada disso precisa ser colado para a tarefa funcionar. Cinco linhas descaracterizadas resolvem — e normalmente a resposta fica melhor, porque o pedido fica específico.\n\nEscrevi a lista do que não colar e como reescrever o pedido sem dado de cliente:",
+  "linkedin_post_rules": "Publicado pelo próprio dono, uma vez por semana, no perfil dele. Sem hashtag spam (no máximo 3), sem tag de pessoas que não pediram, sem DM não solicitada. O link vai no primeiro comentário ou no corpo — decisão do dono."
+}

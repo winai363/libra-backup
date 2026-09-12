@@ -30,6 +30,7 @@ def entry(**overrides) -> dict:
         "link": "/libra/growth/articles/adhd-routines-es",
         "image_url": "/libra/api/books/adhd-adults-workbook-es/cover",
         "published_at": "2026-09-10T08:00:00+00:00",
+        "campaign": "pin-adhd-es",
     }
     base.update(overrides)
     return base
@@ -217,3 +218,32 @@ def test_the_shipped_authorization_file_is_closed():
     """The repository must never ship an open channel."""
     assert auth.channel_authorized("pinterest-rss") is False
     assert auth.authorization_state()["pinterest-rss"]["authorized"] is False
+
+
+# ── one channel's feed carries only that channel's articles ─────────────────
+
+def test_a_foreign_campaign_is_kept_out_of_the_feed():
+    kept, rejected = select_entries(
+        [entry(campaign="pin-adhd-es"), entry(id="pt-one", campaign="li-contab-pt")],
+        site_base=SITE, now=NOW, allowed_campaigns={"pin-adhd-es"})
+
+    assert [e["id"] for e in kept] == ["adhd-routines-es"]
+    assert rejected[0]["id"] == "pt-one"
+    assert "does not belong to this feed's channel" in rejected[0]["reason"]
+
+
+def test_an_entry_without_a_campaign_is_kept_out_when_scoping_is_on():
+    payload = entry()
+    payload.pop("campaign", None)
+
+    kept, rejected = select_entries([payload], site_base=SITE, now=NOW,
+                                    allowed_campaigns={"pin-adhd-es"})
+
+    assert kept == []
+    assert "None" in rejected[0]["reason"]
+
+
+def test_no_scoping_keeps_previous_behaviour():
+    kept, _ = select_entries([entry(campaign="anything")], site_base=SITE, now=NOW)
+
+    assert [e["id"] for e in kept] == ["adhd-routines-es"]

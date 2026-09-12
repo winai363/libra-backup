@@ -21,6 +21,12 @@ Usage:
     python3 scripts/organic_experiment_report.py --json      # machine payload
     python3 scripts/organic_experiment_report.py --send      # also Telegram
 
+Verdicts are exactly four: CONTINUE (the channel reached readers), ITERATE (some
+reach, below threshold at the end of the window), INCONCLUSIVE (too early, or a
+day-14 zero that calls for a distribution and tracking check), and STOP-CHANNEL
+(the window closed with no qualified clicks after a verified publication). None of
+them retires a book: a weak channel is evidence about the channel.
+
 Kill switch: set "active": false in data/organic_experiment.json (or delete the
 file) and this reports `inactive` without reading anything else.
 """
@@ -173,6 +179,53 @@ def account_royalties_by_month(connection: sqlite3.Connection) -> dict:
     }
 
 
+def channel_rollup(books: list, channels: dict) -> dict:
+    """Clicks per channel, using the campaign→channel map the experiment declares.
+    A campaign nobody declared is reported under "undeclared" rather than dropped."""
+    by_campaign: dict = {}
+    for book in books:
+        for campaign, kinds in book["clicks_by_campaign"].items():
+            by_campaign[campaign] = by_campaign.get(campaign, 0) + sum(kinds.values())
+    rollup: dict = {}
+    for campaign, clicks in by_campaign.items():
+        channel = channels.get(campaign, "undeclared")
+        entry = rollup.setdefault(channel, {"clicks": 0, "campaigns": {}})
+        entry["clicks"] += clicks
+        entry["campaigns"][campaign] = clicks
+    return rollup
+
+
+def direction(before, after) -> str:
+    """Directional only. Unknown when either side is missing — a month KDP did not
+    attribute is not a zero, and no percentage is computed from one or two sales."""
+    if before is None or after is None:
+        return "unknown"
+    if after > before:
+        return "up"
+    if after < before:
+        return "down"
+    return "flat"
+
+
+def compare_to_baseline(book: dict, started_on: str | None) -> dict:
+    """Royalties in the months before the window vs the months inside it, as a
+    direction. Two observations of a $3 book cannot support anything stronger."""
+    months = book["royalties_by_month"]
+    if not months or not started_on:
+        return {"direction": "unknown", "reason": "no attributed months or no verified start"}
+    start_month = started_on[:7]
+    before = [v["royalties_usd"] for m, v in months.items()
+              if m < start_month and v["royalties_usd"] is not None]
+    during = [v["royalties_usd"] for m, v in months.items()
+              if m >= start_month and v["royalties_usd"] is not None]
+    return {
+        "direction": direction(max(before) if before else None, max(during) if during else None),
+        "months_before": sorted(m for m in months if m < start_month),
+        "months_during": sorted(m for m in months if m >= start_month),
+        "note": "directional comparison of monthly royalties; no attribution to any click",
+    }
+
+
 def verified_publications(experiment: dict) -> list:
     """Publication records that name what was published, where, and the evidence
     for it. A scheduled task, a prepared post or a written RSS file is not a
@@ -237,6 +290,7 @@ def build_report(*, experiment_file: Path = EXPERIMENT_FILE, ledger: Path = LEDG
                 "clicks_by_campaign": clicks_by_campaign(connection, slug, started_on, exclusion)
                 if started_on else {},
                 "publications": [r for r in publications if r.get("slug") == slug],
+                "vs_baseline": None,  # filled in below, once started_on is known
                 "baseline": (experiment.get("baseline", {}).get("books", {}) or {}).get(slug),
                 "purchase_attribution": "not_attributable",
             })
@@ -275,21 +329,35 @@ def build_report(*, experiment_file: Path = EXPERIMENT_FILE, ledger: Path = LEDG
     }
 
     threshold = int(experiment.get("acquisition_threshold_clicks") or 25)
+    window_closed = bool(ends_on and str(today) >= str(ends_on))
+    # Four outcomes only, and none of them retires a book: a weak channel is
+    # evidence about the channel, not about the catalogue.
     if not publications:
         state, verdict, action = "not_started", "INCONCLUSIVE", \
             "no verified publication yet — nothing has been published, so nothing is being measured"
-    elif qualified_clicks == 0 and (days_elapsed or 0) >= 14:
+    elif qualified_clicks >= threshold:
+        state, verdict, action = "active", "CONTINUE", \
+            f"{qualified_clicks} qualified clicks passed the provisional acquisition threshold " \
+            f"of {threshold}; this is reach, not sales validation"
+    elif qualified_clicks == 0 and (days_elapsed or 0) >= 14 and not window_closed:
         state, verdict, action = "active", "INCONCLUSIVE", \
             "zero qualified clicks by day 14 — diagnose distribution and tracking " \
             "(feed/pin live? link reachable? events recorded?); do not retire a book on this"
-    elif qualified_clicks >= threshold:
-        state, verdict, action = "active", "ACQUISITION_THRESHOLD_MET", \
-            f"{qualified_clicks} qualified clicks reached the provisional acquisition " \
-            "threshold; this is reach, not sales validation"
+    elif window_closed and qualified_clicks == 0:
+        state, verdict, action = "active", "STOP-CHANNEL", \
+            "the window closed with zero qualified clicks after a verified publication: " \
+            "this channel delivered no readers. The books stay; the channel stops"
+    elif window_closed:
+        state, verdict, action = "active", "ITERATE", \
+            f"{qualified_clicks}/{threshold} qualified clicks by the end of the window — " \
+            "change the content or the surface, not the catalogue"
     else:
         state, verdict, action = "active", "INCONCLUSIVE", \
             f"{qualified_clicks}/{threshold} qualified clicks so far"
 
+    for book in books:
+        book["vs_baseline"] = compare_to_baseline(book, started_on)
+    channels = experiment.get("campaign_channels") or {}
     paused = [b["slug"] for b in books if b["campaign"]["action"] == "pause"]
     return {
         "state": state,
@@ -306,6 +374,7 @@ def build_report(*, experiment_file: Path = EXPERIMENT_FILE, ledger: Path = LEDG
         "verdict": verdict,
         "action": action,
         "tracks": tracks,
+        "by_channel": channel_rollup(books, channels),
         "paused_books": paused,
         "account_royalties_by_month": account,
         "books": books,
@@ -343,11 +412,14 @@ def format_lines(report: dict) -> str:
     for month, figures in report["account_royalties_by_month"].items():
         lines.append(f"  account {month}: ${figures['royalties_usd']} "
                      f"(kenp {figures['kenp']}, observed {figures['observed_at'][:10]})")
+    for channel, figures in sorted(report["by_channel"].items()):
+        lines.append(f"  channel {channel}: clicks {figures['clicks']} {figures['campaigns']}")
     for book in report["books"]:
         clicks = sum(n for kinds in book["clicks_by_campaign"].values() for n in kinds.values())
         shelf = book["shelf"]["formats"] or "unknown"
         lines.append(f"  {book['slug']} [{book['campaign']['action']}]: clicks {clicks} | "
                      f"shelf {shelf} | published {len(book['publications'])} | "
+                     f"royalties {book['vs_baseline']['direction']} vs baseline | "
                      f"attribution {book['purchase_attribution']}")
         for campaign, kinds in sorted(book["clicks_by_campaign"].items()):
             lines.append(f"      {campaign}: {kinds}")

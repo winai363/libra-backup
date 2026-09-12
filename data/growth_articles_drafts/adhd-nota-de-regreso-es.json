@@ -1,0 +1,30 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "adhd-nota-de-regreso-es",
+  "language": "es",
+  "title": "La nota de regreso: cómo retomar una tarea después de una interrupción",
+  "description": "Lo caro de una interrupción no es el minuto que dura, es el cuarto de hora de volver a situarse. Una nota de tres líneas antes de levantarte resuelve casi todo.",
+  "link": "/libra/growth/articles/adhd-nota-de-regreso-es",
+  "image_url": "/libra/api/books/adhd-adults-workbook-es/cover",
+  "target_slug": "adhd-adults-workbook-es",
+  "campaign": "pin-adhd-es",
+  "cta_label": "Ver el cuaderno en Amazon",
+  "book_line": "Cuaderno de TDAH para adultos: plantillas y ejercicios que se leen en el Kindle y se copian a un cuaderno de papel o se imprimen.",
+  "pin_title": "La nota de regreso: cómo retomar una tarea después de una interrupción",
+  "body": "Te interrumpen dos minutos. Vuelves y pasan quince más antes de estar otra vez dentro de la tarea: abres archivos, relees lo que escribiste, intentas recordar qué ibas a hacer después. La interrupción costó dos minutos; el regreso costó quince.\n\nLa nota de regreso se escribe antes de levantarte, no después de volver. Tres líneas, en el mismo papel o al final del documento:\n\nPrimera línea: dónde estoy. \"Acabado el punto 2, sin revisar.\"\n\nSegunda línea: qué iba a hacer justo ahora. \"Escribir el punto 3 con los datos de la hoja de julio.\"\n\nTercera línea: qué tengo abierto. \"Hoja de julio, correo de la semana pasada.\"\n\nEs menos de un minuto. Lo importante es la segunda línea: la mayoría de nosotros cree que recordará la siguiente acción y lo que recuerda es el tema, no la acción. Recordar el tema deja el trabajo de decidir para cuando vuelves, que es precisamente el peor momento.\n\nFunciona también cuando la interrupción la provocas tú. Si te levantas a por agua, tres líneas. Si cambias de una tarea a otra porque la primera se atascó, tres líneas. Lo que protege el sistema no es la disciplina: es que la nota sea tan corta que no valga la pena saltársela.\n\nY sirve de un día para otro. Si dejas una tarea a medias un viernes, esa nota es el arranque del lunes, y el lunes no empieza con veinte minutos de arqueología.\n\nUn detalle: escribe la nota a mano si puedes. No porque el papel tenga magia, sino porque una nota a mano sigue visible cuando vuelves, y una nota en una pestaña se cierra con las demás.\n\nCuando estas tres líneas ya son un hábito, el siguiente problema suele ser decidir qué tarea merece la atención del día. Ahí ya hace falta un sistema un poco más grande, y conviene tenerlo escrito en algún sitio donde puedas volver a consultarlo.",
+  "qa_checklist": [
+    "Un lector nativo de español revisa el texto completo (no solo una herramienta)",
+    "Ninguna afirmación médica: nada de diagnóstico, tratamiento, ni promesa de mejora clínica",
+    "Cada consejo es practicable hoy, sin comprar nada y sin imprimir",
+    "El texto es original y escrito para esta página, no extraído del libro",
+    "El CTA describe el libro con honestidad: cuaderno en Kindle, plantillas que se copian a papel"
+  ],
+  "semantic_review": "Español neutro, registro de tú. 'Arqueología' usado como metáfora reconocible; no es modismo local.",
+  "flagged_uncertainty": [
+    "'a por agua' es España; en América Latina: 'por agua'. Un nativo debe corregirlo.",
+    "'atascó' (atascarse) — alternativa neutra: 'se trabó'."
+  ],
+  "claims_check": "Sin afirmaciones médicas. No se menciona diagnóstico, medicación ni resultados clínicos. El texto habla de organización cotidiana.",
+  "concept_rank": 7
+}

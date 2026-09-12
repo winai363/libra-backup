@@ -16,13 +16,29 @@
   "planned_window_days": 30,
   "channels": [
     {
-      "campaign": "organic-owner-post",
-      "what": "Bui posts the hub page link where the buyer already is (ADHD/productivity groups, accountant communities, bilingual-parent groups) — one post per book per week, no unsolicited DMs, no link drops in unrelated threads.",
-      "executed_by": "owner (manual)"
+      "channel": "pinterest-rss",
+      "campaigns": [
+        "pin-adhd-es",
+        "pin-bilingual-kids"
+      ],
+      "books": [
+        "adhd-adults-workbook-es",
+        "bilingual-english-spanish-kids-vocab"
+      ],
+      "how": "Pinterest fetches /libra/growth/feed.xml itself (native RSS auto-publish). No posting code, no API, no browser.",
+      "status": "closed — needs owner authorization in data/posting_authorization.json plus a claimed subpath",
+      "executed_by": "Pinterest, after one owner setup"
     },
     {
-      "campaign": "organic-pinterest",
-      "what": "Pinterest pins to the hub page. Four pins were posted manually on 2026-07-10 (see data/manual-task-state.json); this reuses that channel with tracked links.",
+      "channel": "owner-post",
+      "campaigns": [
+        "li-contab-pt"
+      ],
+      "books": [
+        "ai-workflows-accountants-pt"
+      ],
+      "how": "The owner posts the article link on his own LinkedIn, once a week. Brazilian accounting content lives on LinkedIn and vendor blogs, not on Pinterest.",
+      "status": "drafts ready (3 posts) — nothing is scheduled or automated",
       "executed_by": "owner (manual)"
     }
   ],
@@ -177,5 +193,48 @@
       "KDP Select status comes from listing.json records of June/July. Re-read the KDP page before any direct-sale decision."
     ]
   },
-  "zero_sales_note": "The 30 live books with no royalties are not called unmarketable: with no exposure data and no tracked traffic ever sent to them, nothing has been tested. Blocked and removed titles are not called irrecoverable either — no recovery route has been attempted or ruled out with evidence."
+  "zero_sales_note": "The 30 live books with no royalties are not called unmarketable: with no exposure data and no tracked traffic ever sent to them, nothing has been tested. Blocked and removed titles are not called irrecoverable either — no recovery route has been attempted or ruled out with evidence.",
+  "campaign_channels": {
+    "pin-adhd-es": "pinterest-rss",
+    "pin-bilingual-kids": "pinterest-rss",
+    "li-contab-pt": "owner-post",
+    "organic-pinterest": "pinterest-rss",
+    "organic-owner-post": "owner-post"
+  },
+  "content_pipeline": {
+    "drafts_dir": "data/growth_articles_drafts (not served, not in any feed)",
+    "published_dir": "data/growth_articles (served at /libra/growth/articles/<id>, feed-eligible)",
+    "approval_steps": [
+      "a human works through the article's qa_checklist",
+      "for ES/PT/bilingual text, a native or fluent reader resolves every item in flagged_uncertainty",
+      "set qa_approved true and published_at to a real date",
+      "move the file into data/growth_articles",
+      "stagger published_at one article per day so Pinterest (oldest first, within 24h) does not pin a batch"
+    ],
+    "first_three_per_book": {
+      "adhd-adults-workbook-es": [
+        "adhd-lista-dos-columnas-es",
+        "adhd-punto-de-aterrizaje-es",
+        "adhd-nota-de-regreso-es"
+      ],
+      "bilingual-english-spanish-kids-vocab": [
+        "bilingual-kitchen-word-walk",
+        "bilingual-child-refuses-to-speak",
+        "bilingual-same-story-two-languages"
+      ],
+      "ai-workflows-accountants-pt": [
+        "contabil-o-que-nunca-colar-na-ia",
+        "contabil-tres-roteiros-conciliacao",
+        "contabil-ia-inventa-base-legal"
+      ]
+    },
+    "backlog_doc": "docs/organic-content-backlog-2026-09-12.md"
+  },
+  "verdicts": [
+    "CONTINUE",
+    "ITERATE",
+    "INCONCLUSIVE",
+    "STOP-CHANNEL"
+  ],
+  "verdict_rule": "No verdict retires a book. STOP-CHANNEL ends a channel; ITERATE changes content or surface; a day-14 zero is a distribution and tracking diagnosis."
 }

@@ -1,0 +1,30 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "bilingual-child-refuses-to-speak",
+  "language": "en",
+  "title": "When your child answers in the other language: four things to say instead of pushing",
+  "description": "A child who understands everything and answers in the other language has not stopped learning. Four responses that keep the conversation going instead of ending it.",
+  "link": "/libra/growth/articles/bilingual-child-refuses-to-speak",
+  "image_url": "/libra/api/books/bilingual-english-spanish-kids-vocab/cover",
+  "target_slug": "bilingual-english-spanish-kids-vocab",
+  "campaign": "pin-bilingual-kids",
+  "cta_label": "See the book on Amazon",
+  "book_line": "Bilingual English-Spanish vocabulary book for kids: themed word lists and simple activities, read on a Kindle, copied into a notebook when you want them on paper.",
+  "pin_title": "When your child answers in the other language: four things to say instead of pushing",
+  "body": "It happens around the age when school takes over: you speak in one language, your child answers in the other. Understanding is intact. Output has moved.\n\nPushing harder is the reflex, and it is the one thing that reliably backfires: the child learns that the minority language comes with a correction attached.\n\nFour things to say instead.\n\nRepeat, do not correct. The child says \"I want water\"; you answer \"¿quieres agua? Toma.\" They heard the sentence they could have said, without being told they were wrong. This is the one that does most of the work.\n\nAsk a question that cannot be answered with yes or no. \"¿Cuál quieres, el rojo o el azul?\" A forced choice gets a word out, and the word is in the language you offered.\n\nGive the word, then move on. If they stall looking for a word, say it and keep going. Holding the conversation hostage until the right word appears is what teaches children that speaking is expensive.\n\nName the moment, once. \"En casa lo intentamos en español, y si no sale, seguimos igual.\" One sentence, said calmly, once a month. Not a rule recited at every meal.\n\nTwo more things that help, neither of them a conversation. First, make the language useful: one activity the child likes that only happens in it — a call with a grandparent, a cartoon, a game. Usefulness beats encouragement. Second, keep the sessions short and physical; a child naming twelve objects they can touch is doing more than a child sitting through a worksheet.\n\nWhat not to do: do not pretend you did not understand. Children read that instantly, and it turns the language into a negotiation.\n\nIf you want a ready list of words and short activities to use in those ten-minute moments, that is what a themed vocabulary book gives you — read on a screen, copied onto paper when you want it on the fridge.",
+  "qa_checklist": [
+    "A bilingual (EN/ES) reader checks both languages, not a tool",
+    "No claims about fluency, test scores or developmental outcomes",
+    "Every activity works with what is already in the house: no printer, no purchase",
+    "Original text written for this page, not lifted from the book",
+    "CTA is honest: a Kindle vocabulary book read on a screen, lists copied into a notebook"
+  ],
+  "semantic_review": "English body with Spanish parent-scripts quoted inline, which is how the buyer actually speaks. Scripts are short, grammatical and neutral Spanish.",
+  "flagged_uncertainty": [
+    "'En casa lo intentamos en español, y si no sale, seguimos igual.' — natural but worth a native check for tone; it must sound calm, not disappointed.",
+    "The article addresses Spanish-as-minority-language households; Spanish-dominant households building English need the mirrored version before we claim the topic is covered."
+  ],
+  "claims_check": "No outcome promises. The text says what to do and how long it takes; it does not claim fluency, school results or cognitive benefits.",
+  "concept_rank": 7
+}

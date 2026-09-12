@@ -1,0 +1,29 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "bilingual-kitchen-word-walk",
+  "language": "en",
+  "title": "The ten-minute kitchen word walk: twelve bilingual words, no printer",
+  "description": "A ten-minute bilingual vocabulary routine that uses the objects already on your counter. Twelve words, one room, nothing to print and nothing to buy.",
+  "link": "/libra/growth/articles/bilingual-kitchen-word-walk",
+  "image_url": "/libra/api/books/bilingual-english-spanish-kids-vocab/cover",
+  "target_slug": "bilingual-english-spanish-kids-vocab",
+  "campaign": "pin-bilingual-kids",
+  "cta_label": "See the book on Amazon",
+  "book_line": "Bilingual English-Spanish vocabulary book for kids: themed word lists and simple activities, read on a Kindle, copied into a notebook when you want them on paper.",
+  "pin_title": "The ten-minute kitchen word walk: twelve bilingual words, no printer",
+  "body": "Most bilingual activity ideas start with a download. You find the worksheet, you realise the printer is out of ink, and the activity never happens. The kitchen fixes that: it is full of objects a child can touch, and touching is what makes a word stick.\n\nHere is the routine. It takes ten minutes and you do it standing up.\n\nPick one shelf or one drawer. Not the whole kitchen — one shelf. Twelve objects is plenty for a session.\n\nWalk along it with your child and name each object in the language you are building, then in the other one: \"la cuchara — the spoon\". Let them repeat only if they want to. Pressure is what ends these sessions early.\n\nGo round a second time, but this time you say the word and they point. Pointing is easier than speaking, and it shows you what landed without turning the game into a test.\n\nThird round, swap roles: they say a word, you point. Children correct adults with great enthusiasm, and a child correcting you is a child using the language.\n\nStop while it is still fun. Ten minutes, twelve words, done. If you stop at the first sign of boredom, tomorrow's session starts from a good memory.\n\nThe next day, use five of the same words in a real sentence during dinner: \"pass me la cuchara, please\". Recycling beats a new list. A word used at the table three days in a row does more than thirty words named once.\n\nTwo things to avoid. Do not translate every sentence you say all day — it teaches the child to wait for the translation. And do not keep score: a child who senses a test stops guessing, and guessing is how vocabulary grows.\n\nIf you want the themed lists ready-made — kitchen, bathroom, school bag, weather — with the activities written next to them, that is what a vocabulary book is for. You read it on a screen and copy the week's twelve words onto paper.",
+  "qa_checklist": [
+    "A bilingual (EN/ES) reader checks both languages, not a tool",
+    "No claims about fluency, test scores or developmental outcomes",
+    "Every activity works with what is already in the house: no printer, no purchase",
+    "Original text written for this page, not lifted from the book",
+    "CTA is honest: a Kindle vocabulary book read on a screen, lists copied into a notebook"
+  ],
+  "semantic_review": "Written for an English-dominant parent raising a Spanish-learning child, which matches the book's English-first structure. Spanish fragments kept to single words inside English sentences.",
+  "flagged_uncertainty": [
+    "'la cuchara — the spoon' order assumes Spanish is the target language; half the book's buyers may be Spanish-dominant parents building English. A bilingual reviewer should confirm the framing or we publish a mirrored version."
+  ],
+  "claims_check": "No outcome promises. The text says what to do and how long it takes; it does not claim fluency, school results or cognitive benefits.",
+  "concept_rank": 1
+}

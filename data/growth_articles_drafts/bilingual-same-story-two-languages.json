@@ -1,0 +1,29 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "bilingual-same-story-two-languages",
+  "language": "en",
+  "title": "One story, two languages: the bedtime routine that does not add a minute",
+  "description": "You already read a bedtime story. Alternating languages page by page turns it into vocabulary practice without making bedtime longer or buying a second book.",
+  "link": "/libra/growth/articles/bilingual-same-story-two-languages",
+  "image_url": "/libra/api/books/bilingual-english-spanish-kids-vocab/cover",
+  "target_slug": "bilingual-english-spanish-kids-vocab",
+  "campaign": "pin-bilingual-kids",
+  "cta_label": "See the book on Amazon",
+  "book_line": "Bilingual English-Spanish vocabulary book for kids: themed word lists and simple activities, read on a Kindle, copied into a notebook when you want them on paper.",
+  "pin_title": "One story, two languages: the bedtime routine that does not add a minute",
+  "body": "Bedtime is the one routine most households already protect. That makes it the cheapest place to add language practice: you are not adding a slot, you are using one that exists.\n\nThe method is simple enough to start tonight with the book already on the shelf.\n\nRead the left page in one language and the right page in the other. The pictures carry the meaning across, so a child who missed a word on the Spanish page picks it up from the English page without anyone explaining.\n\nKeep the same book for a week. Repetition is the point: on night four, your child will say the next line before you do, and saying it is the part that builds vocabulary.\n\nPick three words per book, not thirty. Write them somewhere visible — a sticky note on the fridge — and use them during the day. A word that only lives in a book stays in the book.\n\nIf the book only exists in one language, translate on the fly and do not apologise for it. A rough sentence said warmly is worth more than a perfect one read stiffly.\n\nWhen your child asks \"what does that mean?\", answer and keep reading. Stopping to explain three times a page turns the story into a lesson, and the lesson is what they will remember resisting.\n\nOne variation for older children: they read one page aloud, you read the next. Swapping removes the feeling of being tested, because you are doing the same task they are.\n\nAnd one thing to skip: do not make bedtime the only time the language appears. A single protected routine plus two or three words reused during the day is a far more stable pattern than one long session on Sunday.\n\nThemed word lists make the \"three words a week\" part easy, because choosing is the step most people quietly drop. That is what a vocabulary book is for: the words are grouped, the activities are next to them, and you copy the week's list onto the fridge.",
+  "qa_checklist": [
+    "A bilingual (EN/ES) reader checks both languages, not a tool",
+    "No claims about fluency, test scores or developmental outcomes",
+    "Every activity works with what is already in the house: no printer, no purchase",
+    "Original text written for this page, not lifted from the book",
+    "CTA is honest: a Kindle vocabulary book read on a screen, lists copied into a notebook"
+  ],
+  "semantic_review": "English body, no Spanish required inside. Keeps the advice honest about bilingual picture books that do not exist in both languages.",
+  "flagged_uncertainty": [
+    "Claim 'the pictures carry the meaning across' is an ordinary observation about picture books, not a research claim; a reviewer should confirm it does not read as a learning-science promise."
+  ],
+  "claims_check": "No outcome promises. The text says what to do and how long it takes; it does not claim fluency, school results or cognitive benefits.",
+  "concept_rank": 6
+}

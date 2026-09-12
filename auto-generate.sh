@@ -6,6 +6,22 @@
 export PATH="/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export HOME="/root"
 
+# New-book gate: autonomous production is off until the existing catalogue shows
+# it can acquire readers. Checked before anything is generated or any API is hit.
+if ! python3 -c "
+import sys
+sys.path.insert(0, '/root/libra')
+from new_book_gate import NewBookGateClosed, assert_new_book_allowed
+try:
+    assert_new_book_allowed()
+except NewBookGateClosed as exc:
+    print(f'new_book_gate_closed: {exc}', file=sys.stderr)
+    raise SystemExit(73)
+"; then
+  echo "[$(date +%F' '%T)] refused: new-book gate closed (data/new_book_gate.json)" >&2
+  exit 73
+fi
+
 LOG_DIR="/root/kdp/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/$(date +%Y-%m-%d).log"

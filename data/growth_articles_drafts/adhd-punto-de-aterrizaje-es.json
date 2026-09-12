@@ -1,0 +1,30 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "adhd-punto-de-aterrizaje-es",
+  "language": "es",
+  "title": "El punto de aterrizaje: dejar de perder las llaves sin recordar nada",
+  "description": "Perder las llaves no se arregla con memoria: se arregla con un sitio fijo a un paso de la puerta. Cómo montarlo hoy con una caja que ya tienes en casa.",
+  "link": "/libra/growth/articles/adhd-punto-de-aterrizaje-es",
+  "image_url": "/libra/api/books/adhd-adults-workbook-es/cover",
+  "target_slug": "adhd-adults-workbook-es",
+  "campaign": "pin-adhd-es",
+  "cta_label": "Ver el cuaderno en Amazon",
+  "book_line": "Cuaderno de TDAH para adultos: plantillas y ejercicios que se leen en el Kindle y se copian a un cuaderno de papel o se imprimen.",
+  "pin_title": "El punto de aterrizaje: dejar de perder las llaves sin recordar nada",
+  "body": "Buscar las llaves cinco minutos antes de salir no es un problema de memoria. Es un problema de decisiones repetidas: cada vez que entras en casa decides, sin darte cuenta, dónde las dejas. Y una decisión tomada con las manos ocupadas y la cabeza en otra parte sale distinta cada día.\n\nEl punto de aterrizaje elimina la decisión. Es un sitio único, a un paso de la puerta, donde aterriza todo lo que llevas encima al entrar: llaves, cartera, tarjeta de transporte, el sobre que te dieron.\n\nCómo montarlo en diez minutos:\n\nElige el recipiente más aburrido que tengas. Una caja de zapatos, una bandeja, un bol grande. Si tiene tapa, quítala: una tapa es un paso más y los pasos extra son lo que mata el sistema.\n\nPonlo donde ya sueltas las cosas. No donde quedaría bonito. Si tus llaves llevan dos años cayendo en la mesa de la entrada, el punto de aterrizaje va en esa mesa.\n\nNada más vive ahí. En el momento en que el bol se convierte en el sitio donde también van el correo, los cargadores y las monedas, deja de funcionar, porque tendrás que buscar dentro.\n\nUna sola regla, en voz alta, los primeros días: \"al entrar, las manos van al bol\". Decirlo funciona mejor que intentar acordarse, porque lo que falla no es la intención, es el automatismo.\n\nLo que no hay que hacer: montar cinco puntos de aterrizaje por la casa. Un sistema con cinco sitios posibles es otra vez una decisión.\n\nSi compartes casa, avisa de que ese bol es intocable. La mayoría de los fallos vienen de que alguien \"ordenó\" el bol con buena intención.\n\nDos semanas después ya no lo piensas. Y el tiempo que recuperas no es el de buscar las llaves: es el de salir de casa sin empezar el día enfadado.\n\nEste tipo de sistemas funcionan mejor por escrito y de uno en uno. Montar tres a la vez es la forma más rápida de no mantener ninguno.",
+  "qa_checklist": [
+    "Un lector nativo de español revisa el texto completo (no solo una herramienta)",
+    "Ninguna afirmación médica: nada de diagnóstico, tratamiento, ni promesa de mejora clínica",
+    "Cada consejo es practicable hoy, sin comprar nada y sin imprimir",
+    "El texto es original y escrito para esta página, no extraído del libro",
+    "El CTA describe el libro con honestidad: cuaderno en Kindle, plantillas que se copian a papel"
+  ],
+  "semantic_review": "Español neutro. Evitado 'recibidor' (muy de España) en favor de 'la entrada'. Imperativos en tú.",
+  "flagged_uncertainty": [
+    "'bol' se entiende en España; en México/Argentina suele ser 'bowl' o 'recipiente'. Un nativo debe elegir.",
+    "'tarjeta de transporte' puede no ser universal; alternativa: 'el abono del transporte' o quitarlo."
+  ],
+  "claims_check": "Sin afirmaciones médicas. No se menciona diagnóstico, medicación ni resultados clínicos. El texto habla de organización cotidiana.",
+  "concept_rank": 3
+}

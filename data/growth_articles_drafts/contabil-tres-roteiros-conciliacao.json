@@ -1,0 +1,33 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "contabil-tres-roteiros-conciliacao",
+  "language": "pt",
+  "title": "Três roteiros de IA para olhar um conjunto de lançamentos sem expor o cliente",
+  "description": "Três pedidos prontos para usar com cinco linhas descaracterizadas de lançamentos: achar o que está fora do padrão, agrupar por natureza e listar o que falta conferir.",
+  "link": "/libra/growth/articles/contabil-tres-roteiros-conciliacao",
+  "image_url": "/libra/api/books/ai-workflows-accountants-pt/cover",
+  "target_slug": "ai-workflows-accountants-pt",
+  "campaign": "li-contab-pt",
+  "cta_label": "Ver o e-book na Amazon",
+  "book_line": "E-book Kindle sobre fluxos de trabalho com IA para escritórios contábeis: roteiros prontos, checklists e o que conferir antes de enviar ao cliente.",
+  "pin_title": "Três roteiros de IA para olhar um conjunto de lançamentos sem expor o cliente",
+  "body": "Um escritório pequeno não precisa de um projeto de automação para começar. Precisa de três pedidos que funcionem sempre, aplicados a um recorte pequeno de dados já descaracterizado.\n\nAntes dos roteiros, a regra: cole de cinco a vinte linhas, só data, valor e descrição. Sem conta, sem nome, sem CPF.\n\nRoteiro 1 — o que está fora do padrão. \"Abaixo há vinte lançamentos de um mesmo mês, com data, valor e descrição. Aponte os que parecem fora do padrão do conjunto e explique em uma linha por que cada um chamou atenção. Não invente informação que não está nas linhas.\"\n\nO valor aqui não é a IA acertar; é a lista curta do que merece seu olho primeiro.\n\nRoteiro 2 — agrupar por natureza. \"Agrupe estes lançamentos por natureza de despesa usando apenas as descrições. Para cada grupo, diga quantas linhas entraram. Se uma descrição for ambígua, coloque em 'indefinido' em vez de escolher.\"\n\nA instrução sobre 'indefinido' é a parte importante: sem ela, o modelo força um grupo e você perde justo os casos que precisavam de decisão humana.\n\nRoteiro 3 — o que falta conferir. \"Com base nestas linhas, liste o que um contador deveria conferir antes de fechar o mês. Pergunte em vez de concluir quando faltar informação.\"\n\nEsse é o roteiro que a equipe júnior usa melhor, porque produz perguntas em vez de respostas.\n\nDepois de rodar os três, duas conferências obrigatórias: confira os valores contra a fonte — modelos erram aritmética e copiam número errado com muita convicção — e descarte qualquer base legal que a resposta citar sem você verificar.\n\nUma medição simples, para não ficar na sensação: marque numa planilha o tempo da tarefa antes e depois, por três semanas. Se não mudou, o problema é o roteiro, não a equipe.\n\nNo e-book cada roteiro vem com a versão descaracterizada do pedido, o que conferir e onde o erro costuma aparecer.",
+  "qa_checklist": [
+    "Um leitor nativo de português do Brasil revisa o texto (não apenas uma ferramenta)",
+    "Nenhuma orientação tributária ou contábil específica: o texto trata de fluxo de trabalho, e a conferência humana é obrigatória em cada exemplo",
+    "Nenhuma menção a fornecedor, ERP ou produto de software",
+    "Nenhum dado de cliente real aparece em exemplo algum",
+    "Texto original escrito para esta página, não extraído do livro",
+    "O CTA descreve o livro com honestidade: e-book Kindle lido na tela"
+  ],
+  "semantic_review": "Português do Brasil. Os roteiros estão em linguagem de comando, como o leitor vai colar. Evitei nomes de ferramentas e qualquer promessa de percentual de economia.",
+  "flagged_uncertainty": [
+    "'natureza de despesa' é o termo usual no Brasil, mas um contador nativo deve confirmar se é o vocabulário que ele usaria no plano de contas.",
+    "'fora do padrão' foi escolhido em vez de 'inconsistência' para não sugerir achado de auditoria."
+  ],
+  "claims_check": "Sem promessa de economia garantida, sem orientação tributária e sem indicação de fornecedor. Todo exemplo termina em conferência humana.",
+  "concept_rank": 1,
+  "linkedin_post_draft": "Três pedidos de IA que um escritório pequeno usa sem projeto de automação nenhum: achar o que está fora do padrão, agrupar por natureza e listar o que falta conferir.\n\nTodos rodam em cinco a vinte linhas descaracterizadas, e todos terminam em conferência humana — inclusive a aritmética, que é onde o modelo erra com mais convicção.\n\nOs três roteiros, prontos para colar:",
+  "linkedin_post_rules": "Publicado pelo próprio dono, uma vez por semana, no perfil dele. Sem hashtag spam (no máximo 3), sem tag de pessoas que não pediram, sem DM não solicitada. O link vai no primeiro comentário ou no corpo — decisão do dono."
+}

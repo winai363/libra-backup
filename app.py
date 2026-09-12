@@ -18,6 +18,7 @@ from business_ledger import record_hub_event
 from kdp_freeze import KDPFrozenError, assert_kdp_mutation_allowed, freeze_state
 from settings import CommerceConfigError, CommerceSettings, load_env_file
 import posting_authorization
+from new_book_gate import NewBookGateClosed, assert_new_book_allowed
 from growth_feed import build_rss, load_entries
 from content_hub import (
     TrackingConfigError,
@@ -794,6 +795,13 @@ async def update_status(slug: str, request: Request):
 async def create_book(request: Request):
     """Create a new book entry. Called by Tim/skills after generating an ebook."""
     check_auth(request)
+    # Autonomous new-book production is off until the catalogue proves it can
+    # acquire readers. This refuses the registration of a new title, which is the
+    # last cheap place to stop the work.
+    try:
+        assert_new_book_allowed()
+    except NewBookGateClosed as exc:
+        raise HTTPException(status_code=423, detail=str(exc))
     body = await request.json()
     slug = body.get("slug")
     if not slug:
@@ -1331,6 +1339,25 @@ def _live_book_asin(slug):
     return listing, asin
 
 
+def _book_offer(slug: str) -> dict:
+    """What the reader is about to click, read from the last bookshelf scrape:
+    format and price as KDP showed them. Unknown values are left out rather than
+    guessed — a wrong price on the page is worse than no price."""
+    try:
+        roster = json.loads((KDP_DIR / "bookshelf-roster.json").read_text())
+        entries = [e for e in roster.get("entries", [])
+                   if e.get("slug") == slug and e.get("status") == "LIVE"]
+    except (OSError, json.JSONDecodeError, AttributeError):
+        entries = []
+    ebook = next((e for e in entries if e.get("format") == "ebook"), None)
+    if not ebook:
+        return {"format_line": ""}
+    price, currency = ebook.get("price"), ebook.get("currency") or "USD"
+    if price:
+        return {"format_line": f"Kindle ebook · {price:.2f} {currency} · Amazon"}
+    return {"format_line": "Kindle ebook · Amazon"}
+
+
 def _hub_cta_path(slug: str, campaign: str, destination: str) -> str:
     return f"/growth/out/{make_tracking_token(slug, campaign, destination)}"
 
@@ -1355,6 +1382,20 @@ def _declared_campaigns() -> set:
     if not isinstance(names, list):
         return set()
     return {n for n in names if isinstance(n, str) and _SLUG_ID_RE.fullmatch(n)}
+
+
+def _campaigns_for_channel(channel: str) -> set:
+    """Declared campaigns that belong to one channel, from the campaign→channel map
+    in data/growth_campaigns.json. Unmapped campaigns belong to no channel, so a
+    feed never picks them up by accident."""
+    try:
+        declared = json.loads(GROWTH_CAMPAIGNS_FILE.read_text())
+    except (OSError, json.JSONDecodeError):
+        return set()
+    mapping = declared.get("channels") if isinstance(declared, dict) else None
+    if not isinstance(mapping, dict):
+        return set()
+    return {name for name, value in mapping.items() if value == channel}
 
 
 def _hub_campaign(requested) -> str:
@@ -1404,19 +1445,36 @@ async def growth_article_hub_page(article_id: str):
     except (OSError, json.JSONDecodeError):
         return HTMLResponse("<h1>Article not found</h1>", status_code=404)
 
+    # An article is published only once a human approved it. A file dropped into
+    # the directory is not a publication decision.
+    if article.get("qa_approved") is not True:
+        return HTMLResponse("<h1>Article not found</h1>", status_code=404)
+
     target_slug = article.get("target_slug")
     result = _live_book_asin(target_slug)
     if result is None:
         return HTMLResponse("<h1>Article not found</h1>", status_code=404)
-    _, asin = result
+    listing, asin = result
     destination = f"https://www.amazon.com/dp/{asin}"
-    campaign = article.get("campaign") or GROWTH_HUB_CAMPAIGN
+    # Campaign names go through the same declared-campaign check as ?c= — an
+    # article file may not invent a label in our own click data either.
+    campaign = _hub_campaign(article.get("campaign"))
     try:
         cta_path = _hub_cta_path(target_slug, campaign, destination)
     except TrackingConfigError:
         raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")
+    cover_url = f"{GROWTH_SITE_BASE}/libra/api/books/{target_slug}/cover"
+    canonical = f"{GROWTH_SITE_BASE}/libra/growth/articles/{article_id}"
     html_path = Path(__file__).parent / "templates" / "hub_article.html"
     page = render_hub_page(html_path.read_text(), {
+        "LANG": escape_text(article.get("language") or "en"),
+        "SUMMARY": escape_text(article.get("description", "")),
+        "CANONICAL": escape_text(canonical),
+        "OG_IMAGE": escape_text(cover_url),
+        "BOOK_COVER": escape_text(cover_url),
+        "BOOK_TITLE": escape_text(listing.get("title", target_slug)),
+        "BOOK_LINE": escape_text(article.get("book_line", "")),
+        "BOOK_FORMAT": escape_text(_book_offer(target_slug)["format_line"]),
         "TITLE": escape_text(article.get("title", article_id)),
         "BODY": paragraphs_html(article.get("body", "")),
         "CTA_URL": escape_text(cta_path),
@@ -1463,7 +1521,8 @@ async def growth_feed(request: Request):
     if not posting_authorization.channel_authorized("pinterest-rss"):
         return Response("Not found", status_code=404, media_type="text/plain")
     xml, report = build_rss(load_entries(GROWTH_ARTICLES_DIR), site_base=GROWTH_SITE_BASE,
-                            feed_path=GROWTH_FEED_PATH)
+                            feed_path=GROWTH_FEED_PATH,
+                            allowed_campaigns=_campaigns_for_channel("pinterest-rss"))
     if report["rejected"]:
         logger.warning("growth feed skipped %d entr(y/ies): %s",
                        len(report["rejected"]), report["rejected"])

@@ -123,14 +123,23 @@ def load_entries(directory: Path) -> list:
 
 
 def select_entries(entries: list, *, site_base: str, now: datetime,
-                   max_items: int = DEFAULT_MAX_ITEMS) -> tuple:
+                   max_items: int = DEFAULT_MAX_ITEMS,
+                   allowed_campaigns=None) -> tuple:
     """(kept, rejected) — the newest `max_items` valid entries, ordered oldest
-    first because Pinterest publishes a feed's oldest content first."""
+    first because Pinterest publishes a feed's oldest content first.
+
+    `allowed_campaigns` keeps one channel's feed to that channel's articles: a
+    LinkedIn article must not become a Pin just because it was approved."""
     if max_items > MAX_ITEMS_HARD:
         raise ValueError(f"max_items {max_items} above the hard cap {MAX_ITEMS_HARD}")
     kept, rejected = [], []
     for entry in entries:
         try:
+            if allowed_campaigns is not None:
+                campaign = (entry or {}).get("campaign") if isinstance(entry, dict) else None
+                if campaign not in set(allowed_campaigns):
+                    raise FeedEntryRejected(
+                        f"campaign {campaign!r} does not belong to this feed's channel")
             kept.append(validate_entry(entry, site_base=site_base, now=now))
         except FeedEntryRejected as error:
             rejected.append({"id": str(entry.get("id") if isinstance(entry, dict) else entry),
@@ -144,11 +153,12 @@ def build_rss(entries: list, *, site_base: str, feed_path: str = "/libra/growth/
               channel_description: str = "Short practical guides from our books, "
                                          "with a link to the book they came from.",
               language: str = "en", now: datetime | None = None,
-              max_items: int = DEFAULT_MAX_ITEMS) -> tuple:
+              max_items: int = DEFAULT_MAX_ITEMS, allowed_campaigns=None) -> tuple:
     """(xml, report). Entries are validated here, so an invalid entry can never
     reach the served feed."""
     now = now or datetime.now(timezone.utc)
-    kept, rejected = select_entries(entries, site_base=site_base, now=now, max_items=max_items)
+    kept, rejected = select_entries(entries, site_base=site_base, now=now, max_items=max_items,
+                                    allowed_campaigns=allowed_campaigns)
 
     items = []
     for entry in kept:

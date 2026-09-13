@@ -1,0 +1,53 @@
+{
+  "checked_at": "2026-09-13T09:00:00+07:00",
+  "checked_by": "claude",
+  "scope": "Read-only re-verification of the three KDP category-removal incidents. Nothing written to KDP.",
+  "sources": {
+    "kdp_bookshelf_roster": "/root/kdp/bookshelf-roster.json fetched_at 2026-09-13T08:45:18 (LIVE 42, BLOCKED 3)",
+    "amazon_public_pages": "GET amazon.it and amazon.de /dp/<ASIN> 2026-09-13 ~09:00 +07 (amazon.com returned a bot page without product data)",
+    "incident_registry": "data/kdp_metadata_incidents.json (source: KDP category quality email, noticed 2026-07-22)",
+    "category_tree": "data/kdp_category_tree.json fetched_at 2026-06-27",
+    "royalties": "data/libra-business.db kdp_title_attribution + /root/kdp/sales-sync-state.json"
+  },
+  "findings": [
+    {
+      "asin": "B0H5C6PCBL",
+      "slug": "ai-workflows-italian-real-estate",
+      "removed_category": "AI & Semantics",
+      "roster_status": "LIVE",
+      "amazon_public": "200 on amazon.it and amazon.de, buy/Kindle Unlimited present, no unavailable marker",
+      "leaf_still_in_kdp_tree": "Computers & Technology > Computer Science > Artificial Intelligence > AI & Semantics",
+      "local_listing_categories_contain_removed_leaf": false,
+      "classification": "KDP_REVIEW_ACTION",
+      "new_since_2026-07-22": false,
+      "royalties": "Aug 2026 $0.21 / 59 KENP; none attributed in Sep to date"
+    },
+    {
+      "asin": "B0H6H2D17K",
+      "slug": "adhd-workbook-german-adults",
+      "removed_category": "Career Counseling eBooks",
+      "roster_status": "BLOCKED",
+      "amazon_public": "404 on amazon.it and amazon.de",
+      "leaf_still_in_kdp_tree": "Health, Fitness & Dieting > Counseling & Psychology > Counseling > Career Counseling",
+      "local_listing_categories_contain_removed_leaf": false,
+      "classification": "KDP_REVIEW_ACTION",
+      "new_since_2026-07-22": false,
+      "note": "Not LIVE since the KDP block of 2026-08-02 (already escalated; owner rule: no appeal, no republish). The category removal is not the cause.",
+      "royalties": "no attributed royalties or KENP in any snapshot"
+    },
+    {
+      "asin": "B0H4KT12GV",
+      "slug": "ai-augmented-productivity-toolkit",
+      "removed_category": "Business Intelligence Software",
+      "roster_status": "LIVE",
+      "amazon_public": "200 on amazon.it and amazon.de, buy/Kindle Unlimited present, no unavailable marker",
+      "leaf_still_in_kdp_tree": "Computers & Technology > Applications & Software > Business > Business Intelligence Tools",
+      "local_listing_categories_contain_removed_leaf": false,
+      "classification": "KDP_REVIEW_ACTION",
+      "new_since_2026-07-22": false,
+      "royalties": "Jul 2026 $1.96 / 25 orders (free-promo downloads); none since"
+    }
+  ],
+  "observed_state_update": "None. No new KDP category observation exists after the 2026-07-22 notice; LIVE status was confirmed by two independent sources but category placement could not be re-observed, so incidents stay unresolved and unchanged.",
+  "alert_dedup": "category_health_manager.maybe_notify re-sent the unchanged incident list whenever the unrelated warning_count moved; signature no longer includes warning_count."
+}

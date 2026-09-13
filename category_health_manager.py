@@ -299,17 +299,20 @@ def maybe_notify(report: dict, force: bool = False) -> None:
             previous = json.loads(STATE_FILE.read_text(encoding="utf-8"))
         except Exception:
             previous = {}
+    # warning_count is left out: warnings are not in the message, and counting them
+    # re-sent the same unchanged KDP notices every time an unrelated warning moved.
     signature = {
         "status": report["status"],
         "blocker_count": report["blocker_count"],
-        "warning_count": report["warning_count"],
-        "blockers": sorted((b["slug"], b["kind"], b.get("category", "")) for b in report["blockers"]),
+        "blockers": sorted([b["slug"], b["kind"], b.get("category", "")] for b in report["blockers"]),
         "metadata_incidents": sorted(
-            (item.get("asin", ""), item.get("category", ""), item.get("noticed_at", ""))
+            [item.get("asin", ""), item.get("category", ""), item.get("noticed_at", "")]
             for item in report["metadata_incidents"]
         ),
     }
-    changed = previous.get("signature") != signature
+    previous_signature = dict(previous.get("signature") or {})
+    previous_signature.pop("warning_count", None)
+    changed = previous_signature != signature
     STATE_FILE.write_text(json.dumps({"signature": signature, "updated_at": report["checked_at"]}, indent=2), encoding="utf-8")
     if not (force or changed):
         return

@@ -794,3 +794,10 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - ตรวจจริง: `--status` → routine 11/11 · owner_executed [] · lanes_on_hold ["owner-post"] · day_zero 2026-09-12T13:45:50+07 · `approve-next --lane owner-post` ปฏิเสธด้วยเหตุผล hold
 - เทสต์รวม 1274 ผ่าน 8 skip (เพิ่ม 5 ตัว: lane hold, day30 CONTINUE/ITERATE/INCONCLUSIVE, status)
 - ⛔ ไม่เพิ่ม browser automation / Pinterest API / OAuth / LinkedIn / KDP automation และไม่สร้างเครื่องผลิตคอนเทนต์ก่อน day 30
+
+## 2026-09-13 — สืบแจ้งเตือน "หมวดถูกถอด" 3 ASIN (อ่านอย่างเดียว ไม่แตะ KDP)
+- ไม่ใช่ drift ใหม่: ทั้ง 3 รายการคือ KDP category quality notice 22 ก.ค. (`data/kdp_metadata_incidents.json`) = KDP_REVIEW_ACTION · หมวดทั้งสามยังอยู่ใน KDP tree (ไม่ใช่ taxonomy change) · listing.json ไม่มีหมวดที่ถูกถอด
+- สาเหตุที่เตือนซ้ำ: `maybe_notify` สร้าง signature เป็น tuple แต่ state อ่านกลับจาก JSON เป็น list ⇒ ไม่เคยเท่ากัน ⇒ ส่งซ้ำทุกรอบ + `warning_count` ขยับก็ส่งซ้ำ · แก้ commit 372c175 (list + ตัด warning_count + strip ของ state เก่า) · เทสต์ 3 ตัว · จำลองกับ state จริง = 0 แจ้งเตือน
+- สถานะ: B0H5C6PCBL / B0H4KT12GV LIVE (roster 13ก.ย. 08:45 + amazon.it/.de 200 มี KU) · B0H6H2D17K BLOCKED ตั้งแต่ 2 ส.ค. (404) — ไม่ใช่เรื่องใหม่ ไม่เกี่ยวกับหมวด · ทั้งสามไม่อยู่ในการทดลอง organic
+- incident คง `resolved:false` — อ่านตำแหน่งหมวดจริงจาก KDP ไม่ได้ จึงไม่ปรับ observed state · หลักฐาน `data/metadata_drift_checks/2026-09-13.json`
+- เทสต์รวม 1276 ผ่าน 1 ล้ม: `test_organic_activation_plan::test_anything_already_served...` เทียบ ISO string ต่าง timezone แบบข้อความ (บทความ 09:00+07 จาก cron อนุมัติวันนี้) = บั๊กของเทสต์ ไม่ใช่บทความอนาคต · ไม่ได้แก้ (นอกขอบเขต)

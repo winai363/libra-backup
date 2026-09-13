@@ -203,4 +203,5 @@ def test_anything_already_served_is_approved_and_belongs_to_a_declared_campaign(
         article = json.loads(file.read_text())
         assert article.get("qa_approved") is True, file.name
         assert article.get("campaign") in CAMPAIGNS["campaigns"], file.name
-        assert str(article.get("published_at") or "") <= datetime.now(timezone.utc).isoformat(), file.name
+        if article.get("published_at"):
+            assert datetime.fromisoformat(article["published_at"]) <= datetime.now(timezone.utc), file.name

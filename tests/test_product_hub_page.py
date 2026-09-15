@@ -107,6 +107,21 @@ def test_sample_pdf_is_public_when_the_book_has_one(world):
     assert response.content == pdf
 
 
+def test_rendered_sample_link_carries_the_libra_mount_and_serves_the_pdf(world):
+    """Regression (15 Sep 2026): the link was /growth/products/<slug>/sample.pdf,
+    which 404s on the public domain because nginx serves this app under /libra/."""
+    pdf = _write_sample(libra_app.KDP_DIR)
+    client = TestClient(libra_app.app)
+    page = client.get("/growth/products/aquarelle-botanique-debutants-fr").text
+
+    assert 'href="/growth/' not in page
+    href = "/libra/growth/products/aquarelle-botanique-debutants-fr/sample.pdf"
+    assert f'href="{href}"' in page
+    # TestClient serves the app without nginx's /libra mount.
+    response = client.get(href.removeprefix("/libra"))
+    assert response.status_code == 200 and response.content == pdf
+
+
 def test_missing_sample_file_is_404(world):
     client = TestClient(libra_app.app)
     assert client.get(

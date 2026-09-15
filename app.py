@@ -1358,9 +1358,17 @@ def _book_offer(slug: str) -> dict:
     return {"format_line": "Kindle ebook · Amazon"}
 
 
-# Public path of the tracked out-link. nginx mounts this app under /libra/, so a
-# root-relative "/growth/out/" reaches another app on the domain and 404s.
-GROWTH_OUT_PREFIX = "/libra/growth/out/"
+# nginx mounts this app under /libra/, so a root-relative link such as
+# "/growth/out/" reaches another app on the domain and 404s. Every link we render
+# into a public page goes through _public_path.
+LIBRA_PUBLIC_MOUNT = "/libra"
+
+
+def _public_path(app_path: str) -> str:
+    return f"{LIBRA_PUBLIC_MOUNT}{app_path}"
+
+
+GROWTH_OUT_PREFIX = _public_path("/growth/out/")
 
 
 def _growth_out_path(token: str) -> str:
@@ -1586,7 +1594,7 @@ async def growth_product_page(slug: str):
         "CTA_URL": escape_text(_growth_out_path(token)),
         "CTA_LABEL": f"Acheter — {price}",
         "SAMPLE": (
-            f'<p class="sample"><a href="/growth/products/{escape_text(slug)}/sample.pdf">'
+            f'<p class="sample"><a href="{_public_path(f"/growth/products/{escape_text(slug)}/sample.pdf")}">'
             "Lire un extrait (PDF)</a></p>"
             if _sample_pdf(slug) else ""
         ),

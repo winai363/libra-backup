@@ -2,6 +2,12 @@
 
 อ่าน `memory.md` (ท้ายไฟล์ = ล่าสุด) ก่อนเริ่มงานเสมอ. กฎที่ห้ามละเมิด:
 
+## 15 ก.ย. 2026 — 🛡️ distribution guard (อ่านอย่างเดียว): ingestion ≠ audience
+- `scripts/distribution_guard.py` = step `distribution_guard` ใน `organic_autopilot.py --all` (cron 7 * * * * เดิม ไม่เพิ่ม cron) · `--status` / `--diagnose` อ่านอย่างเดียว · เทสต์ `tests/test_distribution_guard.py`
+- ⛔ Pinterestbot/Pinterest/0.2 = หลักฐานการเผยแพร่ **ไม่ใช่ทราฟฟิก** · ไม่ประมาณ impressions · ไม่นับ owner (IP ที่ถือ session Chat UI ในหน้าต่าง log เดียวกัน) / test (IP เครื่องนี้) / crawler · log ไม่ครอบคลุม = null ไม่ใช่ 0
+- ประตู: บทความชุดสุดท้าย 17 ก.ย. + 72 ชม. → ประเมินครั้งเดียว · visits ≤1 และ CTA 0 = `EARLY_DISTRIBUTION_FAILURE` (ไม่ใช่ความล้มเหลวของเล่ม/conversion) → วินิจฉัย 8 ข้อ + Telegram 1 ครั้ง · อื่นๆ เงียบ · ⛔ ห้ามเปลี่ยนกลยุทธ์อัตโนมัติ · Day 7/14/30 เดิมไม่แตะ
+- 🔴 พบ 15 ก.ย.: CTA ทุกบทความ `href="/growth/out/…"` → **404** บนโดเมนจริง (ที่ถูกคือ `/libra/growth/out/…` → 307 Amazon) · ยังไม่แก้ รอบุ๋ยสั่ง (freeze exception: tracking failure) · ระหว่างนี้คลิก 0 = tracking พัง ไม่ใช่หลักฐานเรื่องช่องทาง
+
 ## 12 ก.ย. 2026 (รอบเจ็ด) — 🎯 นิยาม autonomy ใหม่: งานประจำของบุ๋ย = 0
 - ⛔ **เลน LinkedIn ถอดออกจากการทดลอง** = `lanes_on_hold["owner-post"]` ใน `organic_experiment.json` · `approve_next` ปฏิเสธเลนที่ hold · คอนเทนต์ PT เก็บไว้ครบ ห้ามลบ ห้ามหาช่องทางอื่นมาแทนระหว่างการทดลอง
 - ⛔ **ห้ามให้บุ๋ยย้าย Pin ระหว่างบอร์ด** — Pin ทุกอันลงบอร์ดที่ต่อฟีดไว้ · ความเป็นระเบียบของบอร์ดเป็นเรื่องความสวยงาม ไม่ใช่ขั้นตอนปฏิบัติการ · ค่อยเสนอสถาปัตยกรรม 2 ฟีด/2 บอร์ดหลัง day 30

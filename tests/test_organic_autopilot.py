@@ -64,6 +64,9 @@ def env(tmp_path, monkeypatch):
     configured_mailbox.write_text("IMAP_USER=test\n")
     monkeypatch.setattr(autopilot, "ICLOUD_ENV", configured_mailbox)
 
+    # The distribution guard reads the real nginx log; it has its own tests.
+    monkeypatch.setattr(autopilot.distribution_guard, "run", lambda *a, **k: {"state": "stubbed"})
+
     paths = activation.Paths(root, kdp)
     monkeypatch.setattr(autopilot, "_paths", lambda: paths)
     monkeypatch.setattr(autopilot, "STATE_FILE", root / "data" / "state.json")

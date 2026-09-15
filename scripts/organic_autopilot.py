@@ -34,6 +34,7 @@ LIBRA_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(LIBRA_DIR / "scripts"))
 
 import activate_organic_experiment as activation  # noqa: E402
+import distribution_guard  # noqa: E402
 import pinterest_evidence as evidence_module  # noqa: E402
 import organic_experiment_report as report_module  # noqa: E402
 from organic_experiment_report import send_telegram  # noqa: E402
@@ -354,6 +355,8 @@ ROUTINE_STEPS = (
     ("sales / KENP / royalties", "cron 15 9 * * *", "kdp_sales_sync.py"),
     ("book safety", "cron 45 8 + 7 * * * *", "roster + organic_autopilot safety"),
     ("feed ingestion health", "cron 7 * * * *", "organic_autopilot health"),
+    ("distribution guard (ingestion ≠ audience)", "cron 7 * * * *",
+     "organic_autopilot distribution_guard"),
     ("daily reporting", "cron 55 9 * * *", "organic_experiment_report.py"),
     ("day 7 / 14 / 30 checkpoints", "days elapsed since day 0", "organic_autopilot checkpoints"),
     ("day-30 verdict and channel action", "day 30", "organic_autopilot _apply_day30_decision"),
@@ -428,6 +431,11 @@ def run_all() -> dict:
             ("health", lambda: feed_health(state, evidence=evidence)),
             ("mailbox", lambda: mailbox_check(state)),
             ("checkpoints", lambda: run_checkpoints(state, paths=paths)),
+            # Read-only: ingestion is not audience. Alerts once, only on
+            # EARLY_DISTRIBUTION_FAILURE after the 72h discovery window.
+            ("distribution_guard", lambda: distribution_guard.run(
+                state, alert=lambda key, message: _alert_once(state, key, message),
+                served_dir=paths.served, campaigns_file=paths.campaigns)),
         )
         for name, step in steps:
             try:

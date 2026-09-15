@@ -61,10 +61,12 @@ def test_product_page_renders_one_tracked_payhip_cta(world):
 def test_clicking_the_cta_redirects_to_payhip_and_records_a_payhip_click(world):
     client = TestClient(libra_app.app)
     page = client.get("/growth/products/aquarelle-botanique-debutants-fr").text
-    start = page.index('href="/growth/out/') + len('href="')
+    assert 'href="/growth/out/' not in page
+    start = page.index('href="/libra/growth/out/') + len('href="')
     cta = page[start:page.index('"', start)]
 
-    outbound = client.get(cta, follow_redirects=False)
+    # TestClient serves the app without nginx's /libra mount.
+    outbound = client.get(cta.removeprefix("/libra"), follow_redirects=False)
 
     assert outbound.status_code == 307
     assert outbound.headers["location"] == "https://payhip.com/b/abc12"

@@ -1358,8 +1358,17 @@ def _book_offer(slug: str) -> dict:
     return {"format_line": "Kindle ebook · Amazon"}
 
 
+# Public path of the tracked out-link. nginx mounts this app under /libra/, so a
+# root-relative "/growth/out/" reaches another app on the domain and 404s.
+GROWTH_OUT_PREFIX = "/libra/growth/out/"
+
+
+def _growth_out_path(token: str) -> str:
+    return f"{GROWTH_OUT_PREFIX}{token}"
+
+
 def _hub_cta_path(slug: str, campaign: str, destination: str) -> str:
-    return f"/growth/out/{make_tracking_token(slug, campaign, destination)}"
+    return _growth_out_path(make_tracking_token(slug, campaign, destination))
 
 
 GROWTH_CAMPAIGNS_FILE = Path(__file__).parent / "data" / "growth_campaigns.json"
@@ -1574,7 +1583,7 @@ async def growth_product_page(slug: str):
         "DESCRIPTION": escape_text(
             (listing.get("description", "") + f"\n\nPrix : {price}").strip()
         ),
-        "CTA_URL": escape_text(f"/growth/out/{token}"),
+        "CTA_URL": escape_text(_growth_out_path(token)),
         "CTA_LABEL": f"Acheter — {price}",
         "SAMPLE": (
             f'<p class="sample"><a href="/growth/products/{escape_text(slug)}/sample.pdf">'

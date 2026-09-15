@@ -179,7 +179,7 @@ def test_book_hub_page_renders_with_one_tracked_cta(client, ledger):
     assert "A useful description of the test book." in body
     assert body.count("/growth/out/") == 1
 
-    start = body.index('href="/growth/out/') + len('href="')
+    start = body.index('href="/libra/growth/out/') + len('href="')
     end = body.index('"', start)
     cta_path = body[start:end]
     token = cta_path.rsplit("/", 1)[-1]
@@ -243,6 +243,41 @@ def test_book_hub_page_escapes_html_in_listing_data(client):
     assert "&lt;script&gt;" in response.text
 
 
+# ── public CTA path (regression: 15 Sep 2026, every CTA 404ed in production) ─
+
+def test_cta_builder_always_emits_the_libra_mounted_path():
+    assert libra_app.GROWTH_OUT_PREFIX == "/libra/growth/out/"
+    path = libra_app._hub_cta_path("book-a", "organic-1", "https://www.amazon.com/dp/B0TESTASIN1")
+    assert path.startswith("/libra/growth/out/")
+    assert libra_app._growth_out_path("tok") == "/libra/growth/out/tok"
+
+
+def test_rendered_cta_never_uses_the_unprefixed_path_and_still_tracks(client, ledger, campaigns_file):
+    """nginx serves this app under /libra/. A root-relative /growth/out/ link lands on
+    another app and 404s, so no reader can reach Amazon and no click is recorded."""
+    campaigns_file.write_text(json.dumps({"campaigns": ["article-1"]}))
+    _write_listing(libra_app.KDP_DIR, "book-a")
+    _write_article(libra_app.GROWTH_ARTICLES_DIR, "article-1")
+
+    for page_path, campaign in (("/growth/books/book-a", "content-hub"),
+                                ("/growth/articles/article-1", "article-1")):
+        body = client.get(page_path).text
+        assert 'href="/growth/out/' not in body
+        assert body.count('href="/libra/growth/out/') == 1
+        start = body.index('href="/libra/growth/out/') + len('href="')
+        href = body[start:body.index('"', start)]
+
+        # The href minus nginx's mount prefix is the app route: it redirects and records.
+        response = client.get(href.removeprefix("/libra"), follow_redirects=False,
+                              headers={"User-Agent": "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15"})
+        assert response.status_code == 307
+        assert response.headers["location"] == "https://www.amazon.com/dp/B0TESTASIN1"
+        with sqlite3.connect(ledger) as connection:
+            row = connection.execute(
+                "SELECT slug, campaign FROM hub_events ORDER BY id DESC LIMIT 1").fetchone()
+        assert row == ("book-a", campaign)
+
+
 # ── /growth/articles/{article_id} ───────────────────────────────────────────
 
 def test_article_hub_page_renders_with_one_tracked_cta(client, ledger, campaigns_file):
@@ -259,7 +294,7 @@ def test_article_hub_page_renders_with_one_tracked_cta(client, ledger, campaigns
     assert "Second paragraph." in body
     assert body.count("/growth/out/") == 1
 
-    start = body.index('href="/growth/out/') + len('href="')
+    start = body.index('href="/libra/growth/out/') + len('href="')
     end = body.index('"', start)
     token = body[start:end].rsplit("/", 1)[-1]
     payload = resolve_tracking_token(token)
@@ -346,7 +381,7 @@ def campaigns_file(tmp_path, monkeypatch):
 
 
 def _campaign_of_cta(body: str) -> str:
-    start = body.index('href="/growth/out/') + len('href="/growth/out/')
+    start = body.index('href="/libra/growth/out/') + len('href="/libra/growth/out/')
     token = body[start:body.index('"', start)]
     return resolve_tracking_token(token)["campaign"]
 
@@ -383,10 +418,10 @@ def test_campaign_click_is_recorded_under_its_own_campaign(client, ledger, campa
     campaigns_file.write_text(json.dumps({"campaigns": ["organic-pinterest"]}))
     _write_listing(libra_app.KDP_DIR, "book-a")
     body = client.get("/growth/books/book-a?c=organic-pinterest").text
-    start = body.index('href="/growth/out/') + len('href="')
+    start = body.index('href="/libra/growth/out/') + len('href="')
     cta = body[start:body.index('"', start)]
 
-    client.get(cta, follow_redirects=False,
+    client.get(cta.removeprefix("/libra"), follow_redirects=False,
                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0 Safari/537.36"})
 
     with sqlite3.connect(ledger) as connection:
@@ -527,7 +562,7 @@ def test_article_campaign_must_be_declared(client, ledger, campaigns_file):
     _write_article(libra_app.GROWTH_ARTICLES_DIR, "article-1", campaign="made-up-label")
 
     body = client.get("/growth/articles/article-1").text
-    start = body.index('href="/growth/out/') + len('href="/growth/out/')
+    start = body.index('href="/libra/growth/out/') + len('href="/libra/growth/out/')
     token = body[start:body.index('"', start)]
 
     assert resolve_tracking_token(token)["campaign"] == libra_app.GROWTH_HUB_CAMPAIGN
@@ -539,7 +574,7 @@ def test_declared_article_campaign_is_used(client, ledger, campaigns_file):
     _write_article(libra_app.GROWTH_ARTICLES_DIR, "article-1", campaign="pin-book-a")
 
     body = client.get("/growth/articles/article-1").text
-    start = body.index('href="/growth/out/') + len('href="/growth/out/')
+    start = body.index('href="/libra/growth/out/') + len('href="/libra/growth/out/')
     token = body[start:body.index('"', start)]
 
     assert resolve_tracking_token(token)["campaign"] == "pin-book-a"

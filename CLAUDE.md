@@ -6,7 +6,8 @@
 - `scripts/distribution_guard.py` = step `distribution_guard` ใน `organic_autopilot.py --all` (cron 7 * * * * เดิม ไม่เพิ่ม cron) · `--status` / `--diagnose` อ่านอย่างเดียว · เทสต์ `tests/test_distribution_guard.py`
 - ⛔ Pinterestbot/Pinterest/0.2 = หลักฐานการเผยแพร่ **ไม่ใช่ทราฟฟิก** · ไม่ประมาณ impressions · ไม่นับ owner (IP ที่ถือ session Chat UI ในหน้าต่าง log เดียวกัน) / test (IP เครื่องนี้) / crawler · log ไม่ครอบคลุม = null ไม่ใช่ 0
 - ประตู: บทความชุดสุดท้าย 17 ก.ย. + 72 ชม. → ประเมินครั้งเดียว · visits ≤1 และ CTA 0 = `EARLY_DISTRIBUTION_FAILURE` (ไม่ใช่ความล้มเหลวของเล่ม/conversion) → วินิจฉัย 8 ข้อ + Telegram 1 ครั้ง · อื่นๆ เงียบ · ⛔ ห้ามเปลี่ยนกลยุทธ์อัตโนมัติ · Day 7/14/30 เดิมไม่แตะ
-- 🔴 พบ 15 ก.ย.: CTA ทุกบทความ `href="/growth/out/…"` → **404** บนโดเมนจริง (ที่ถูกคือ `/libra/growth/out/…` → 307 Amazon) · ยังไม่แก้ รอบุ๋ยสั่ง (freeze exception: tracking failure) · ระหว่างนี้คลิก 0 = tracking พัง ไม่ใช่หลักฐานเรื่องช่องทาง
+- ✅ แก้แล้ว 15 ก.ย. 22:07:06 +07 (commit 0dd2deb, บุ๋ยอนุมัติ TECHNICAL_FIX): CTA เคยเป็น `href="/growth/out/…"` → 404 · ตอนนี้ทุก surface ใช้ `GROWTH_OUT_PREFIX = "/libra/growth/out/"` ผ่าน `_growth_out_path` · ⛔ ห้ามสร้างลิงก์สาธารณะแบบ root-relative อีก (app ถูก mount ใต้ `/libra/`) · มีเทสต์กันถอยใน `tests/test_growth_routes.py`
+- `organic_experiment.json`: `technical_incidents[CTA_ROUTING_BROKEN]` (Day 0 → 22:07:06) = หลักฐาน conversion path **INVALID / NOT_OBSERVABLE** · `conversion_path_valid_from` = จุดเริ่มนับคลิก CTA ที่ใช้ได้ · Day 0 ไม่เปลี่ยน · ⛔ ห้ามตีความคลิก 0 ช่วงนั้นว่า conversion ล้ม · ห้ามเขียนลง `interventions` (นับเป็น human steps)
 
 ## 12 ก.ย. 2026 (รอบเจ็ด) — 🎯 นิยาม autonomy ใหม่: งานประจำของบุ๋ย = 0
 - ⛔ **เลน LinkedIn ถอดออกจากการทดลอง** = `lanes_on_hold["owner-post"]` ใน `organic_experiment.json` · `approve_next` ปฏิเสธเลนที่ hold · คอนเทนต์ PT เก็บไว้ครบ ห้ามลบ ห้ามหาช่องทางอื่นมาแทนระหว่างการทดลอง

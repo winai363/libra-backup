@@ -235,6 +235,11 @@ def approve_next(paths: Paths, *, lane: str, at: datetime | None = None) -> dict
     if row["slug"] in paused:
         raise Refused(f"{row['id']}: {row['slug']!r} is paused "
                       f"({paused[row['slug']].get('reason', 'no reason recorded')}) — not approving")
+    pin_prefix = "/libra/growth/pins/"
+    image_url = str(row["data"].get("image_url") or "")
+    if image_url.startswith(pin_prefix) and not (
+            paths.data / "growth_pins" / image_url.removeprefix(pin_prefix)).exists():
+        raise Refused(f"{row['id']}: its Pin image {image_url} has not been generated — not approving")
     already_today = [i for i, record in served.items()
                      if record["day"] == str(at.date()) and record["lane"] == lane]
     if already_today:

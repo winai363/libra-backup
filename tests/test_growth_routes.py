@@ -614,3 +614,20 @@ def test_feed_carries_only_its_own_channels_articles(client, authorization_file,
 
     assert "adhd-routines-es" in body
     assert "contabil" not in body
+
+
+def test_pin_image_is_served_only_for_an_approved_article(client, tmp_path, monkeypatch):
+    pins_dir = tmp_path / "growth_pins"
+    pins_dir.mkdir()
+    monkeypatch.setattr(libra_app, "GROWTH_PINS_DIR", pins_dir)
+    (pins_dir / "article-1.jpg").write_bytes(b"\xff\xd8\xff pin")
+    (pins_dir / "draft-1.jpg").write_bytes(b"\xff\xd8\xff pin")
+    _write_article(libra_app.GROWTH_ARTICLES_DIR, "article-1")
+    _write_article(libra_app.GROWTH_ARTICLES_DIR, "draft-1", qa_approved=False)
+
+    served = client.get("/growth/pins/article-1.jpg")
+    assert served.status_code == 200
+    assert served.headers["content-type"] == "image/jpeg"
+    assert client.get("/growth/pins/draft-1.jpg").status_code == 404
+    assert client.get("/growth/pins/no-such-article.jpg").status_code == 404
+    assert client.get("/growth/pins/..%2Fsecret.jpg").status_code == 404

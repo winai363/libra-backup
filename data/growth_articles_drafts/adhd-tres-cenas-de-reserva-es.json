@@ -1,0 +1,62 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "adhd-tres-cenas-de-reserva-es",
+  "language": "es",
+  "title": "Tres cenas de reserva: resolver la cena con TDAH sin decidir cada noche",
+  "description": "A las ocho, con hambre y sin plan, la cena se decide con prisa. Tres cenas sencillas que sabes hacer, sus ingredientes siempre en casa y un papel pegado en la cocina.",
+  "link": "/libra/growth/articles/adhd-tres-cenas-de-reserva-es",
+  "image_url": "/libra/growth/pins/adhd-tres-cenas-de-reserva-es.jpg",
+  "target_slug": "adhd-adults-workbook-es",
+  "campaign": "pin-adhd-es",
+  "cta_label": "Ver el cuaderno en Amazon",
+  "book_line": "Cuaderno de TDAH para adultos: plantillas y ejercicios que se leen en el Kindle y se copian a un cuaderno de papel o se imprimen.",
+  "pin_title": "Tres cenas de reserva: resolver la cena con TDAH sin decidir cada noche",
+  "body": "A las ocho de la noche, con hambre y cansancio, decidir qué cenar es una decisión más al final de un día que ya tuvo muchas. Por eso tantas veces termina en pedir comida, comer cualquier cosa de pie o no cenar.\n\nTres cenas de reserva no son un plan semanal de menús. Son un seguro para los días en que no hay plan: tres cenas que sabes preparar sin receta, en menos de veinte minutos, con ingredientes que se guardan bien.\n\nCómo elegirlas hoy:\n\nPiensa en lo que ya cocinas sin mirar nada. No lo que te gustaría cocinar, sino lo que te sale casi solo. Una pasta con atún, arroz con huevo, una sopa con pan, un sándwich caliente. Elige tres.\n\nPara cada una, escribe los ingredientes en una sola línea. Solo los que no pueden faltar.\n\nRevisa esas tres líneas y marca lo que se conserva semanas: paquetes, latas, congelados, huevos, pan congelado. Si una cena depende de algo que se echa a perder en dos días, cámbiala por otra. Una cena de reserva que exige ir a comprar no sirve de reserva.\n\nAhora la regla que la hace funcionar: los ingredientes de las tres cenas siempre están en casa. Cuando usas el último paquete de algo, va directo a la lista del supermercado, antes de guardar lo demás.\n\nEscribe las tres cenas en un papel y pégalo por dentro de la puerta de un armario de la cocina. No en una app. A las ocho de la noche lo que ayuda es ver la respuesta, no tener que buscarla.\n\nLos días con plan, cocinas lo que querías. Los días sin plan, no decides: miras el papel, eliges una de tres y empiezas. Elegir entre tres es mucho más fácil que elegir entre todo lo posible.\n\nCon el tiempo puedes cambiarlas o sumar una cuarta. No más de cuatro: la idea es justamente tener pocas opciones.\n\nUna semana con dos noches de reserva no es un fracaso del plan. Es el plan funcionando.",
+  "qa_checklist": [
+    "Un lector nativo de español revisa el texto completo (no solo una herramienta)",
+    "Ninguna afirmación médica: nada de diagnóstico, tratamiento, ni promesa de mejora clínica",
+    "Cada consejo es practicable hoy, sin comprar nada y sin imprimir",
+    "El texto es original y escrito para esta página, no extraído del libro",
+    "El CTA describe el libro con honestidad: cuaderno en Kindle, plantillas que se copian a papel"
+  ],
+  "semantic_review": "Español neutro, registro de tú, sin voseo ni modismos de un país concreto. Vocabulario elegido para leerse igual en España y en América Latina ('teléfono', 'agregar', 'anotar', 'correo'). Frases cortas; una técnica por artículo, respondida entera antes del CTA.",
+  "flagged_uncertainty": [],
+  "claims_check": "Sin afirmaciones médicas. No se menciona diagnóstico, medicación, tratamiento ni resultados clínicos, y no hay estadísticas. El texto habla de organización cotidiana con papel o teléfono.",
+  "concept_rank": 10,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "regional-language check",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "'lista de la compra/lista de compras' (varía por país) → 'lista del supermercado'",
+      "'nevera/refrigerador' y 'alacena' evitados: 'armario de la cocina'",
+      "'picar algo' evitado",
+      "ningún comentario sobre nutrición, dieta ni efectos de los alimentos",
+      "closing sentence about the book removed: the CTA lives on the book card (CLAUDE.md, 12 Sep round four)"
+    ],
+    "remaining": [],
+    "note": "Not reviewed by a native human; this is a semantic review."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 25,
+  "recommended_offset_days": 25,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-adhd-tres-cenas-de-reserva-es",
+  "destination": "https://www.amazon.com/dp/B0H6VB1SDX",
+  "buyer_intent": "Adulto con TDAH que termina pidiendo comida o saltándose la cena por no decidir a tiempo",
+  "image_metadata": {
+    "url": "/libra/growth/pins/adhd-tres-cenas-de-reserva-es.jpg",
+    "source": "pin image generated in this project from the book's own cover",
+    "rights": "ours",
+    "pixels": "1000x1500",
+    "alt": "Pin vertical con el título «Tres cenas de reserva: resolver la cena con TDAH sin decidir cada noche» sobre la portada del libro TDAH en Adultos: Cuaderno de Ejercicios"
+  },
+  "batch": "pinterest-volume-2026-09-19"
+}

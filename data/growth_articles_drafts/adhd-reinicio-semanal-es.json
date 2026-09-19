@@ -1,0 +1,60 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "adhd-reinicio-semanal-es",
+  "language": "es",
+  "title": "El reinicio semanal de 10 minutos: cuatro preguntas para empezar la semana con TDAH",
+  "description": "Diez minutos una vez por semana, una hoja y cuatro preguntas: qué quedó abierto, qué citas vienen, qué falta en casa y cuál es la única cosa importante de la semana.",
+  "link": "/libra/growth/articles/adhd-reinicio-semanal-es",
+  "image_url": "/libra/growth/pins/adhd-reinicio-semanal-es.jpg",
+  "target_slug": "adhd-adults-workbook-es",
+  "campaign": "pin-adhd-es",
+  "cta_label": "Ver el cuaderno en Amazon",
+  "book_line": "Cuaderno de TDAH para adultos: plantillas y ejercicios que se leen en el Kindle y se copian a un cuaderno de papel o se imprimen.",
+  "pin_title": "El reinicio semanal de 10 minutos: cuatro preguntas para empezar la semana con TDAH",
+  "body": "Durante la semana, las cosas se acumulan sin hacer ruido: un mensaje sin contestar, una cita que aceptaste de palabra, algo que se terminó en la cocina. Ninguna es grave. Juntas, el jueves, se sienten como una avalancha.\n\nEl reinicio semanal es una revisión corta para que eso no llegue al jueves. Diez minutos, una vez por semana, siempre el mismo día y a la misma hora. Elige un momento que ya exista en tu semana: después de cenar el domingo, o el lunes con el primer café. Si lo pones en un hueco que no existe, no va a pasar.\n\nToma una hoja y responde cuatro preguntas, una por bloque:\n\nQué quedó abierto. Repasa la semana que termina: mensajes, promesas, cosas que dijiste que harías. Escribe cada una en una línea. No las resuelvas ahora; solo sácalas de la cabeza.\n\nQué viene. Abre el calendario de los próximos siete días y copia las citas con su hora. Al lado de cada una, anota si necesita algo antes: un documento, un regalo, salir antes del trabajo.\n\nQué falta. Casa y compras: lo que se terminó, lo que hay que reparar, lo que hay que devolver.\n\nQué es lo único. De todo lo anterior, elige una sola cosa que haría que la semana valga la pena. Rodéala con un círculo.\n\nPon un temporizador de diez minutos y para cuando suene, aunque la hoja quede incompleta. Una revisión que dura una hora se abandona a la tercera semana; una que dura diez minutos se puede repetir incluso en una semana mala.\n\nLa hoja se queda a la vista toda la semana, por ejemplo pegada en la pared junto a donde trabajas. Durante los días siguientes, tachas lo que se resuelve y agregas lo que aparece.\n\nEn el siguiente reinicio, empieza copiando lo que no se tachó. Si una línea se ha copiado tres semanas seguidas, toca decidir: o le das un momento concreto en el calendario, o la sueltas del todo.\n\nSi una semana te saltas el reinicio, no hay nada que recuperar. La semana siguiente, diez minutos y las mismas cuatro preguntas.",
+  "qa_checklist": [
+    "Un lector nativo de español revisa el texto completo (no solo una herramienta)",
+    "Ninguna afirmación médica: nada de diagnóstico, tratamiento, ni promesa de mejora clínica",
+    "Cada consejo es practicable hoy, sin comprar nada y sin imprimir",
+    "El texto es original y escrito para esta página, no extraído del libro",
+    "El CTA describe el libro con honestidad: cuaderno en Kindle, plantillas que se copian a papel"
+  ],
+  "semantic_review": "Español neutro, registro de tú, sin voseo ni modismos de un país concreto. Vocabulario elegido para leerse igual en España y en América Latina ('teléfono', 'agregar', 'anotar', 'correo'). Frases cortas; una técnica por artículo, respondida entera antes del CTA.",
+  "flagged_uncertainty": [],
+  "claims_check": "Sin afirmaciones médicas. No se menciona diagnóstico, medicación, tratamiento ni resultados clínicos, y no hay estadísticas. El texto habla de organización cotidiana con papel o teléfono.",
+  "concept_rank": 4,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "regional-language check",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "'nevera/refrigerador' (varía por país) evitado: la hoja va 'en la pared junto a donde trabajas'",
+      "distinto del cierre diario del borrador adhd-tres-rutinas-es: aquí es una revisión semanal",
+      "closing sentence about the book removed: the CTA lives on the book card (CLAUDE.md, 12 Sep round four)"
+    ],
+    "remaining": [],
+    "note": "Not reviewed by a native human; this is a semantic review."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 13,
+  "recommended_offset_days": 13,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-adhd-reinicio-semanal-es",
+  "destination": "https://www.amazon.com/dp/B0H6VB1SDX",
+  "buyer_intent": "Adulto con TDAH que llega a mitad de semana abrumado por pendientes acumulados",
+  "image_metadata": {
+    "url": "/libra/growth/pins/adhd-reinicio-semanal-es.jpg",
+    "source": "pin image generated in this project from the book's own cover",
+    "rights": "ours",
+    "pixels": "1000x1500",
+    "alt": "Pin vertical con el título «El reinicio semanal de 10 minutos: cuatro preguntas para empezar la semana con TDAH» sobre la portada del libro TDAH en Adultos: Cuaderno de Ejercicios"
+  },
+  "batch": "pinterest-volume-2026-09-19"
+}

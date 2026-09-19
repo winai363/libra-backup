@@ -1,0 +1,62 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "adhd-citas-tres-avisos-es",
+  "language": "es",
+  "title": "Una cita, tres avisos: no olvidar citas con TDAH usando el calendario del teléfono",
+  "description": "Un solo aviso quince minutos antes llega tarde. Tres avisos por cita (la víspera, la hora de prepararte y la hora de salir) y una regla para anotarla en el momento en que la aceptas.",
+  "link": "/libra/growth/articles/adhd-citas-tres-avisos-es",
+  "image_url": "/libra/growth/pins/adhd-citas-tres-avisos-es.jpg",
+  "target_slug": "adhd-adults-workbook-es",
+  "campaign": "pin-adhd-es",
+  "cta_label": "Ver el cuaderno en Amazon",
+  "book_line": "Cuaderno de TDAH para adultos: plantillas y ejercicios que se leen en el Kindle y se copian a un cuaderno de papel o se imprimen.",
+  "pin_title": "Una cita, tres avisos: no olvidar citas con TDAH usando el calendario del teléfono",
+  "body": "Olvidar una cita casi nunca ocurre el día de la cita. Ocurre semanas antes, cuando la aceptas por teléfono, dices \"sí, perfecto\" y piensas que la anotarás después.\n\nPrimera regla: una cita no existe hasta que está en el calendario, y se anota antes de colgar o antes de salir del lugar donde la pediste. Si no puedes escribirla en ese momento, pide que te la envíen por mensaje. Es una petición normal.\n\nSegunda regla: una cita, tres avisos. El aviso que viene por defecto, quince minutos antes, sirve de poco. Quince minutos antes ya no puedes salir a tiempo ni buscar el documento que te pidieron.\n\nAviso uno, la víspera por la noche. Sirve para preparar lo que hay que llevar y para mirar cómo vas a llegar.\n\nAviso dos, la hora de prepararte. No la hora de la cita: la hora en que tienes que dejar lo que estés haciendo para vestirte, reunir las cosas o terminar una llamada.\n\nAviso tres, la hora de salir. Calcula el trayecto y súmale un margen. Si el trayecto es de veinte minutos, el aviso de salida va treinta minutos antes de la cita.\n\nLa mayoría de los calendarios del teléfono permiten poner varios avisos en un mismo evento. Si el tuyo solo permite uno, crea dos eventos cortos más: \"prepararme para el dentista\" y \"salir para el dentista\".\n\nTercera regla: escribe en el título del evento lo que necesitas saber sin abrirlo. No \"Dentista\", sino \"Dentista, llevar tarjeta del seguro y documento de identidad\". Cuando el aviso aparece en la pantalla, se lee el título y nada más.\n\nPara empezar hoy, abre el calendario y busca las citas de las próximas dos semanas. A cada una agrégale los avisos que le faltan y reescribe el título. Diez minutos como mucho.\n\nY si alguien te pregunta por una cita que no ves en el calendario, la respuesta es \"déjame confirmarlo\", no \"creo que sí\".",
+  "qa_checklist": [
+    "Un lector nativo de español revisa el texto completo (no solo una herramienta)",
+    "Ninguna afirmación médica: nada de diagnóstico, tratamiento, ni promesa de mejora clínica",
+    "Cada consejo es practicable hoy, sin comprar nada y sin imprimir",
+    "El texto es original y escrito para esta página, no extraído del libro",
+    "El CTA describe el libro con honestidad: cuaderno en Kindle, plantillas que se copian a papel"
+  ],
+  "semantic_review": "Español neutro, registro de tú, sin voseo ni modismos de un país concreto. Vocabulario elegido para leerse igual en España y en América Latina ('teléfono', 'agregar', 'anotar', 'correo'). Frases cortas; una técnica por artículo, respondida entera antes del CTA.",
+  "flagged_uncertainty": [],
+  "claims_check": "Sin afirmaciones médicas. No se menciona diagnóstico, medicación, tratamiento ni resultados clínicos, y no hay estadísticas. El texto habla de organización cotidiana con papel o teléfono.",
+  "concept_rank": 5,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "regional-language check",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "'celular/móvil' → 'teléfono'",
+      "frase 'casi todo el mundo lo hace con gusto' eliminada (afirmación sin base)",
+      "ejemplo médico reducido a 'dentista' sin detalles clínicos",
+      "'segundo piso' (numeración de pisos distinta según el país) → documento de identidad",
+      "closing sentence about the book removed: the CTA lives on the book card (CLAUDE.md, 12 Sep round four)"
+    ],
+    "remaining": [],
+    "note": "Not reviewed by a native human; this is a semantic review."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 15,
+  "recommended_offset_days": 15,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-adhd-citas-tres-avisos-es",
+  "destination": "https://www.amazon.com/dp/B0H6VB1SDX",
+  "buyer_intent": "Adulto con TDAH que olvida citas o llega tarde a ellas",
+  "image_metadata": {
+    "url": "/libra/growth/pins/adhd-citas-tres-avisos-es.jpg",
+    "source": "pin image generated in this project from the book's own cover",
+    "rights": "ours",
+    "pixels": "1000x1500",
+    "alt": "Pin vertical con el título «Una cita, tres avisos: no olvidar citas con TDAH usando el calendario del teléfono» sobre la portada del libro TDAH en Adultos: Cuaderno de Ejercicios"
+  },
+  "batch": "pinterest-volume-2026-09-19"
+}

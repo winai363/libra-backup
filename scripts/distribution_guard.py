@@ -64,7 +64,7 @@ import socket
 import sys
 import urllib.error
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 from zoneinfo import ZoneInfo
@@ -76,9 +76,12 @@ sys.path.insert(0, str(LIBRA_DIR / "scripts"))
 import pinterest_evidence as evidence_module  # noqa: E402
 from content_hub import is_bot_user_agent  # noqa: E402
 from growth_feed import DESCRIPTION_LIMITS, TITLE_LIMITS  # noqa: E402
-from scheduled_pinterest_approval import WINDOW_LAST_DAY  # noqa: E402
 
 SITE_BASE = "https://newton-winai-klinprasom.incomeinclick.in.th"
+# The early-distribution gate judges the first scheduled inventory (13-17 Sep
+# 2026), once. On 19 Sep the owner extended the publication schedule to add Pin
+# volume; articles published after this day must not slide that check forward.
+WINDOW_LAST_DAY = date(2026, 9, 17)
 SERVED_DIR = LIBRA_DIR / "data" / "growth_articles"
 CAMPAIGNS_FILE = LIBRA_DIR / "data" / "growth_campaigns.json"
 KDP_DIR = LIBRA_DIR.parent / "kdp"
@@ -338,7 +341,10 @@ def snapshot(articles: dict, *, now: datetime | None = None, logs=None,
 def discovery_window_end(articles: dict, now: datetime) -> datetime | None:
     """None while the scheduled inventory is still publishing; otherwise 72h after
     the last article's publication."""
-    latest = max(meta["published_at"] for meta in articles.values())
+    published = [meta["published_at"] for meta in articles.values()]
+    first_inventory = [moment for moment in published
+                       if moment.astimezone(TIMEZONE).date() <= WINDOW_LAST_DAY]
+    latest = max(first_inventory or published)
     finished = (now.astimezone(TIMEZONE).date() > WINDOW_LAST_DAY
                 or latest.astimezone(TIMEZONE).date() >= WINDOW_LAST_DAY)
     return latest + DISCOVERY_WINDOW if finished else None

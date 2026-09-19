@@ -1,0 +1,61 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "adhd-siguiente-accion-fisica-es",
+  "language": "es",
+  "title": "La siguiente acción física: dividir un proyecto grande en pasos de 10 minutos con TDAH",
+  "description": "Un proyecto como renovar el pasaporte no se puede hacer: solo se puede hacer su siguiente paso. Cómo escribirlo en una tarjeta para que empezar sea obvio y no una decisión.",
+  "link": "/libra/growth/articles/adhd-siguiente-accion-fisica-es",
+  "image_url": "/libra/growth/pins/adhd-siguiente-accion-fisica-es.jpg",
+  "target_slug": "adhd-adults-workbook-es",
+  "campaign": "pin-adhd-es",
+  "cta_label": "Ver el cuaderno en Amazon",
+  "book_line": "Cuaderno de TDAH para adultos: plantillas y ejercicios que se leen en el Kindle y se copian a un cuaderno de papel o se imprimen.",
+  "pin_title": "La siguiente acción física: dividir un proyecto grande en pasos de 10 minutos con TDAH",
+  "body": "Hay entradas en la lista que llevan meses sin moverse: \"organizar la mudanza\", \"buscar otro trabajo\", \"renovar el pasaporte\". No se mueven porque no son tareas. Son proyectos, y un proyecto no se puede hacer. Solo se puede hacer su siguiente paso.\n\nLa siguiente acción física es la respuesta a una pregunta: ¿qué haría con las manos, en los próximos diez minutos, para que esto avance? Tiene que ser algo visible: llamar, escribir, buscar, abrir, imprimir, preguntar.\n\nUn ejemplo. \"Renovar el pasaporte\" es un proyecto. Pensar en él cansa porque arrastra todo junto: la cita, las fotos, los papeles, el pago. La siguiente acción física podría ser \"abrir la página oficial y leer qué documentos piden\". Diez minutos. Al terminarla, la siguiente aparece casi sola: \"buscar el pasaporte actual y mirar la fecha de vencimiento\".\n\nCómo hacerlo hoy:\n\nBusca en tu lista la entrada más antigua que no avanza.\n\nEn una tarjeta o un papel pequeño, escribe arriba el nombre del proyecto.\n\nDebajo, escribe una sola acción que empiece con un verbo físico y que puedas terminar en diez minutos. Si al leerla dudas por dónde empezar, todavía es demasiado grande: pártela otra vez.\n\nSi la acción depende de algo que no tienes, como un dato, una contraseña o la respuesta de alguien, la siguiente acción es conseguir eso. \"Preguntarle a Marta el número de expediente\" es una acción válida.\n\nDeja la tarjeta donde la veas mañana a primera hora.\n\nCuando hagas la acción, tacha la línea y escribe la siguiente en la misma tarjeta. La tarjeta se convierte en el historial del proyecto y, lo más útil, siempre tiene escrito qué toca ahora.\n\nNo hace falta planear el proyecto completo. Planear veinte pasos por adelantado suele ser otra forma de no empezar. Basta con saber el siguiente.\n\nSi tienes varios proyectos parados, una tarjeta por proyecto, pero solo una encima de la mesa cada día.",
+  "qa_checklist": [
+    "Un lector nativo de español revisa el texto completo (no solo una herramienta)",
+    "Ninguna afirmación médica: nada de diagnóstico, tratamiento, ni promesa de mejora clínica",
+    "Cada consejo es practicable hoy, sin comprar nada y sin imprimir",
+    "El texto es original y escrito para esta página, no extraído del libro",
+    "El CTA describe el libro con honestidad: cuaderno en Kindle, plantillas que se copian a papel"
+  ],
+  "semantic_review": "Español neutro, registro de tú, sin voseo ni modismos de un país concreto. Vocabulario elegido para leerse igual en España y en América Latina ('teléfono', 'agregar', 'anotar', 'correo'). Frases cortas; una técnica por artículo, respondida entera antes del CTA.",
+  "flagged_uncertainty": [],
+  "claims_check": "Sin afirmaciones médicas. No se menciona diagnóstico, medicación, tratamiento ni resultados clínicos, y no hay estadísticas. El texto habla de organización cotidiana con papel o teléfono.",
+  "concept_rank": 9,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "regional-language check",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "'auto/carro/coche' evitado: ejemplo del pasaporte, igual en todos los países",
+      "'alcanza' (uso regional de 'basta') → 'basta'",
+      "'entrar en/entrar a' (varía por país) → 'abrir la página'",
+      "closing sentence about the book removed: the CTA lives on the book card (CLAUDE.md, 12 Sep round four)"
+    ],
+    "remaining": [],
+    "note": "Not reviewed by a native human; this is a semantic review."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 23,
+  "recommended_offset_days": 23,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-adhd-siguiente-accion-fisica-es",
+  "destination": "https://www.amazon.com/dp/B0H6VB1SDX",
+  "buyer_intent": "Adulto con TDAH con proyectos personales que llevan meses sin avanzar",
+  "image_metadata": {
+    "url": "/libra/growth/pins/adhd-siguiente-accion-fisica-es.jpg",
+    "source": "pin image generated in this project from the book's own cover",
+    "rights": "ours",
+    "pixels": "1000x1500",
+    "alt": "Pin vertical con el título «La siguiente acción física: dividir un proyecto grande en pasos de 10 minutos con TDAH» sobre la portada del libro TDAH en Adultos: Cuaderno de Ejercicios"
+  },
+  "batch": "pinterest-volume-2026-09-19"
+}

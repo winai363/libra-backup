@@ -1,0 +1,64 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "bilingual-car-ride-counting-game",
+  "language": "en",
+  "title": "The car-ride counting game: numbers one to ten in two languages, no screen",
+  "description": "Turn the school run into number practice: pick one thing to count out of the window, count it to ten in the language you are building, then let your child choose the next thing.",
+  "link": "/libra/growth/articles/bilingual-car-ride-counting-game",
+  "image_url": "/libra/growth/pins/bilingual-car-ride-counting-game.jpg",
+  "target_slug": "bilingual-english-spanish-kids-vocab",
+  "campaign": "pin-bilingual-kids",
+  "cta_label": "See the book on Amazon",
+  "book_line": "Bilingual English-Spanish vocabulary book for kids: themed word lists and simple activities, read on a Kindle, copied into a notebook when you want them on paper.",
+  "pin_title": "The car-ride counting game: numbers one to ten in two languages, no screen",
+  "body": "Car and bus rides are dead time for a child in a seat: they cannot move, and they are looking out of the window anyway. A counting game uses exactly that.\n\nPick one thing to count. It should be common on your route but not constant: dogs, bicycles, trees with no leaves, red doors. One thing per trip keeps it simple.\n\nCount out loud in the language you are building, up to ten. If Spanish is the one you are building: \"¡un perro!… dos perros… tres perros\". If it is English: \"one dog… two dogs… three dogs\". Your child spots, and you count together. One small Spanish detail you can just model: \"uno\" becomes \"un\" before a masculine word (un perro) and \"una\" before a feminine one (una bicicleta). When you reach ten, the round is over and the spotter chooses the next thing to count.\n\nA safety note that matters more than the game: if you are driving, you only talk. Your child does the spotting and the pointing; your eyes stay on the road. Pause the game at any tricky junction — it will still be there afterwards.\n\nThree variations once the basic game works.\n\nCount down instead of up. Start at ten and count down each time you spot one — \"diez, nueve, ocho\" or \"ten, nine, eight\". The last number can be timed for the moment you arrive.\n\nSplit the languages between people. One of you counts in one language, the other answers in the other, taking turns: \"uno\" — \"two\" — \"tres\" — \"four\". It sounds chaotic, children find it very funny, and every number gets said in both languages.\n\nGuess first. Before leaving, everyone guesses how many dogs you will see on the way. Guessing a number is saying a number.\n\nLeave the numbers above ten for later. Once one to ten is easy in both directions, eleven to twenty is the next step, but there is no rush: a game that stays easy is a game children ask for.\n\nWhat to avoid: quizzing, as in \"what's seven in Spanish?\" or \"how do you say siete?\". A question with one right answer turns the back seat into a classroom. Counting together gets the same numbers said without the test.",
+  "qa_checklist": [
+    "A bilingual (EN/ES) reader checks both languages, not a tool",
+    "No claims about fluency, test scores or developmental outcomes",
+    "Every activity works with what is already in the house: no printer, no purchase",
+    "Original text written for this page, not lifted from the book",
+    "CTA is honest: a Kindle vocabulary book read on a screen, lists copied into a notebook"
+  ],
+  "semantic_review": "English body; numbers and short noun phrases in Spanish with correct agreement (un perro, una bicicleta, dos perros). Driver-safety line included. Regional words for car and bus avoided in Spanish.",
+  "flagged_uncertainty": [],
+  "claims_check": "No outcome promises. The text says what to do and how long it takes; it does not claim fluency, school results or cognitive benefits.",
+  "concept_rank": 9,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "direction symmetry (either language may be the target)",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "examples run in both directions and the instructions name 'the language you are building'",
+      "Spanish kept to short words and phrases with articles and accents checked",
+      "closing mention of the book cut to one sentence after the activity is fully explained",
+      "added the un/una rule before nouns so the Spanish count phrases are correct",
+      "driver safety stated before the variations",
+      "no Spanish word for car or bus used, since those vary by country",
+      "closing sentence about the book removed: the CTA lives on the book card (CLAUDE.md, 12 Sep round four)"
+    ],
+    "remaining": [],
+    "note": "Not reviewed by a native bilingual human; this is a semantic review."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 10,
+  "recommended_offset_days": 10,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-bilingual-car-ride-counting-game",
+  "destination": "https://www.amazon.com/dp/B0H4V4DRLV",
+  "buyer_intent": "Parent looking for a screen-free bilingual game for car or bus rides",
+  "image_metadata": {
+    "url": "/libra/growth/pins/bilingual-car-ride-counting-game.jpg",
+    "source": "pin image generated in this project from the book's own cover",
+    "rights": "ours",
+    "pixels": "1000x1500",
+    "alt": "Pin image: the title \"The car-ride counting game: numbers one to ten in two languages, no screen\" set over the cover of the bilingual English-Spanish vocabulary book"
+  },
+  "batch": "pinterest-volume-2026-09-19"
+}

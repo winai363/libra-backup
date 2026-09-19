@@ -1,0 +1,63 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "bilingual-park-walk-five-things",
+  "language": "en",
+  "title": "The five-things park walk: collect, count and sort in two languages",
+  "description": "On your next walk to the park, collect five small things — a leaf, a stone, a stick — and name them in the language you are building. Then count, sort and play a hiding game.",
+  "link": "/libra/growth/articles/bilingual-park-walk-five-things",
+  "image_url": "/libra/growth/pins/bilingual-park-walk-five-things.jpg",
+  "target_slug": "bilingual-english-spanish-kids-vocab",
+  "campaign": "pin-bilingual-kids",
+  "cta_label": "See the book on Amazon",
+  "book_line": "Bilingual English-Spanish vocabulary book for kids: themed word lists and simple activities, read on a Kindle, copied into a notebook when you want them on paper.",
+  "pin_title": "The five-things park walk: collect, count and sort in two languages",
+  "body": "A walk is a vocabulary lesson that brings its own materials. Leaves, stones and sticks cost nothing, fit in a pocket, and give a child something to hold while they say the word.\n\nThe rule for today's walk: collect five things. Only five, and only things that are allowed to be picked up — fallen leaves, small stones, a stick, a seed or a feather.\n\nName each one as it goes into the pocket, in the language you are building. If you are building Spanish: \"una hoja\", \"una piedra\", \"un palo\". If you are building English: \"a leaf\", \"a stone\", \"a stick\". One word each. No stopping to practise.\n\nAt a bench — or back home on the kitchen table — empty the pocket and lay the five things out in a row. Now the game starts.\n\nFirst, count them together: \"uno, dos, tres, cuatro, cinco\" or \"one, two, three, four, five\".\n\nSecond, sort them. Big and small: grande, pequeño. Or by colour: verde, amarillo, rojo — green, yellow, red. Sorting makes your child say a word in order to put an object in a group.\n\nThird, hide one. Your child closes their eyes, you take one object away, and they tell you which one is missing: \"¡la hoja!\" or \"the leaf!\". This is the round most children ask to repeat.\n\nKeep the collection on a windowsill for a day or two and name it again at breakfast. Then take it back outside; the next walk brings a new set.\n\nThe walk works in a city too. A park is easiest, but a street gives you just as many words: a door, a window, a tree, a dog. Name five on the way and count them on the way home.\n\nOne habit worth keeping whenever Spanish words are part of the game: say them with their article, \"un palo\" or \"el palo\", \"una hoja\" or \"la hoja\", so the article comes with the word from the start.",
+  "qa_checklist": [
+    "A bilingual (EN/ES) reader checks both languages, not a tool",
+    "No claims about fluency, test scores or developmental outcomes",
+    "Every activity works with what is already in the house: no printer, no purchase",
+    "Original text written for this page, not lifted from the book",
+    "CTA is honest: a Kindle vocabulary book read on a screen, lists copied into a notebook"
+  ],
+  "semantic_review": "English body; Spanish nouns with indefinite and definite articles (una hoja, una piedra, un palo), numbers and colours. Regional colour word for brown avoided. Scripts in both directions for naming, counting and the missing-object round.",
+  "flagged_uncertainty": [],
+  "claims_check": "No outcome promises. The text says what to do and how long it takes; it does not claim fluency, school results or cognitive benefits.",
+  "concept_rank": 13,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "direction symmetry (either language may be the target)",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "examples run in both directions and the instructions name 'the language you are building'",
+      "Spanish kept to short words and phrases with articles and accents checked",
+      "closing mention of the book cut to one sentence after the activity is fully explained",
+      "avoided the regional split for brown (marrón / café) by using green, yellow and red",
+      "limited collecting to things allowed to be picked up",
+      "closing sentence about the book removed: the CTA lives on the book card (CLAUDE.md, 12 Sep round four)"
+    ],
+    "remaining": [],
+    "note": "Not reviewed by a native bilingual human; this is a semantic review."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 18,
+  "recommended_offset_days": 18,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-bilingual-park-walk-five-things",
+  "destination": "https://www.amazon.com/dp/B0H4V4DRLV",
+  "buyer_intent": "Parent looking for an outdoor bilingual activity with no materials",
+  "image_metadata": {
+    "url": "/libra/growth/pins/bilingual-park-walk-five-things.jpg",
+    "source": "pin image generated in this project from the book's own cover",
+    "rights": "ours",
+    "pixels": "1000x1500",
+    "alt": "Pin image: the title \"The five-things park walk: collect, count and sort in two languages\" set over the cover of the bilingual English-Spanish vocabulary book"
+  },
+  "batch": "pinterest-volume-2026-09-19"
+}

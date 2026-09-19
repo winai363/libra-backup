@@ -79,14 +79,34 @@ def _served_tree(tmp_path, plan, *, up_to_day):
     return served
 
 
+VOLUME_BATCH = "pinterest-volume-2026-09-19"
+
+
+def _first_batch(rows):
+    return [row for row in rows if row["data"].get("batch") != VOLUME_BATCH]
+
+
 def test_nine_prepared_articles_split_six_and_three(lanes):
     pinterest, owner_post = lanes
-    assert len(pinterest) == 6
+    assert len(_first_batch(pinterest.values())) == 6
     assert len(owner_post) == 3
 
 
+def test_the_volume_batch_is_pinterest_only_eleven_per_book(plan):
+    """Owner exception of 19 Sep 2026: more Pins for the same two books, same
+    channel, one per day after the first six."""
+    batch = [row for row in plan if row["data"].get("batch") == VOLUME_BATCH]
+    assert {row["lane"] for row in batch} == {"pinterest-rss"}
+    per_book = {}
+    for row in batch:
+        per_book[row["slug"]] = per_book.get(row["slug"], 0) + 1
+    assert per_book == {"adhd-adults-workbook-es": 11, "bilingual-english-spanish-kids-vocab": 11}
+    orders = sorted(row["order"] for row in batch)
+    assert orders == list(range(7, 29))
+
+
 def test_publication_order_is_one_per_day_then_weekly(plan):
-    pinterest = [row["data"]["recommended_offset_days"] for row in plan
+    pinterest = [row["data"]["recommended_offset_days"] for row in _first_batch(plan)
                  if row["lane"] == "pinterest-rss"]
     owner_post = [row["data"]["recommended_offset_days"] for row in plan
                   if row["lane"] == "owner-post"]
@@ -102,9 +122,17 @@ def test_every_article_points_at_a_live_book_and_its_own_asin(plan):
 
 
 def test_every_article_uses_its_own_book_cover_as_the_feed_image(plan):
-    for row in plan:
+    for row in _first_batch(plan):
         assert row["data"]["image_url"] == f"/libra/api/books/{row['slug']}/cover", row["id"]
         assert (KDP_DIR / row["slug"] / "cover.jpg").exists(), row["id"]
+
+
+def test_every_volume_batch_article_has_its_own_generated_pin_image(plan):
+    for row in plan:
+        if row["data"].get("batch") != VOLUME_BATCH:
+            continue
+        assert row["data"]["image_url"] == f"/libra/growth/pins/{row['id']}.jpg", row["id"]
+        assert (LIBRA_DIR / "data" / "growth_pins" / f"{row['id']}.jpg").exists(), row["id"]
 
 
 def test_guids_are_stable_unique_and_derived_from_the_id(plan):
@@ -133,7 +161,7 @@ def test_an_article_is_either_an_unapproved_draft_or_a_published_one(plan):
             assert row["data"]["published_at"] is None, row["id"]
 
 
-@pytest.mark.parametrize("day", list(range(0, 15)))
+@pytest.mark.parametrize("day", list(range(0, 31)))
 def test_the_feed_obeys_every_rule_on_each_day_of_the_schedule(tmp_path, plan, day):
     served = _served_tree(tmp_path / str(day), plan, up_to_day=day)
     now = APPROVED_ON + timedelta(days=day, hours=6)
@@ -185,9 +213,9 @@ def test_the_linkedin_lane_is_never_pinned(tmp_path, plan, lanes):
 
 def test_the_feed_window_settles_on_the_five_newest_pinterest_articles(tmp_path, plan, lanes):
     pinterest, _ = lanes
-    served = _served_tree(tmp_path, plan, up_to_day=14)
+    served = _served_tree(tmp_path, plan, up_to_day=30)
     xml, _ = build_rss(load_entries(served), site_base=SITE,
-                       now=APPROVED_ON + timedelta(days=20),
+                       now=APPROVED_ON + timedelta(days=40),
                        allowed_campaigns=PINTEREST_CAMPAIGNS)
     served_ids = [item.findtext("guid").removeprefix("libra-")
                   for item in ET.fromstring(xml).find("channel").findall("item")]

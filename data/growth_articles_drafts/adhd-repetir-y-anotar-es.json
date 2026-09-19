@@ -1,0 +1,62 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "adhd-repetir-y-anotar-es",
+  "language": "es",
+  "title": "TDAH y encargos olvidados: repetir y anotar antes de terminar la conversación",
+  "description": "Te piden algo de pasada, dices que sí y una hora después ya no está. Dos pasos antes de terminar la conversación: repetir el encargo en voz alta y anotarlo con un verbo y un nombre.",
+  "link": "/libra/growth/articles/adhd-repetir-y-anotar-es",
+  "image_url": "/libra/growth/pins/adhd-repetir-y-anotar-es.jpg",
+  "target_slug": "adhd-adults-workbook-es",
+  "campaign": "pin-adhd-es",
+  "cta_label": "Ver el cuaderno en Amazon",
+  "book_line": "Cuaderno de TDAH para adultos: plantillas y ejercicios que se leen en el Kindle y se copian a un cuaderno de papel o se imprimen.",
+  "pin_title": "TDAH y encargos olvidados: repetir y anotar antes de terminar la conversación",
+  "body": "Alguien te pide algo en medio de una conversación: \"¿me mandas el documento cuando llegues?\", \"acuérdate de comprar pilas\". Dices que sí, de verdad. Una hora después, el encargo ya no está, y la otra persona piensa que no te importó.\n\nLo que falló no fue el interés. Fue que el encargo llegó mezclado con todo lo demás que se dijo y nadie lo sacó de ahí.\n\nRepetir y anotar son dos pasos que se hacen antes de que termine la conversación, no después.\n\nPrimero, repite el encargo en voz alta con tus palabras. \"Entonces te mando el documento esta noche, ¿verdad?\". Esto hace dos cosas: confirma que entendiste lo mismo que la otra persona quería decir y convierte una frase de pasada en un acuerdo claro. Si hay un detalle dudoso, como una fecha o qué documento, es el momento de preguntarlo.\n\nSegundo, anótalo ahí mismo. En el teléfono, siempre en la misma nota, llamada \"Me pidieron\", o en un papel que lleves encima. Puedes decirlo con naturalidad: \"déjame anotarlo para que no se me pase\". Anotar delante de la otra persona también le muestra que el encargo te importa.\n\nCómo escribirlo para que sirva después: empieza con un verbo y termina con un nombre. \"Mandar documento a Ana.\" \"Comprar pilas, para Luis.\" Sin el verbo, dentro de dos días no sabrás qué había que hacer; sin el nombre, no sabrás para quién.\n\nTodo va a la misma nota. Si los encargos quedan repartidos entre mensajes, papeles sueltos y la palma de la mano, es casi como no haberlos anotado.\n\nUna vez al día, por ejemplo al llegar a casa, abres la nota. Lo que ya hiciste lo borras. Lo que sigue pendiente lo haces, lo pasas a tu lista con un día concreto, o avisas: \"no voy a poder hasta el jueves\". Avisar a tiempo cuida la relación tanto como cumplir.\n\nPruébalo con el próximo encargo que te hagan hoy, por pequeño que sea.",
+  "qa_checklist": [
+    "Un lector nativo de español revisa el texto completo (no solo una herramienta)",
+    "Ninguna afirmación médica: nada de diagnóstico, tratamiento, ni promesa de mejora clínica",
+    "Cada consejo es practicable hoy, sin comprar nada y sin imprimir",
+    "El texto es original y escrito para esta página, no extraído del libro",
+    "El CTA describe el libro con honestidad: cuaderno en Kindle, plantillas que se copian a papel"
+  ],
+  "semantic_review": "Español neutro, registro de tú, sin voseo ni modismos de un país concreto. Vocabulario elegido para leerse igual en España y en América Latina ('teléfono', 'agregar', 'anotar', 'correo'). Frases cortas; una técnica por artículo, respondida entera antes del CTA.",
+  "flagged_uncertainty": [],
+  "claims_check": "Sin afirmaciones médicas. No se menciona diagnóstico, medicación, tratamiento ni resultados clínicos, y no hay estadísticas. El texto habla de organización cotidiana con papel o teléfono.",
+  "concept_rank": 8,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "regional-language check",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "'la mayoría de la gente lo agradece' (afirmación sin base) → beneficio descrito sin cifras ni generalizar",
+      "'platicar' evitado: 'conversación'",
+      "nombres propios comunes en todos los países (Ana, Luis)",
+      "'cuál documento' (cuál + sustantivo, regional) → 'qué documento'",
+      "closing sentence about the book removed: the CTA lives on the book card (CLAUDE.md, 12 Sep round four)"
+    ],
+    "remaining": [],
+    "note": "Not reviewed by a native human; this is a semantic review."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 21,
+  "recommended_offset_days": 21,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-adhd-repetir-y-anotar-es",
+  "destination": "https://www.amazon.com/dp/B0H6VB1SDX",
+  "buyer_intent": "Adulto con TDAH que olvida encargos y favores y eso le trae roces con otras personas",
+  "image_metadata": {
+    "url": "/libra/growth/pins/adhd-repetir-y-anotar-es.jpg",
+    "source": "pin image generated in this project from the book's own cover",
+    "rights": "ours",
+    "pixels": "1000x1500",
+    "alt": "Pin vertical con el título «TDAH y encargos olvidados: repetir y anotar antes de terminar la conversación» sobre la portada del libro TDAH en Adultos: Cuaderno de Ejercicios"
+  },
+  "batch": "pinterest-volume-2026-09-19"
+}

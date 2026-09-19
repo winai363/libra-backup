@@ -36,7 +36,7 @@ DESCRIPTION_LIMITS = (30, 500)
 # Only our own hub paths may be linked: the claimed location is the /libra/growth
 # subpath, and a Pin that leaves it is not traffic we can measure or stand behind.
 ALLOWED_LINK_PREFIXES = ("/libra/growth/articles/", "/libra/growth/books/")
-ALLOWED_IMAGE_PREFIXES = ("/libra/api/books/", "/libra/static/")
+ALLOWED_IMAGE_PREFIXES = ("/libra/api/books/", "/libra/static/", "/libra/growth/pins/")
 # Keys that would mean a manuscript or a restricted sample is riding along.
 FORBIDDEN_KEYS = ("manuscript", "ebook_md", "sample_text", "epub", "pdf", "chapter_text")
 

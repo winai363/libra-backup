@@ -67,7 +67,7 @@ def _served(paths):
     return sorted(f.stem for f in paths.served.glob("*.json")) if paths.served.is_dir() else []
 
 
-@pytest.mark.parametrize("day", [datetime(2026, 9, 12, 9, 0), datetime(2026, 9, 18, 9, 0),
+@pytest.mark.parametrize("day", [datetime(2026, 9, 12, 9, 0), datetime(2026, 10, 12, 9, 0),
                                  datetime(2027, 9, 14, 9, 0)])
 def test_outside_the_window_is_a_no_op(paths, day):
     result = schedule.run(now=day.replace(tzinfo=schedule.TIMEZONE))
@@ -152,7 +152,24 @@ def test_the_lane_runs_dry_without_error_once_every_article_is_approved(paths):
     assert "already approved" in exhausted["reason"]
 
 
-def test_the_window_is_exactly_the_five_authorized_days():
+def test_the_window_ends_the_day_before_the_day_30_verdict():
+    # 13-17 Sep, extended by the owner on 19 Sep 2026 to 11 Oct (Day 30 = 12 Oct).
     assert schedule.WINDOW_FIRST_DAY == date(2026, 9, 13)
-    assert schedule.WINDOW_LAST_DAY == date(2026, 9, 17)
-    assert (schedule.WINDOW_LAST_DAY - schedule.WINDOW_FIRST_DAY).days + 1 == 5
+    assert schedule.WINDOW_LAST_DAY == date(2026, 10, 11)
+
+
+def test_an_article_whose_pin_image_is_missing_is_not_approved(paths):
+    draft_file = paths.drafts / "pin-one.json"
+    draft = json.loads(draft_file.read_text())
+    draft["image_url"] = "/libra/growth/pins/pin-one.jpg"
+    draft_file.write_text(json.dumps(draft))
+
+    missing = schedule.run(now=datetime(2026, 9, 20, 9, 0, tzinfo=schedule.TIMEZONE))
+    assert missing["state"] == "refused"
+    assert "has not been generated" in missing["reason"]
+    assert _served(paths) == []
+
+    (paths.data / "growth_pins").mkdir()
+    (paths.data / "growth_pins" / "pin-one.jpg").write_bytes(b"\xff\xd8jpeg")
+    approved = schedule.run(now=datetime(2026, 9, 21, 9, 0, tzinfo=schedule.TIMEZONE))
+    assert approved["state"] == "approved" and approved["id"] == "pin-one"

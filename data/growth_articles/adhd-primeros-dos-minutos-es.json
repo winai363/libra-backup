@@ -1,0 +1,63 @@
+{
+  "qa_approved": true,
+  "published_at": "2026-09-19T12:34:48.291992+07:00",
+  "id": "adhd-primeros-dos-minutos-es",
+  "language": "es",
+  "title": "Solo los dos primeros minutos: cómo empezar una tarea aburrida con TDAH",
+  "description": "Muchas tareas aburridas no fallan a la mitad: fallan antes de empezar. Un acuerdo de dos minutos contigo y una primera acción tan pequeña que no necesita ganas.",
+  "link": "/libra/growth/articles/adhd-primeros-dos-minutos-es",
+  "image_url": "/libra/growth/pins/adhd-primeros-dos-minutos-es.jpg",
+  "target_slug": "adhd-adults-workbook-es",
+  "campaign": "pin-adhd-es",
+  "cta_label": "Ver el cuaderno en Amazon",
+  "book_line": "Cuaderno de TDAH para adultos: plantillas y ejercicios que se leen en el Kindle y se copian a un cuaderno de papel o se imprimen.",
+  "pin_title": "Solo los dos primeros minutos: cómo empezar una tarea aburrida con TDAH",
+  "body": "Hay tareas que no son difíciles, solo aburridas: completar un formulario, ordenar recibos, contestar un correo incómodo. Y justamente por eso se quedan semanas en la lista. No hay nada que resolver, solo algo que empezar, y empezar es la parte más cara.\n\nLa técnica consiste en cambiar el acuerdo. No te comprometes a hacer la tarea. Te comprometes a dos minutos de la tarea. Cuando pasen, puedes parar sin culpa.\n\nPara que funcione, los dos minutos tienen que empezar con una acción física concreta, no con una intención. \"Ordenar los papeles del seguro\" no es una acción. \"Poner la carpeta del seguro sobre la mesa y abrirla\" sí lo es. \"Contestar el correo difícil\" no es una acción; \"escribir la primera frase del correo, aunque salga mal\" sí.\n\nPaso a paso:\n\nElige una sola tarea aburrida de tu lista. La que lleva más días ahí.\n\nEscribe en un papel la primera acción física, tan pequeña que parezca ridícula.\n\nPon un temporizador de dos minutos en el teléfono y deja el teléfono boca abajo, lejos de la mano.\n\nHaz la acción hasta que suene.\n\nCuando suene, decide con honestidad: ¿sigo o paro? Las dos respuestas valen. Si paras, escribe en el mismo papel cuál sería la siguiente acción, para que el próximo arranque también sea pequeño.\n\nA veces, al sonar, sigues. No porque la tarea se haya vuelto interesante, sino porque la barrera estaba en la entrada y ya la cruzaste. Pero si la técnica solo cuenta cuando sigues, deja de servir el primer día que paras. Por eso los dos minutos tienen que valer como éxito por sí solos.\n\nDos errores frecuentes: elegir como primera acción algo que en realidad es la tarea entera (\"escribir el informe\") y hacer los dos minutos con el correo abierto al lado. La primera acción tiene que caber en dos minutos, y durante esos dos minutos solo existe ella.\n\nPrueba hoy con una sola tarea. Si mañana la retomas con otros dos minutos, ya tienes un método.",
+  "qa_checklist": [
+    "Un lector nativo de español revisa el texto completo (no solo una herramienta)",
+    "Ninguna afirmación médica: nada de diagnóstico, tratamiento, ni promesa de mejora clínica",
+    "Cada consejo es practicable hoy, sin comprar nada y sin imprimir",
+    "El texto es original y escrito para esta página, no extraído del libro",
+    "El CTA describe el libro con honestidad: cuaderno en Kindle, plantillas que se copian a papel"
+  ],
+  "semantic_review": "Español neutro, registro de tú, sin voseo ni modismos de un país concreto. Vocabulario elegido para leerse igual en España y en América Latina ('teléfono', 'agregar', 'anotar', 'correo'). Frases cortas; una técnica por artículo, respondida entera antes del CTA.",
+  "flagged_uncertainty": [],
+  "claims_check": "Sin afirmaciones médicas. No se menciona diagnóstico, medicación, tratamiento ni resultados clínicos, y no hay estadísticas. El texto habla de organización cotidiana con papel o teléfono.",
+  "concept_rank": 1,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "regional-language check",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "'atascarse' evitado",
+      "ejemplo de la declaración de impuestos (presente en el libro) sustituido por uno propio para no copiar el libro",
+      "'lo que suele pasar es que sigues' suavizado a 'a veces sigues' (sin promesa)",
+      "distinto de la 'regla de los dos minutos' clásica (hacer ya lo que dura menos de dos minutos): aquí se trata de empezar",
+      "closing sentence about the book removed: the CTA lives on the book card (CLAUDE.md, 12 Sep round four)"
+    ],
+    "remaining": [],
+    "note": "Not reviewed by a native human; this is a semantic review."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 7,
+  "recommended_offset_days": 7,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-adhd-primeros-dos-minutos-es",
+  "destination": "https://www.amazon.com/dp/B0H6VB1SDX",
+  "buyer_intent": "Adulto con TDAH que pospone tareas aburridas durante semanas",
+  "image_metadata": {
+    "url": "/libra/growth/pins/adhd-primeros-dos-minutos-es.jpg",
+    "source": "pin image generated in this project from the book's own cover",
+    "rights": "ours",
+    "pixels": "1000x1500",
+    "alt": "Pin vertical con el título «Solo los dos primeros minutos: cómo empezar una tarea aburrida con TDAH» sobre la portada del libro TDAH en Adultos: Cuaderno de Ejercicios"
+  },
+  "batch": "pinterest-volume-2026-09-19",
+  "approved_by": "owner batch approval (activation runbook)"
+}

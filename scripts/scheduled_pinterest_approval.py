@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""scheduled_pinterest_approval.py — the owner-authorized 5-day publication
-schedule for the Pinterest lane of the organic experiment (13-17 Sep 2026,
-09:00 Asia/Bangkok, one article per run).
+"""scheduled_pinterest_approval.py — the owner-authorized publication schedule
+for the Pinterest lane of the organic experiment (09:00 Asia/Bangkok, one article
+per run). First window 13-17 Sep 2026; on 19 Sep 2026 the owner extended it to
+11 Oct 2026 (the eve of the Day-30 verdict) to raise Pin volume, as a stated
+exception to the experiment's feature freeze.
 
 It is a thin, heavily fenced wrapper around
 `activate_organic_experiment.approve_next(lane="pinterest-rss")`, which keeps
@@ -10,7 +12,7 @@ campaign, publication order, one article per lane per day, and a published_at
 that is never in the future.
 
 What this wrapper adds, and nothing more:
-  - a hard date window. Outside 13-17 Sep 2026 it is a no-op, so the crontab line
+  - a hard date window. Outside 13 Sep - 11 Oct 2026 it is a no-op, so the crontab line
     can never fire again next September. The guard lives here rather than in a
     cron line that deletes itself, because a self-deleting one-shot cron has
     already failed once on this server (2026-09-12 cleanup).
@@ -45,7 +47,7 @@ from organic_experiment_report import send_telegram  # noqa: E402
 LANE = "pinterest-rss"
 TIMEZONE = ZoneInfo("Asia/Bangkok")
 WINDOW_FIRST_DAY = date(2026, 9, 13)
-WINDOW_LAST_DAY = date(2026, 9, 17)
+WINDOW_LAST_DAY = date(2026, 10, 11)
 LOCK_FILE = LIBRA_DIR / "data" / ".pinterest-approval.lock"
 
 

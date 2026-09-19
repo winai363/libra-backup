@@ -1,0 +1,61 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "adhd-modo-espera-es",
+  "language": "es",
+  "title": "El modo espera con TDAH: qué hacer con las horas antes de una cita",
+  "description": "Tienes algo a las cuatro y la mañana se va esperando, sin empezar nada. Cómo aprovechar las horas de antes con una hora de salida escrita, dos alarmas y tareas con un final claro.",
+  "link": "/libra/growth/articles/adhd-modo-espera-es",
+  "image_url": "/libra/growth/pins/adhd-modo-espera-es.jpg",
+  "target_slug": "adhd-adults-workbook-es",
+  "campaign": "pin-adhd-es",
+  "cta_label": "Ver el cuaderno en Amazon",
+  "book_line": "Cuaderno de TDAH para adultos: plantillas y ejercicios que se leen en el Kindle y se copian a un cuaderno de papel o se imprimen.",
+  "pin_title": "El modo espera con TDAH: qué hacer con las horas antes de una cita",
+  "body": "Tienes una cita a las cuatro de la tarde. Es lo único del día. Y aun así la mañana se va sin hacer nada: no empiezas nada importante por miedo a que se te pase la hora, así que esperas. A las cuatro llegas con la sensación de haber perdido el día.\n\nHay quien llama a esto \"modo espera\". La cita ocupa la atención de todas las horas anteriores, aunque falte mucho para ella.\n\nLo que ayuda es sacar la cita de la cabeza y ponerla en un papel, junto con un plan para las horas de antes.\n\nPaso 1: escribe la hora de salida, no la hora de la cita. Si la cita es a las cuatro y tardas media hora en llegar, la hora que importa es las tres y veinte. Pon una alarma a esa hora y otra quince minutos antes, para cerrar lo que estés haciendo.\n\nPaso 2: deja listo desde ya lo que tienes que llevar. Ropa, documentos, llaves. Si ya está preparado, una parte de tu cabeza deja de vigilarlo.\n\nPaso 3: elige para el tiempo que queda tareas con un final claro, que quepan con holgura en el hueco: doblar la ropa, contestar tres mensajes, preparar la comida de mañana. Evita las tareas que absorben, como empezar a ordenar un armario o abrir un documento largo; esas son las que te hacen llegar tarde.\n\nPaso 4: escribe el plan con una línea por tarea y la hora de salida al final, subrayada. \"Ropa. Tres mensajes. Comida de mañana. Salir a las tres y veinte.\"\n\nCon las alarmas puestas, ya no hace falta mirar el reloj cada diez minutos: el teléfono vigila la hora y tú puedes dedicarte a la tarea.\n\nSi aun así la mañana se va esperando, no pasa nada. La próxima vez, prepara el papel la noche anterior.\n\nEl mismo sistema sirve para otros momentos de espera: antes de salir al trabajo, antes de una llamada a media tarde, antes de ir a buscar a alguien.",
+  "qa_checklist": [
+    "Un lector nativo de español revisa el texto completo (no solo una herramienta)",
+    "Ninguna afirmación médica: nada de diagnóstico, tratamiento, ni promesa de mejora clínica",
+    "Cada consejo es practicable hoy, sin comprar nada y sin imprimir",
+    "El texto es original y escrito para esta página, no extraído del libro",
+    "El CTA describe el libro con honestidad: cuaderno en Kindle, plantillas que se copian a papel"
+  ],
+  "semantic_review": "Español neutro, registro de tú, sin voseo ni modismos de un país concreto. Vocabulario elegido para leerse igual en España y en América Latina ('teléfono', 'agregar', 'anotar', 'correo'). Frases cortas; una técnica por artículo, respondida entera antes del CTA.",
+  "flagged_uncertainty": [],
+  "claims_check": "Sin afirmaciones médicas. No se menciona diagnóstico, medicación, tratamiento ni resultados clínicos, y no hay estadísticas. El texto habla de organización cotidiana con papel o teléfono.",
+  "concept_rank": 11,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "regional-language check",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "'modo espera' presentado como nombre informal, sin término clínico ni afirmación de frecuencia",
+      "formato de hora de 24 h evitado: 'las tres y veinte'",
+      "adjetivos con género evitados ('cansado') para no excluir a nadie",
+      "closing sentence about the book removed: the CTA lives on the book card (CLAUDE.md, 12 Sep round four)"
+    ],
+    "remaining": [],
+    "note": "Not reviewed by a native human; this is a semantic review."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 27,
+  "recommended_offset_days": 27,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-adhd-modo-espera-es",
+  "destination": "https://www.amazon.com/dp/B0H6VB1SDX",
+  "buyer_intent": "Adulto con TDAH que pierde el día entero esperando una cita o compromiso",
+  "image_metadata": {
+    "url": "/libra/growth/pins/adhd-modo-espera-es.jpg",
+    "source": "pin image generated in this project from the book's own cover",
+    "rights": "ours",
+    "pixels": "1000x1500",
+    "alt": "Pin vertical con el título «El modo espera con TDAH: qué hacer con las horas antes de una cita» sobre la portada del libro TDAH en Adultos: Cuaderno de Ejercicios"
+  },
+  "batch": "pinterest-volume-2026-09-19"
+}

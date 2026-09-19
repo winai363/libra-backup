@@ -338,3 +338,12 @@ def test_guard_writes_nothing_but_the_state_it_is_given(lane, tmp_path):
     after.pop("access.log", None)
     assert after == before
     assert state["distribution_guard"]["result"] == "EARLY_DISTRIBUTION_FAILURE"
+
+
+def test_articles_after_the_first_inventory_do_not_slide_the_window(lane):
+    """Owner extended the schedule on 19 Sep 2026: a Pin published every day after
+    17 Sep must not keep pushing the one-time early-distribution check forward."""
+    later = {**lane["articles"],
+             "a9": article(WINDOW_END - timedelta(hours=1)),
+             "a10": article(WINDOW_END + timedelta(days=1))}
+    assert guard.discovery_window_end(later, WINDOW_END + timedelta(days=2)) == WINDOW_END

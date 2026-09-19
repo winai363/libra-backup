@@ -1,0 +1,61 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "adhd-una-superficie-es",
+  "language": "es",
+  "title": "Una superficie al día: ordenar la casa con TDAH empezando por una sola mesa",
+  "description": "Ordenar toda la casa es un proyecto que nunca empieza. Ordenar una superficie cabe en quince minutos. Cómo elegirla, qué hacer con cada objeto y cómo mantenerla despejada.",
+  "link": "/libra/growth/articles/adhd-una-superficie-es",
+  "image_url": "/libra/growth/pins/adhd-una-superficie-es.jpg",
+  "target_slug": "adhd-adults-workbook-es",
+  "campaign": "pin-adhd-es",
+  "cta_label": "Ver el cuaderno en Amazon",
+  "book_line": "Cuaderno de TDAH para adultos: plantillas y ejercicios que se leen en el Kindle y se copian a un cuaderno de papel o se imprimen.",
+  "pin_title": "Una superficie al día: ordenar la casa con TDAH empezando por una sola mesa",
+  "body": "\"Ordenar la casa\" es una frase que no tiene principio. ¿Por dónde se empieza: la ropa, la cocina, los papeles? Mientras se decide, pasa el fin de semana y el desorden sigue en el mismo sitio.\n\nUna superficie al día sí tiene un principio claro: una sola superficie plana. Una mesa, la parte de arriba de un mueble, el escritorio, esa silla que se convirtió en armario. Solo esa, y solo hoy.\n\nCómo hacerlo:\n\nElige la superficie que más ves durante el día. No la peor de la casa, sino la más visible. Despejar lo que ves a diario se nota más que despejar un rincón que nadie mira.\n\nPon un temporizador de quince minutos.\n\nToma los objetos uno por uno y elige para cada uno entre cuatro destinos: se queda aquí, va a su sitio en otra habitación, basura, o una caja de \"no sé\". Lo que va a otra habitación no se lleva objeto por objeto: se junta en otra caja y se reparte al final, en un solo viaje. Cada viaje a otra habitación es una oportunidad de distraerte con lo que hay allí.\n\nLa caja de \"no sé\" es la clave. Muchas cosas se quedan en la mesa porque decidir qué hacer con ellas cuesta. La caja permite avanzar sin decidir. Ciérrala, escribe la fecha encima y guárdala; la revisas dentro de un mes, con calma.\n\nCuando suene el temporizador, paras. Si la superficie no quedó vacía, no importa; mañana sigues con la misma.\n\nPara que dure, una regla pequeña: la superficie despejada tiene un solo uso. Si es la mesa de comer, en ella solo se come. Una superficie sin un uso definido vuelve a llenarse en pocos días, porque es el lugar más cómodo para soltar cualquier cosa.\n\nY una revisión de un minuto cada noche: lo que haya caído encima durante el día vuelve a su sitio antes de acostarte.\n\nCuando una superficie aguante una semana despejada, pasa a la siguiente. Una por vez. Ordenar tres a la vez suele terminar con tres a medias.",
+  "qa_checklist": [
+    "Un lector nativo de español revisa el texto completo (no solo una herramienta)",
+    "Ninguna afirmación médica: nada de diagnóstico, tratamiento, ni promesa de mejora clínica",
+    "Cada consejo es practicable hoy, sin comprar nada y sin imprimir",
+    "El texto es original y escrito para esta página, no extraído del libro",
+    "El CTA describe el libro con honestidad: cuaderno en Kindle, plantillas que se copian a papel"
+  ],
+  "semantic_review": "Español neutro, registro de tú, sin voseo ni modismos de un país concreto. Vocabulario elegido para leerse igual en España y en América Latina ('teléfono', 'agregar', 'anotar', 'correo'). Frases cortas; una técnica por artículo, respondida entera antes del CTA.",
+  "flagged_uncertainty": [],
+  "claims_check": "Sin afirmaciones médicas. No se menciona diagnóstico, medicación, tratamiento ni resultados clínicos, y no hay estadísticas. El texto habla de organización cotidiana con papel o teléfono.",
+  "concept_rank": 7,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "regional-language check",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "'bolsa' (significa cosas distintas según el país) → 'otra caja'",
+      "'encimera/mesón' evitado: se usan 'mesa', 'escritorio', 'parte de arriba de un mueble'",
+      "sin promesa de casa ordenada: solo una superficie",
+      "closing sentence about the book removed: the CTA lives on the book card (CLAUDE.md, 12 Sep round four)"
+    ],
+    "remaining": [],
+    "note": "Not reviewed by a native human; this is a semantic review."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 19,
+  "recommended_offset_days": 19,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-adhd-una-superficie-es",
+  "destination": "https://www.amazon.com/dp/B0H6VB1SDX",
+  "buyer_intent": "Adulto con TDAH que se siente superado por el desorden de la casa y no sabe por dónde empezar",
+  "image_metadata": {
+    "url": "/libra/growth/pins/adhd-una-superficie-es.jpg",
+    "source": "pin image generated in this project from the book's own cover",
+    "rights": "ours",
+    "pixels": "1000x1500",
+    "alt": "Pin vertical con el título «Una superficie al día: ordenar la casa con TDAH empezando por una sola mesa» sobre la portada del libro TDAH en Adultos: Cuaderno de Ejercicios"
+  },
+  "batch": "pinterest-volume-2026-09-19"
+}

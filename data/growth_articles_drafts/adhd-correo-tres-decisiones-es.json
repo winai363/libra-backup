@@ -1,0 +1,62 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "adhd-correo-tres-decisiones-es",
+  "language": "es",
+  "title": "Vaciar el correo en 15 minutos con TDAH: tres decisiones para cada mensaje",
+  "description": "Una bandeja de entrada llena no se ordena leyendo, se ordena decidiendo. Tres respuestas posibles para cada correo y una sesión de 15 minutos con temporizador.",
+  "link": "/libra/growth/articles/adhd-correo-tres-decisiones-es",
+  "image_url": "/libra/growth/pins/adhd-correo-tres-decisiones-es.jpg",
+  "target_slug": "adhd-adults-workbook-es",
+  "campaign": "pin-adhd-es",
+  "cta_label": "Ver el cuaderno en Amazon",
+  "book_line": "Cuaderno de TDAH para adultos: plantillas y ejercicios que se leen en el Kindle y se copian a un cuaderno de papel o se imprimen.",
+  "pin_title": "Vaciar el correo en 15 minutos con TDAH: tres decisiones para cada mensaje",
+  "body": "Una bandeja de entrada con cuatrocientos mensajes no pesa por los mensajes. Pesa porque cada vez que la abres ves cuatrocientas decisiones sin tomar, y cierras la pestaña sin tocar ninguna.\n\nEl truco es dejar de leer el correo y empezar a clasificarlo. Para cada mensaje hay solo tres respuestas posibles:\n\nHecho. Se responde o se resuelve en menos de dos minutos. Lo haces en ese momento y lo archivas.\n\nPendiente. Pide más de dos minutos: una respuesta pensada, un pago, un documento que buscar. No lo haces ahora. Lo mueves a una carpeta o etiqueta que se llame \"Pendiente\" y anotas en tu lista de papel una línea con el nombre de la persona y lo que falta.\n\nFuera. No necesita nada de ti. Archivo o papelera, sin terminar de leerlo.\n\nCómo hacerlo hoy:\n\nPon un temporizador de quince minutos. Empieza por los correos más recientes, no por los más antiguos: lo reciente es lo que todavía tiene arreglo. Mensaje por mensaje, una de las tres decisiones. Nada de abrir enlaces ni contestar a fondo; eso es trabajo de otro momento.\n\nCuando suene el temporizador, paras aunque queden mensajes. Todos los mensajes antiguos que no revisaste los mueves de una vez a una carpeta llamada \"Antes de hoy\". Si ahí había algo urgente, lo más probable es que alguien vuelva a escribir.\n\nDesde mañana, dos sesiones cortas al día, a horas fijas, en lugar de mirar el correo cada vez que suena el teléfono. Si puedes, desactiva el aviso sonoro del correo. Cada aviso es una invitación a abrir la bandeja sin tiempo para decidir nada, y un correo leído pero no decidido vuelve a costar atención la próxima vez que lo ves.\n\nLa carpeta \"Pendiente\" es la única que exige revisión. Una vez al día, mira cuántos mensajes tiene. Si pasan de diez, la siguiente sesión se dedica solo a ella.\n\nNo hace falta llegar a una bandeja vacía. Lo que se busca es que abrir el correo deje de dar miedo.",
+  "qa_checklist": [
+    "Un lector nativo de español revisa el texto completo (no solo una herramienta)",
+    "Ninguna afirmación médica: nada de diagnóstico, tratamiento, ni promesa de mejora clínica",
+    "Cada consejo es practicable hoy, sin comprar nada y sin imprimir",
+    "El texto es original y escrito para esta página, no extraído del libro",
+    "El CTA describe el libro con honestidad: cuaderno en Kindle, plantillas que se copian a papel"
+  ],
+  "semantic_review": "Español neutro, registro de tú, sin voseo ni modismos de un país concreto. Vocabulario elegido para leerse igual en España y en América Latina ('teléfono', 'agregar', 'anotar', 'correo'). Frases cortas; una técnica por artículo, respondida entera antes del CTA.",
+  "flagged_uncertainty": [],
+  "claims_check": "Sin afirmaciones médicas. No se menciona diagnóstico, medicación, tratamiento ni resultados clínicos, y no hay estadísticas. El texto habla de organización cotidiana con papel o teléfono.",
+  "concept_rank": 3,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "regional-language check",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "'mail' evitado: se usa 'correo' en todo el texto",
+      "'no alcanzaste' (regional) → 'no revisaste'",
+      "'chequear' (anglicismo regional) → 'revisar'",
+      "afirmación 'casi nunca era urgente' suavizada a 'lo más probable'",
+      "closing sentence about the book removed: the CTA lives on the book card (CLAUDE.md, 12 Sep round four)"
+    ],
+    "remaining": [],
+    "note": "Not reviewed by a native human; this is a semantic review."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 11,
+  "recommended_offset_days": 11,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-adhd-correo-tres-decisiones-es",
+  "destination": "https://www.amazon.com/dp/B0H6VB1SDX",
+  "buyer_intent": "Adulto con TDAH que evita abrir el correo porque la bandeja de entrada está desbordada",
+  "image_metadata": {
+    "url": "/libra/growth/pins/adhd-correo-tres-decisiones-es.jpg",
+    "source": "pin image generated in this project from the book's own cover",
+    "rights": "ours",
+    "pixels": "1000x1500",
+    "alt": "Pin vertical con el título «Vaciar el correo en 15 minutos con TDAH: tres decisiones para cada mensaje» sobre la portada del libro TDAH en Adultos: Cuaderno de Ejercicios"
+  },
+  "batch": "pinterest-volume-2026-09-19"
+}

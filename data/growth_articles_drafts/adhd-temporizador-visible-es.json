@@ -1,0 +1,62 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "adhd-temporizador-visible-es",
+  "language": "es",
+  "title": "Un temporizador a la vista: ver pasar el tiempo cuando tienes TDAH",
+  "description": "Si levantas la vista y ya pasó una hora sin notarlo, no es falta de voluntad: el tiempo no se ve. Cómo hacerlo visible con un temporizador, un papel y dos reglas.",
+  "link": "/libra/growth/articles/adhd-temporizador-visible-es",
+  "image_url": "/libra/growth/pins/adhd-temporizador-visible-es.jpg",
+  "target_slug": "adhd-adults-workbook-es",
+  "campaign": "pin-adhd-es",
+  "cta_label": "Ver el cuaderno en Amazon",
+  "book_line": "Cuaderno de TDAH para adultos: plantillas y ejercicios que se leen en el Kindle y se copian a un cuaderno de papel o se imprimen.",
+  "pin_title": "Un temporizador a la vista: ver pasar el tiempo cuando tienes TDAH",
+  "body": "Empiezas a contestar un mensaje \"un momento\" y, cuando levantas la vista, pasaron cuarenta minutos. O al revés: una tarea de diez minutos parece tan larga que la dejas para después. En los dos casos pasa lo mismo: el tiempo no se ve, y lo que no se ve se calcula mal.\n\nUn temporizador a la vista convierte el tiempo en algo que se puede mirar. No hace falta comprar nada. Sirve el temporizador del teléfono, el de la cocina o un reloj de pared, con una condición: tiene que estar en tu campo de visión mientras haces la tarea, no guardado en un bolsillo.\n\nCómo usarlo hoy:\n\nAntes de empezar una tarea, escribe en un papel cuánto crees que va a durar. Un número, sin pensarlo mucho.\n\nPon el temporizador con ese tiempo y déjalo delante, donde lo veas sin girar la cabeza. Si usas el teléfono, deja en pantalla los minutos que quedan y silencia las notificaciones mientras dura.\n\nCuando suene, anota al lado del número cuánto tardaste de verdad. No para juzgarte, sino para tener datos.\n\nDespués de unos días, esas dos columnas, lo que calculaste y lo que tardaste, te dicen algo muy útil: cuánto se desvía tu cálculo. Si casi siempre tardas el doble, ya tienes una regla práctica: lo que creas que dura veinte minutos, lo reservas en la agenda como cuarenta.\n\nDos reglas que lo hacen funcionar:\n\nUn temporizador por tarea. Si terminas antes, lo paras y pones otro para la siguiente. Un solo temporizador largo para toda la tarde se olvida igual que el reloj de la pared.\n\nTemporizador también para lo que te atrapa. Redes sociales, noticias, juegos: pon quince minutos antes de abrirlos. Cuando suene no tienes que cerrarlos, pero sí decidir de forma consciente si sigues.\n\nEsto no cambia cómo percibes el tiempo. Cambia que ya no dependes de percibirlo: lo tienes delante.",
+  "qa_checklist": [
+    "Un lector nativo de español revisa el texto completo (no solo una herramienta)",
+    "Ninguna afirmación médica: nada de diagnóstico, tratamiento, ni promesa de mejora clínica",
+    "Cada consejo es practicable hoy, sin comprar nada y sin imprimir",
+    "El texto es original y escrito para esta página, no extraído del libro",
+    "El CTA describe el libro con honestidad: cuaderno en Kindle, plantillas que se copian a papel"
+  ],
+  "semantic_review": "Español neutro, registro de tú, sin voseo ni modismos de un país concreto. Vocabulario elegido para leerse igual en España y en América Latina ('teléfono', 'agregar', 'anotar', 'correo'). Frases cortas; una técnica por artículo, respondida entera antes del CTA.",
+  "flagged_uncertainty": [],
+  "claims_check": "Sin afirmaciones médicas. No se menciona diagnóstico, medicación, tratamiento ni resultados clínicos, y no hay estadísticas. El texto habla de organización cotidiana con papel o teléfono.",
+  "concept_rank": 6,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "regional-language check",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "'cuenta atrás/cuenta regresiva' (varía por país) → 'los minutos que quedan'",
+      "'vídeos/videos' (ortografía regional) evitado",
+      "'apuntar' → 'anotar'",
+      "no se usa 'ceguera temporal' ni ningún término clínico",
+      "closing sentence about the book removed: the CTA lives on the book card (CLAUDE.md, 12 Sep round four)"
+    ],
+    "remaining": [],
+    "note": "Not reviewed by a native human; this is a semantic review."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 17,
+  "recommended_offset_days": 17,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-adhd-temporizador-visible-es",
+  "destination": "https://www.amazon.com/dp/B0H6VB1SDX",
+  "buyer_intent": "Adulto con TDAH que pierde la noción del tiempo y calcula mal cuánto dura cada tarea",
+  "image_metadata": {
+    "url": "/libra/growth/pins/adhd-temporizador-visible-es.jpg",
+    "source": "pin image generated in this project from the book's own cover",
+    "rights": "ours",
+    "pixels": "1000x1500",
+    "alt": "Pin vertical con el título «Un temporizador a la vista: ver pasar el tiempo cuando tienes TDAH» sobre la portada del libro TDAH en Adultos: Cuaderno de Ejercicios"
+  },
+  "batch": "pinterest-volume-2026-09-19"
+}

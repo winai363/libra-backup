@@ -118,6 +118,61 @@
       "pin_url": null,
       "evidence_type": "pinterest_render_logs",
       "url_kind": "destination article on our own site, not the Pin"
+    },
+    {
+      "channel": "pinterest-rss",
+      "slug": "adhd-adults-workbook-es",
+      "url": "https://newton-winai-klinprasom.incomeinclick.in.th/libra/growth/articles/adhd-punto-de-aterrizaje-es",
+      "observed_at": "2026-09-14T14:58:26+07:00",
+      "evidence": "server-side evidence only: Pinterest crawled /libra/growth/articles/adhd-punto-de-aterrizaje-es at 2026-09-14T14:58:23+07:00 and its image fetcher pulled the article's cover at 2026-09-14T14:58:26+07:00, both after publication — Pinterest materialised a Pin from the feed item. The Pin's own URL is not observable to a publisher without the Pinterest API, so no Pin page was opened and pin_url stays null.",
+      "slug_article": "adhd-punto-de-aterrizaje-es",
+      "pin_url": null,
+      "evidence_type": "pinterest_render_logs",
+      "url_kind": "destination article on our own site, not the Pin"
+    },
+    {
+      "channel": "pinterest-rss",
+      "slug": "bilingual-english-spanish-kids-vocab",
+      "url": "https://newton-winai-klinprasom.incomeinclick.in.th/libra/growth/articles/bilingual-kitchen-word-walk",
+      "observed_at": "2026-09-14T14:58:30+07:00",
+      "evidence": "server-side evidence only: Pinterest crawled /libra/growth/articles/bilingual-kitchen-word-walk at 2026-09-14T14:58:22+07:00 and its image fetcher pulled the article's cover at 2026-09-14T14:58:30+07:00, both after publication — Pinterest materialised a Pin from the feed item. The Pin's own URL is not observable to a publisher without the Pinterest API, so no Pin page was opened and pin_url stays null.",
+      "slug_article": "bilingual-kitchen-word-walk",
+      "pin_url": null,
+      "evidence_type": "pinterest_render_logs",
+      "url_kind": "destination article on our own site, not the Pin"
+    },
+    {
+      "channel": "pinterest-rss",
+      "slug": "bilingual-english-spanish-kids-vocab",
+      "url": "https://newton-winai-klinprasom.incomeinclick.in.th/libra/growth/articles/bilingual-child-refuses-to-speak",
+      "observed_at": "2026-09-15T14:57:28+07:00",
+      "evidence": "server-side evidence only: Pinterest crawled /libra/growth/articles/bilingual-child-refuses-to-speak at 2026-09-15T14:57:22+07:00 and its image fetcher pulled the article's cover at 2026-09-15T14:57:28+07:00, both after publication — Pinterest materialised a Pin from the feed item. The Pin's own URL is not observable to a publisher without the Pinterest API, so no Pin page was opened and pin_url stays null.",
+      "slug_article": "bilingual-child-refuses-to-speak",
+      "pin_url": null,
+      "evidence_type": "pinterest_render_logs",
+      "url_kind": "destination article on our own site, not the Pin"
+    },
+    {
+      "channel": "pinterest-rss",
+      "slug": "adhd-adults-workbook-es",
+      "url": "https://newton-winai-klinprasom.incomeinclick.in.th/libra/growth/articles/adhd-nota-de-regreso-es",
+      "observed_at": "2026-09-16T14:57:31+07:00",
+      "evidence": "server-side evidence only: Pinterest crawled /libra/growth/articles/adhd-nota-de-regreso-es at 2026-09-16T14:57:29+07:00 and its image fetcher pulled the article's cover at 2026-09-16T14:57:31+07:00, both after publication — Pinterest materialised a Pin from the feed item. The Pin's own URL is not observable to a publisher without the Pinterest API, so no Pin page was opened and pin_url stays null.",
+      "slug_article": "adhd-nota-de-regreso-es",
+      "pin_url": null,
+      "evidence_type": "pinterest_render_logs",
+      "url_kind": "destination article on our own site, not the Pin"
+    },
+    {
+      "channel": "pinterest-rss",
+      "slug": "bilingual-english-spanish-kids-vocab",
+      "url": "https://newton-winai-klinprasom.incomeinclick.in.th/libra/growth/articles/bilingual-same-story-two-languages",
+      "observed_at": "2026-09-17T14:59:46+07:00",
+      "evidence": "server-side evidence only: Pinterest crawled /libra/growth/articles/bilingual-same-story-two-languages at 2026-09-17T14:59:44+07:00 and its image fetcher pulled the article's cover at 2026-09-17T14:59:46+07:00, both after publication — Pinterest materialised a Pin from the feed item. The Pin's own URL is not observable to a publisher without the Pinterest API, so no Pin page was opened and pin_url stays null.",
+      "slug_article": "bilingual-same-story-two-languages",
+      "pin_url": null,
+      "evidence_type": "pinterest_render_logs",
+      "url_kind": "destination article on our own site, not the Pin"
     }
   ],
   "publication_record_shape": {
@@ -269,7 +324,10 @@
       "compliance problem",
       "clearly broken content"
     ],
-    "note": "Once activated the system collects evidence instead of redesigning itself."
+    "note": "Once activated the system collects evidence instead of redesigning itself.",
+    "owner_exceptions": [
+      "PINTEREST_VOLUME_2026-09-19"
+    ]
   },
   "cadence": {
     "day_0": "first verified publication (a live url we opened and recorded)",
@@ -294,5 +352,45 @@
       "release_rule": "owner says so, or a Day-30 CONTINUE brings the lane back on purpose"
     }
   },
-  "board_policy": "All Pins of this experiment land on the connected board. Board tidiness is cosmetic and never an operational dependency. A second native feed/board may be proposed after Day 30."
+  "board_policy": "All Pins of this experiment land on the connected board. Board tidiness is cosmetic and never an operational dependency. A second native feed/board may be proposed after Day 30.",
+  "technical_incidents": [
+    {
+      "id": "CTA_ROUTING_BROKEN",
+      "from": "2026-09-12T13:45:50+07:00",
+      "to": "2026-09-15T22:07:06+07:00",
+      "defect": "Hub CTA links rendered as /growth/out/<token>, which 404s on the public domain (app is mounted under /libra/). Affected every growth article, book hub and product page.",
+      "fix": "commit 0dd2deb — _hub_cta_path and the product page share GROWTH_OUT_PREFIX=/libra/growth/out/; libra.service restarted 2026-09-15T22:07:06+07:00",
+      "conversion_path_evidence_in_interval": "INVALID / NOT_OBSERVABLE",
+      "interpretation": "Zero Amazon CTA clicks in this interval are not evidence of conversion failure or against any book. Qualified external human visits in the interval measured 0 (nginx, owner/test/crawler excluded), so no lost sales are claimed.",
+      "day0_changed": false,
+      "telemetry_deleted": false,
+      "clicks_manufactured": false,
+      "verified_live": "9 surfaces 200, CTA prefixed, out-link 307 to the expected ASIN/storefront, old path 404, 0 broken hrefs, hub_events unchanged by bot-UA verification"
+    }
+  ],
+  "conversion_path_valid_from": "2026-09-15T22:07:06+07:00",
+  "design_changes": [
+    {
+      "id": "PINTEREST_VOLUME_2026-09-19",
+      "authorized_by": "Bui (owner), in chat 2026-09-19: \"ยกเว้นกฎ และลุยเลย\"",
+      "authorized_at": "2026-09-19T12:25:00+07:00",
+      "type": "owner exception to feature_freeze",
+      "why": "Six Pins (two images, one per book) produced 0 qualified human visits by Day 7. At that volume the Day-30 verdict would be INCONCLUSIVE by construction.",
+      "what": [
+        "22 new articles for the two Pinterest books (11 adhd-adults-workbook-es, 11 bilingual-english-spanish-kids-vocab), same format and QA gates, written in a Claude Code session (subscription, no paid API)",
+        "each new article gets its own Pin image (scripts/make_pin_image.py, the book cover under the article title) instead of the shared cover",
+        "scheduled_pinterest_approval window extended from 17 Sep to 11 Oct 2026, still one article per day at 09:00 +07"
+      ],
+      "unchanged": [
+        "channel (pinterest-rss only)",
+        "books",
+        "KDP freeze",
+        "LinkedIn lane on hold",
+        "one article per lane per day",
+        "Day 0 and the Day-30 date"
+      ],
+      "effective_from": "2026-09-20",
+      "reading_rule": "Day-30 numbers are read as the outcome of the higher-volume schedule from 20 Sep, not of the original 6-Pin plan. Evidence before 20 Sep is kept as it was."
+    }
+  ]
 }

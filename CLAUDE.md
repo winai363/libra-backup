@@ -2,6 +2,14 @@
 
 อ่าน `memory.md` (ท้ายไฟล์ = ล่าสุด) ก่อนเริ่มงานเสมอ. กฎที่ห้ามละเมิด:
 
+## 19 ก.ย. 2026 — 📌 บุ๋ยยกเว้น FEATURE FREEZE: เพิ่มปริมาณ Pin (PINTEREST_VOLUME_2026-09-19)
+- บุ๋ยสั่งในแชท 19 ก.ย. "ยกเว้นกฎ และลุยเลย" หลัง 6 Pin ได้คนจริง 0 · บันทึกใน `organic_experiment.json → design_changes` + `feature_freeze.owner_exceptions` · ข้อยกเว้นนี้ครอบคลุมเฉพาะสามข้อด้านล่าง ข้อห้ามอื่นของ freeze ยังมีผลครบ
+- บทความเพิ่ม 22 ชิ้น (`"batch": "pinterest-volume-2026-09-19"`) · เล่มเดิม 2 เล่ม ช่องทางเดิม · ADHD ES 11 + bilingual EN 11 สลับกัน `publication_order` 7–28 · ตัดประโยคขายท้ายบทความออก (CTA อยู่ที่การ์ด)
+- รูป Pin ไม่ซ้ำต่อบทความ: `scripts/make_pin_image.py` → `data/growth_pins/<id>.jpg` เสิร์ฟที่ `/libra/growth/pins/<id>.jpg` เฉพาะบทความที่ approve แล้ว · `approve_next` ไม่อนุมัติถ้ารูป Pin ยังไม่ถูกสร้าง · เหตุผล: Pinterest ดัน "fresh Pin" (รูปที่ไม่เคยเห็น) — 6 Pin แรกมีแค่ 2 รูป (ปกซ้ำ)
+- `scheduled_pinterest_approval.WINDOW_LAST_DAY = 2026-10-11` · cron `0 9 * 9,10 *` (tag `libra-pinterest-daily-20260919`) · ยังวันละ 1 บทความ
+- distribution guard ประเมิน early-distribution **ครั้งเดียวจาก inventory ชุดแรก (13–17 ก.ย.)** ด้วยค่าคงที่ของตัวเอง — Pin ที่ลงหลัง 17 ก.ย. ไม่เลื่อนหน้าต่าง 72 ชม.
+- Day 30 (12 ต.ค.) อ่านผลเป็นผลของตารางลงถี่ตั้งแต่ 20 ก.ย. ไม่ใช่แผน 6 Pin เดิม · ⛔ KDP FREEZE ไม่เปลี่ยน · ⛔ ยังห้ามเครื่องผลิตคอนเทนต์อัตโนมัติ (บทความชุดนี้เขียนในเซสชัน Claude Code ครั้งเดียว)
+
 ## 15 ก.ย. 2026 — 🛡️ distribution guard (อ่านอย่างเดียว): ingestion ≠ audience
 - `scripts/distribution_guard.py` = step `distribution_guard` ใน `organic_autopilot.py --all` (cron 7 * * * * เดิม ไม่เพิ่ม cron) · `--status` / `--diagnose` อ่านอย่างเดียว · เทสต์ `tests/test_distribution_guard.py`
 - ⛔ Pinterestbot/Pinterest/0.2 = หลักฐานการเผยแพร่ **ไม่ใช่ทราฟฟิก** · ไม่ประมาณ impressions · ไม่นับ owner (IP ที่ถือ session Chat UI ในหน้าต่าง log เดียวกัน) / test (IP เครื่องนี้) / crawler · log ไม่ครอบคลุม = null ไม่ใช่ 0

@@ -49,6 +49,7 @@ app = FastAPI(title="Libra")
 KDP_DIR = Path(ENV.get("KDP_DIR", "/root/kdp"))
 PROFIT_LEDGER_FILE = Path(__file__).parent / "data" / "libra-business.db"
 GROWTH_ARTICLES_DIR = Path(__file__).parent / "data" / "growth_articles"
+GROWTH_PINS_DIR = Path(__file__).parent / "data" / "growth_pins"
 PROFIT_AGENT_STATE_FILE = Path(__file__).parent / "data" / "profit-agent-state.json"
 GROWTH_AUTOPILOT_STATE_FILE = Path(__file__).parent / "data" / "growth-autopilot-state.json"
 USERNAME = ENV.get("USERNAME", "")
@@ -1498,6 +1499,23 @@ async def growth_article_hub_page(article_id: str):
         "CTA_LABEL": escape_text(article.get("cta_label", "View on Amazon")),
     })
     return HTMLResponse(page)
+
+
+@app.get("/growth/pins/{article_id}.jpg")
+async def growth_pin_image(article_id: str):
+    """The article's own Pin image (scripts/make_pin_image.py). Served only for
+    an approved article, the same rule as the article page, so a draft's image
+    is not public before its text is."""
+    if not _SLUG_ID_RE.fullmatch(article_id):
+        raise HTTPException(status_code=404)
+    image = GROWTH_PINS_DIR / f"{article_id}.jpg"
+    try:
+        article = json.loads((GROWTH_ARTICLES_DIR / f"{article_id}.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        raise HTTPException(status_code=404)
+    if article.get("qa_approved") is not True or not image.exists():
+        raise HTTPException(status_code=404)
+    return FileResponse(image, media_type="image/jpeg")
 
 
 @app.get("/growth/out/{token}")

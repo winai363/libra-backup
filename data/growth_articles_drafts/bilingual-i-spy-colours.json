@@ -1,0 +1,64 @@
+{
+  "qa_approved": false,
+  "published_at": null,
+  "id": "bilingual-i-spy-colours",
+  "language": "en",
+  "title": "I spy in two languages: a six-colour game for the living room",
+  "description": "Classic I spy, played with colours instead of first letters so it works the same way in English and Spanish. Six colour words, one room, any time of day.",
+  "link": "/libra/growth/articles/bilingual-i-spy-colours",
+  "image_url": "/libra/growth/pins/bilingual-i-spy-colours.jpg",
+  "target_slug": "bilingual-english-spanish-kids-vocab",
+  "campaign": "pin-bilingual-kids",
+  "cta_label": "See the book on Amazon",
+  "book_line": "Bilingual English-Spanish vocabulary book for kids: themed word lists and simple activities, read on a Kindle, copied into a notebook when you want them on paper.",
+  "pin_title": "I spy in two languages: a six-colour game for the living room",
+  "body": "I spy is usually played with first letters, and that is exactly what makes it awkward across two languages: the same object starts with a different letter in each. Play it with colours instead, and the game works the same way in English and in Spanish.\n\nSix colours are enough to start: red, blue, green, yellow, white, black. In Spanish: rojo, azul, verde, amarillo, blanco, negro.\n\nThe opening line depends on the language you are building. For Spanish, the game has its own little call-and-response: \"Veo, veo.\" \"¿Qué ves?\" \"Algo verde.\" For English: \"I spy with my little eye… something green.\"\n\nYour child looks around and guesses by naming objects. They can guess in either language; when they use the other one, repeat the object in the language you are building and say yes or no: \"¿El cojín? ¡Sí!\" or \"the cushion? Yes!\".\n\nThen swap: they spy, you guess. Guess wrong a few times on purpose. A child who gets to say \"no, not that one\" is running the conversation.\n\nOne grammar detail you can simply model: \"algo\" always takes the masculine form of the colour, so it is \"algo rojo\" and \"algo blanco\", never \"algo roja\". Once the object is named, the colour matches the object instead: la puerta roja, el cojín rojo.\n\nTwo variations for later. Add a second clue once colours are easy — \"algo rojo y pequeño\" / \"something red and small\". Or play on a walk, where the colours keep changing: a red door, a yellow flower, a white dog.\n\nKeep the rounds quick. Five is plenty, and the best time is the waiting you already do: waiting for dinner, waiting for the bath to fill, waiting for a sibling to find their shoes.\n\nWhat to avoid: stopping the game to correct a colour. If your child says the wrong colour word, just point to the object, say the right word in the language you are building, and carry on. The game keeps going, and they hear the word anyway.",
+  "qa_checklist": [
+    "A bilingual (EN/ES) reader checks both languages, not a tool",
+    "No claims about fluency, test scores or developmental outcomes",
+    "Every activity works with what is already in the house: no printer, no purchase",
+    "Original text written for this page, not lifted from the book",
+    "CTA is honest: a Kindle vocabulary book read on a screen, lists copied into a notebook"
+  ],
+  "semantic_review": "English body; traditional Spanish opening 'Veo, veo. ¿Qué ves?' included and English 'I spy with my little eye'. 'Algo' + masculine adjective explained correctly. Colour words neutral (no brown, no orange-shade variants).",
+  "flagged_uncertainty": [],
+  "claims_check": "No outcome promises. The text says what to do and how long it takes; it does not claim fluency, school results or cognitive benefits.",
+  "concept_rank": 17,
+  "semantic_qa": {
+    "status": "SEMANTIC_QA_PASS",
+    "checks_run": [
+      "meaning consistency",
+      "claim check",
+      "direction symmetry (either language may be the target)",
+      "naturalness",
+      "CTA/book consistency",
+      "compliance"
+    ],
+    "resolved": [
+      "examples run in both directions and the instructions name 'the language you are building'",
+      "Spanish kept to short words and phrases with articles and accents checked",
+      "closing mention of the book cut to one sentence after the activity is fully explained",
+      "switched from first letters to colours so the game is symmetric across languages",
+      "stated the algo + masculine adjective rule and the noun-agreement example correctly",
+      "wording differs from the book's own I spy example",
+      "closing sentence about the book removed: the CTA lives on the book card (CLAUDE.md, 12 Sep round four)"
+    ],
+    "remaining": [],
+    "note": "Not reviewed by a native bilingual human; this is a semantic review."
+  },
+  "channel": "pinterest-rss",
+  "publication_order": 26,
+  "recommended_offset_days": 26,
+  "recommended_publication_note": "Offset in days from the day the owner approves the batch. One article per day keeps Pinterest (oldest first, within 24h) from pinning a batch at once.",
+  "guid": "libra-bilingual-i-spy-colours",
+  "destination": "https://www.amazon.com/dp/B0H4V4DRLV",
+  "buyer_intent": "Parent who wants a familiar game adapted for two languages",
+  "image_metadata": {
+    "url": "/libra/growth/pins/bilingual-i-spy-colours.jpg",
+    "source": "pin image generated in this project from the book's own cover",
+    "rights": "ours",
+    "pixels": "1000x1500",
+    "alt": "Pin image: the title \"I spy in two languages: a six-colour game for the living room\" set over the cover of the bilingual English-Spanish vocabulary book"
+  },
+  "batch": "pinterest-volume-2026-09-19"
+}

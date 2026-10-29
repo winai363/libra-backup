@@ -2,8 +2,8 @@
   "schema": "libra-search-portfolio/1",
   "campaign": "search-surface",
   "release": {
-    "state": "PRE_RELEASE",
-    "released_at": null,
+    "state": "ACTIVE",
+    "released_at": "2026-10-30T06:34:04+07:00",
     "goal_days": 90,
     "target_royalties_usd": 20.0,
     "required_consecutive_complete_months": 2

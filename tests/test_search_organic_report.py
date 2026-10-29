@@ -104,3 +104,13 @@ def test_as_of_excludes_snapshots_observed_in_the_future(tmp_path):
 
     assert payload["kdp_months"] == {}
     assert payload["goal"]["latest_royalties_usd"] is None
+
+
+def test_active_release_with_unavailable_ledger_is_unknown_immediately(tmp_path):
+    portfolio = tmp_path / "portfolio.json"
+    write_portfolio(portfolio)
+
+    payload = build_report(tmp_path / "missing.db", portfolio, as_of=date(2026, 11, 1))
+
+    assert payload["goal"]["status"] == "UNKNOWN"
+    assert payload["goal"]["reason"] == "ledger_unavailable"

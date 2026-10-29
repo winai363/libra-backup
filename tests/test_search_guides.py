@@ -122,12 +122,23 @@ def test_eligible_article_has_topic_navigation_related_links_and_schema(client):
     assert response.status_code == 200
     assert "/libra/guides/rutinas-tdah-adultos" in response.text
     assert "/libra/growth/articles/a2" in response.text
+    assert "/libra/growth/articles/a2?c=search-surface" in response.text
     assert "application/ld+json" in response.text
     assert '"@type": "Article"' in response.text
     assert "Nota educativa práctica" in response.text
     assert "Prepared by Libra" in response.text
     start = response.text.index('href="/libra/growth/out/') + len('href="/libra/growth/out/')
     token = response.text[start:response.text.index('"', start)]
+    assert resolve_tracking_token(token)["campaign"] == "search-surface"
+
+
+def test_tagged_read_next_keeps_search_surface_for_next_cta(client):
+    first = client.get("/growth/articles/a1?c=search-surface")
+    assert "/libra/growth/articles/a2?c=search-surface" in first.text
+
+    second = client.get("/growth/articles/a2?c=search-surface")
+    start = second.text.index('href="/libra/growth/out/') + len('href="/libra/growth/out/')
+    token = second.text[start:second.text.index('"', start)]
     assert resolve_tracking_token(token)["campaign"] == "search-surface"
 
 

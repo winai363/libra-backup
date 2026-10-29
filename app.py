@@ -1622,9 +1622,11 @@ async def growth_article_hub_page(article_id: str, request: Request, c: str | No
     related = related_articles(search_topic, article_id)
     related_html = ""
     if related:
+        related_campaign = f"?c={SEARCH_CAMPAIGN}" if c == SEARCH_CAMPAIGN else ""
         links = "".join(
-            '<li><a href="{}">{}</a></li>'.format(
+            '<li><a href="{}{}">{}</a></li>'.format(
                 escape_text(_public_path(f"/growth/articles/{row['id']}")),
+                related_campaign,
                 escape_text(row.get("title", row["id"])),
             )
             for row in related

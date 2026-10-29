@@ -102,6 +102,9 @@ def build_report(ledger: Path, portfolio_path: Path, *, as_of: date | None = Non
         except (KeyError, TypeError, ValueError):
             status = "UNKNOWN"
             reason = "invalid_release_evidence"
+        if scorecard.get("ledger", {}).get("status") != "AVAILABLE":
+            status = "UNKNOWN"
+            reason = "ledger_unavailable"
 
     latest_month = max(scorecard["kdp_months"], default=None)
     latest = scorecard["kdp_months"].get(latest_month) if latest_month else None

@@ -1,0 +1,49 @@
+{
+  "schema": "libra-search-portfolio/1",
+  "campaign": "seo-search",
+  "release": {
+    "state": "PRE_RELEASE",
+    "released_at": null,
+    "goal_days": 90,
+    "target_royalties_usd": 20.0,
+    "required_consecutive_complete_months": 2
+  },
+  "books": [
+    {
+      "slug": "adhd-adults-workbook-es",
+      "topic": "rutinas-tdah-adultos",
+      "language": "es",
+      "promotion_status": "APPROVED",
+      "title": "Rutinas prácticas para adultos con TDAH",
+      "description": "Sistemas sencillos para organizar tareas cotidianas con papel, señales visibles y pasos pequeños.",
+      "review_basis": "Existing live title and individually approved non-clinical articles"
+    },
+    {
+      "slug": "bilingual-english-spanish-kids-vocab",
+      "topic": "actividades-bilingues-en-familia",
+      "language": "en",
+      "promotion_status": "QA_REQUIRED",
+      "title": "Everyday bilingual activities for families",
+      "description": "Short English and Spanish language activities that fit ordinary family routines.",
+      "review_basis": "Reserve topic pending product and semantic review"
+    },
+    {
+      "slug": "beginner-watercolor-spanish",
+      "topic": "acuarela-principiantes",
+      "language": "es",
+      "promotion_status": "QA_REQUIRED",
+      "title": "Acuarela para principiantes",
+      "description": "Ejercicios básicos de acuarela para practicar materiales, color y pinceladas.",
+      "review_basis": "Pending product, image, rights and article review"
+    },
+    {
+      "slug": "senior-smartphone-french",
+      "topic": "smartphone-seniors-fr",
+      "language": "fr",
+      "promotion_status": "HOLD_PROMOTION",
+      "title": "Utiliser un smartphone pas à pas",
+      "description": "Des repères simples pour apprendre les fonctions courantes d'un smartphone.",
+      "review_basis": "Held after illustrated-promise and interior-file mismatch found 2026-09-06"
+    }
+  ]
+}

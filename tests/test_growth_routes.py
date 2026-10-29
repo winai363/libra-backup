@@ -245,7 +245,8 @@ def test_book_hub_page_escapes_html_in_listing_data(client):
 
 # ── public CTA path (regression: 15 Sep 2026, every CTA 404ed in production) ─
 
-def test_cta_builder_always_emits_the_libra_mounted_path():
+def test_cta_builder_always_emits_the_libra_mounted_path(monkeypatch):
+    monkeypatch.setenv("LIBRA_GROWTH_TRACKING_SECRET", "route-test-secret")
     assert libra_app.GROWTH_OUT_PREFIX == "/libra/growth/out/"
     path = libra_app._hub_cta_path("book-a", "organic-1", "https://www.amazon.com/dp/B0TESTASIN1")
     assert path.startswith("/libra/growth/out/")

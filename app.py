@@ -31,6 +31,7 @@ from content_hub import (
     paragraphs_html,
     resolve_tracking_token,
 )
+from organic_search import eligible_topics, load_search_portfolio
 
 logger = logging.getLogger("libra")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -52,6 +53,7 @@ GROWTH_ARTICLES_DIR = Path(__file__).parent / "data" / "growth_articles"
 GROWTH_PINS_DIR = Path(__file__).parent / "data" / "growth_pins"
 PROFIT_AGENT_STATE_FILE = Path(__file__).parent / "data" / "profit-agent-state.json"
 GROWTH_AUTOPILOT_STATE_FILE = Path(__file__).parent / "data" / "growth-autopilot-state.json"
+SEARCH_PORTFOLIO_FILE = Path(__file__).parent / "data" / "search_portfolio.json"
 USERNAME = ENV.get("USERNAME", "")
 PASSWORD = ENV.get("PASSWORD", "")
 TOKEN = ENV.get("SESSION_TOKEN", "")
@@ -1422,6 +1424,76 @@ def _hub_campaign(requested) -> str:
     if isinstance(requested, str) and requested in _declared_campaigns():
         return requested
     return GROWTH_HUB_CAMPAIGN
+
+
+def _search_topics() -> tuple[dict, list[dict]]:
+    try:
+        config = load_search_portfolio(SEARCH_PORTFOLIO_FILE)
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}, []
+    return config, eligible_topics(config, KDP_DIR, GROWTH_ARTICLES_DIR)
+
+
+def _topic_cards(topics: list[dict]) -> str:
+    cards = []
+    for topic in topics:
+        href = _public_path(f"/guides/{topic['topic']}")
+        cards.append(
+            '<article class="topic-card">'
+            f'<p class="language">{escape_text(topic.get("language", ""))}</p>'
+            f'<h2><a href="{escape_text(href)}">{escape_text(topic.get("title", ""))}</a></h2>'
+            f'<p>{escape_text(topic.get("description", ""))}</p>'
+            f'<a class="read-link" href="{escape_text(href)}">Open the guide <span aria-hidden="true">→</span></a>'
+            '</article>'
+        )
+    return "\n".join(cards)
+
+
+@app.get("/guides/", response_class=HTMLResponse)
+async def search_guides_index():
+    _, topics = _search_topics()
+    html_path = Path(__file__).parent / "templates" / "guides_index.html"
+    return HTMLResponse(render_hub_page(html_path.read_text(), {
+        "TOPICS": _topic_cards(topics),
+    }))
+
+
+@app.get("/guides/{topic_id}", response_class=HTMLResponse)
+async def search_guide_topic(topic_id: str):
+    config, topics = _search_topics()
+    topic = next((row for row in topics if row["topic"] == topic_id), None)
+    if topic is None:
+        return HTMLResponse("<h1>Guide not found</h1>", status_code=404)
+    listing = topic["listing"]
+    destination = f"https://www.amazon.com/dp/{listing['asin']}"
+    campaign = _hub_campaign(config.get("campaign"))
+    try:
+        cta_path = _hub_cta_path(topic["slug"], campaign, destination)
+    except TrackingConfigError:
+        raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")
+    articles = "\n".join(
+        '<li><a href="{}">{}</a><p>{}</p></li>'.format(
+            escape_text(_public_path(f"/growth/articles/{article['id']}")),
+            escape_text(article.get("title", article["id"])),
+            escape_text(article.get("description", "")),
+        )
+        for article in topic["articles"]
+    )
+    canonical = f"{GROWTH_SITE_BASE}{_public_path(f'/guides/{topic_id}')}"
+    cover = f"{GROWTH_SITE_BASE}{_public_path(f'/api/books/{topic["slug"]}/cover')}"
+    html_path = Path(__file__).parent / "templates" / "guide_topic.html"
+    return HTMLResponse(render_hub_page(html_path.read_text(), {
+        "LANG": escape_text(topic.get("language", "en")),
+        "TITLE": escape_text(topic.get("title", "")),
+        "DESCRIPTION": escape_text(topic.get("description", "")),
+        "CANONICAL": escape_text(canonical),
+        "ARTICLES": articles,
+        "BOOK_COVER": escape_text(cover),
+        "BOOK_TITLE": escape_text(listing.get("title", topic["slug"])),
+        "BOOK_FORMAT": escape_text(_book_offer(topic["slug"])["format_line"]),
+        "CTA_URL": escape_text(cta_path),
+        "CTA_LABEL": "View the book on Amazon",
+    }))
 
 
 @app.get("/growth/books/{slug}", response_class=HTMLResponse)

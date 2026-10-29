@@ -5,6 +5,7 @@
     "organic-pinterest",
     "organic-owner-post",
     "synthetic-verification",
+        "seo-search",
     "pin-adhd-es",
     "pin-bilingual-kids",
     "li-contab-pt"
@@ -17,8 +18,9 @@
     "li-contab-pt": "owner-post",
     "organic-pinterest": "pinterest-rss",
     "organic-owner-post": "owner-post",
-    "content-hub": "none",
-    "synthetic-verification": "none"
+        "content-hub": "none",
+        "synthetic-verification": "none",
+        "seo-search": "organic-search"
   },
   "channels_note": "campaign → channel. The Pinterest feed serves only campaigns mapped to pinterest-rss, so an approved LinkedIn article is never turned into a Pin. 'none' means the campaign is not a channel: content-hub is the default label and synthetic-verification is our own testing."
 }

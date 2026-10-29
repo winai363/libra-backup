@@ -8,6 +8,7 @@ import time
 import re
 import sqlite3
 import subprocess
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -31,7 +32,15 @@ from content_hub import (
     paragraphs_html,
     resolve_tracking_token,
 )
-from organic_search import eligible_topics, load_search_portfolio, related_articles, topic_for_article
+from organic_search import (
+    SEARCH_CAMPAIGN,
+    build_view_event,
+    eligible_topics,
+    load_search_portfolio,
+    public_search_urls,
+    related_articles,
+    topic_for_article,
+)
 
 logger = logging.getLogger("libra")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -1431,7 +1440,18 @@ def _search_topics() -> tuple[dict, list[dict]]:
         config = load_search_portfolio(SEARCH_PORTFOLIO_FILE)
     except (OSError, ValueError, json.JSONDecodeError):
         return {}, []
+    if config.get("release", {}).get("state") != "ACTIVE":
+        return config, []
     return config, eligible_topics(config, KDP_DIR, GROWTH_ARTICLES_DIR)
+
+
+def _record_search_view(request: Request, slug: str, page_id: str) -> None:
+    if is_bot_user_agent(request.headers.get("user-agent")):
+        return
+    record_hub_event(
+        PROFIT_LEDGER_FILE,
+        build_view_event(slug, SEARCH_CAMPAIGN, page_id),
+    )
 
 
 def _topic_cards(topics: list[dict]) -> str:
@@ -1450,16 +1470,20 @@ def _topic_cards(topics: list[dict]) -> str:
 
 
 @app.get("/guides/", response_class=HTMLResponse)
-async def search_guides_index():
-    _, topics = _search_topics()
+async def search_guides_index(request: Request):
+    config, topics = _search_topics()
+    if config.get("release", {}).get("state") != "ACTIVE":
+        return HTMLResponse("<h1>Guides not found</h1>", status_code=404)
     html_path = Path(__file__).parent / "templates" / "guides_index.html"
-    return HTMLResponse(render_hub_page(html_path.read_text(), {
+    page = render_hub_page(html_path.read_text(), {
         "TOPICS": _topic_cards(topics),
-    }))
+    })
+    _record_search_view(request, "search-guides", "guides:index")
+    return HTMLResponse(page)
 
 
 @app.get("/guides/{topic_id}", response_class=HTMLResponse)
-async def search_guide_topic(topic_id: str):
+async def search_guide_topic(topic_id: str, request: Request):
     config, topics = _search_topics()
     topic = next((row for row in topics if row["topic"] == topic_id), None)
     if topic is None:
@@ -1482,7 +1506,7 @@ async def search_guide_topic(topic_id: str):
     canonical = f"{GROWTH_SITE_BASE}{_public_path(f'/guides/{topic_id}')}"
     cover = f"{GROWTH_SITE_BASE}{_public_path(f'/api/books/{topic["slug"]}/cover')}"
     html_path = Path(__file__).parent / "templates" / "guide_topic.html"
-    return HTMLResponse(render_hub_page(html_path.read_text(), {
+    page = render_hub_page(html_path.read_text(), {
         "LANG": escape_text(topic.get("language", "en")),
         "TITLE": escape_text(topic.get("title", "")),
         "DESCRIPTION": escape_text(topic.get("description", "")),
@@ -1493,7 +1517,24 @@ async def search_guide_topic(topic_id: str):
         "BOOK_FORMAT": escape_text(_book_offer(topic["slug"])["format_line"]),
         "CTA_URL": escape_text(cta_path),
         "CTA_LABEL": "View the book on Amazon",
-    }))
+    })
+    _record_search_view(request, topic["slug"], f"guide:{topic_id}")
+    return HTMLResponse(page)
+
+
+@app.get("/sitemap.xml")
+async def search_sitemap():
+    config, topics = _search_topics()
+    if config.get("release", {}).get("state") != "ACTIVE":
+        return Response("Not found", status_code=404, media_type="text/plain")
+    root = ET.Element("urlset", xmlns="http://www.sitemaps.org/schemas/sitemap/0.9")
+    for url in public_search_urls(topics, GROWTH_SITE_BASE, LIBRA_PUBLIC_MOUNT):
+        node = ET.SubElement(root, "url")
+        ET.SubElement(node, "loc").text = url
+    return Response(
+        ET.tostring(root, encoding="unicode", xml_declaration=True),
+        media_type="application/xml",
+    )
 
 
 @app.get("/growth/books/{slug}", response_class=HTMLResponse)
@@ -1522,7 +1563,7 @@ async def growth_book_hub_page(slug: str, c: str | None = None):
 
 
 @app.get("/growth/articles/{article_id}", response_class=HTMLResponse)
-async def growth_article_hub_page(article_id: str):
+async def growth_article_hub_page(article_id: str, request: Request):
     """Public article hub page with exactly one tracked Amazon CTA linking
     to the article's target book."""
     if not _SLUG_ID_RE.fullmatch(article_id):
@@ -1612,6 +1653,8 @@ async def growth_article_hub_page(article_id: str):
             "Practical educational note. It does not replace professional advice or promise results.",
         )),
     })
+    if search_topic:
+        _record_search_view(request, target_slug, f"article:{article_id}")
     return HTMLResponse(page)
 
 

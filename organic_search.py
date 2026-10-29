@@ -102,6 +102,19 @@ def related_articles(topic: dict | None, article_id: str, *, limit: int = 3) -> 
     ][:limit]
 
 
+def public_search_urls(topics: list[dict], site_base: str, public_mount: str) -> list[str]:
+    base = site_base.rstrip("/")
+    mount = "/" + public_mount.strip("/")
+    urls = [f"{base}{mount}/guides/"]
+    for topic in topics:
+        urls.append(f"{base}{mount}/guides/{topic['topic']}")
+        urls.extend(
+            f"{base}{mount}/growth/articles/{article['id']}"
+            for article in topic.get("articles", [])
+        )
+    return urls
+
+
 def build_view_event(slug: str, campaign: str, page_id: str, *, now=None) -> dict:
     return {
         "event_key": secrets.token_hex(16),

@@ -1,4 +1,5 @@
 import json
+import sqlite3
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,7 +20,7 @@ def client(tmp_path, monkeypatch):
     portfolio.write_text(json.dumps({
         "schema": "libra-search-portfolio/1",
         "campaign": "seo-search",
-        "release": {"state": "PRE_RELEASE"},
+        "release": {"state": "ACTIVE"},
         "books": [
             {
                 "slug": "book-a", "topic": "rutinas-tdah-adultos", "language": "es",
@@ -37,12 +38,25 @@ def client(tmp_path, monkeypatch):
     campaigns = tmp_path / "growth_campaigns.json"
     campaigns.write_text(json.dumps({"campaigns": ["content-hub", "seo-search"]}))
     monkeypatch.setattr(libra_app, "GROWTH_CAMPAIGNS_FILE", campaigns)
+    ledger = tmp_path / "libra-business.db"
+    monkeypatch.setattr(libra_app, "PROFIT_LEDGER_FILE", ledger)
     write_listing(kdp_dir, "book-a")
     write_listing(kdp_dir, "held-book")
     write_article(articles_dir, "a1")
     write_article(articles_dir, "a2")
     write_article(articles_dir, "held-a1", target_slug="held-book")
     return TestClient(libra_app.app)
+
+
+READER_UA = "Mozilla/5.0 (iPhone) AppleWebKit/605.1.15 Safari/604.1"
+GOOGLEBOT_UA = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+
+
+def event_count(ledger, event_kind):
+    with sqlite3.connect(ledger) as connection:
+        return connection.execute(
+            "SELECT COUNT(*) FROM hub_events WHERE event_kind=?", (event_kind,)
+        ).fetchone()[0]
 
 
 def write_listing(kdp_dir, slug):
@@ -110,3 +124,29 @@ def test_held_book_article_is_not_added_to_search_navigation(client):
 
     assert response.status_code == 200
     assert "/libra/guides/" not in response.text
+
+
+def test_sitemap_contains_only_approved_live_public_urls(client):
+    response = client.get("/sitemap.xml")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/xml")
+    assert "/libra/guides/rutinas-tdah-adultos" in response.text
+    assert "/libra/growth/articles/a1" in response.text
+    assert "held-a1" not in response.text
+
+
+def test_reader_view_counts_but_googlebot_does_not(client):
+    ledger = libra_app.PROFIT_LEDGER_FILE
+    client.get("/guides/rutinas-tdah-adultos", headers={"User-Agent": READER_UA})
+    client.get("/guides/rutinas-tdah-adultos", headers={"User-Agent": GOOGLEBOT_UA})
+
+    assert event_count(ledger, "qualified_view") == 1
+
+
+def test_article_view_counts_only_when_article_is_search_eligible(client):
+    ledger = libra_app.PROFIT_LEDGER_FILE
+    client.get("/growth/articles/a1", headers={"User-Agent": READER_UA})
+    client.get("/growth/articles/held-a1", headers={"User-Agent": READER_UA})
+
+    assert event_count(ledger, "qualified_view") == 1

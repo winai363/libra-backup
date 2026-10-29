@@ -31,7 +31,7 @@ from content_hub import (
     paragraphs_html,
     resolve_tracking_token,
 )
-from organic_search import eligible_topics, load_search_portfolio
+from organic_search import eligible_topics, load_search_portfolio, related_articles, topic_for_article
 
 logger = logging.getLogger("libra")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -1555,6 +1555,41 @@ async def growth_article_hub_page(article_id: str):
         raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")
     cover_url = f"{GROWTH_SITE_BASE}/libra/api/books/{target_slug}/cover"
     canonical = f"{GROWTH_SITE_BASE}/libra/growth/articles/{article_id}"
+    _, search_topics = _search_topics()
+    search_topic = topic_for_article(search_topics, article_id)
+    if search_topic:
+        guide_href = _public_path(f"/guides/{search_topic['topic']}")
+        guide_nav = (
+            f'<nav class="guide-nav" aria-label="Topic">'
+            f'<a href="{escape_text(guide_href)}">← {escape_text(search_topic.get("title", "Guide"))}</a>'
+            '</nav>'
+        )
+    else:
+        guide_nav = ""
+    related = related_articles(search_topic, article_id)
+    related_html = ""
+    if related:
+        links = "".join(
+            '<li><a href="{}">{}</a></li>'.format(
+                escape_text(_public_path(f"/growth/articles/{row['id']}")),
+                escape_text(row.get("title", row["id"])),
+            )
+            for row in related
+        )
+        related_html = f'<aside class="related"><h2>Read next</h2><ul>{links}</ul></aside>'
+    structured = json.dumps({
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": article.get("title", article_id),
+        "description": article.get("description", ""),
+        "inLanguage": article.get("language") or "en",
+        "datePublished": article.get("published_at"),
+        "mainEntityOfPage": canonical,
+    }, ensure_ascii=False, indent=2).replace("</", "<\\/")
+    disclosures = {
+        "es": "Nota educativa práctica. No sustituye asesoramiento médico ni promete resultados.",
+        "fr": "Note éducative pratique. Elle ne remplace pas un avis professionnel et ne promet aucun résultat.",
+    }
     html_path = Path(__file__).parent / "templates" / "hub_article.html"
     page = render_hub_page(html_path.read_text(), {
         "LANG": escape_text(article.get("language") or "en"),
@@ -1569,6 +1604,13 @@ async def growth_article_hub_page(article_id: str):
         "BODY": paragraphs_html(article.get("body", "")),
         "CTA_URL": escape_text(cta_path),
         "CTA_LABEL": escape_text(article.get("cta_label", "View on Amazon")),
+        "GUIDE_NAV": guide_nav,
+        "RELATED": related_html,
+        "JSON_LD": structured,
+        "DISCLOSURE": escape_text(disclosures.get(
+            article.get("language"),
+            "Practical educational note. It does not replace professional advice or promise results.",
+        )),
     })
     return HTMLResponse(page)
 

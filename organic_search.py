@@ -86,6 +86,22 @@ def eligible_topics(config: dict, kdp_dir: Path, articles_dir: Path) -> list[dic
     return sorted(topics, key=lambda row: row["topic"])
 
 
+def topic_for_article(topics: list[dict], article_id: str) -> dict | None:
+    for topic in topics:
+        if any(article.get("id") == article_id for article in topic.get("articles", [])):
+            return topic
+    return None
+
+
+def related_articles(topic: dict | None, article_id: str, *, limit: int = 3) -> list[dict]:
+    if topic is None:
+        return []
+    return [
+        article for article in topic.get("articles", [])
+        if article.get("id") != article_id
+    ][:limit]
+
+
 def build_view_event(slug: str, campaign: str, page_id: str, *, now=None) -> dict:
     return {
         "event_key": secrets.token_hex(16),

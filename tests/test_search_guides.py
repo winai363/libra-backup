@@ -40,6 +40,7 @@ def client(tmp_path, monkeypatch):
     write_listing(kdp_dir, "book-a")
     write_listing(kdp_dir, "held-book")
     write_article(articles_dir, "a1")
+    write_article(articles_dir, "a2")
     write_article(articles_dir, "held-a1", target_slug="held-book")
     return TestClient(libra_app.app)
 
@@ -91,3 +92,21 @@ def test_topic_page_links_to_articles_and_one_tracked_amazon_cta(client):
 def test_held_and_unknown_topic_are_404(client):
     assert client.get("/guides/smartphone-seniors-fr").status_code == 404
     assert client.get("/guides/unknown").status_code == 404
+
+
+def test_eligible_article_has_topic_navigation_related_links_and_schema(client):
+    response = client.get("/growth/articles/a1")
+
+    assert response.status_code == 200
+    assert "/libra/guides/rutinas-tdah-adultos" in response.text
+    assert "/libra/growth/articles/a2" in response.text
+    assert "application/ld+json" in response.text
+    assert '"@type": "Article"' in response.text
+    assert "Nota educativa práctica" in response.text
+
+
+def test_held_book_article_is_not_added_to_search_navigation(client):
+    response = client.get("/growth/articles/held-a1")
+
+    assert response.status_code == 200
+    assert "/libra/guides/" not in response.text

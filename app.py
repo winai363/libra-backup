@@ -34,6 +34,7 @@ from content_hub import (
 )
 from organic_search import (
     SEARCH_CAMPAIGN,
+    UNATTRIBUTED_CAMPAIGN,
     build_view_event,
     eligible_topics,
     load_search_portfolio,
@@ -1445,12 +1446,17 @@ def _search_topics() -> tuple[dict, list[dict]]:
     return config, eligible_topics(config, KDP_DIR, GROWTH_ARTICLES_DIR)
 
 
-def _record_search_view(request: Request, slug: str, page_id: str) -> None:
-    if is_bot_user_agent(request.headers.get("user-agent")):
+def _record_search_view(request: Request, slug: str, page_id: str, campaign: str) -> None:
+    user_agent = request.headers.get("user-agent") or ""
+    if (
+        is_bot_user_agent(user_agent)
+        or request.headers.get("x-libra-measurement", "").lower() in {"synthetic", "owner", "test"}
+        or user_agent.lower().startswith("testclient")
+    ):
         return
     record_hub_event(
         PROFIT_LEDGER_FILE,
-        build_view_event(slug, SEARCH_CAMPAIGN, page_id),
+        build_view_event(slug, campaign, page_id),
     )
 
 
@@ -1477,8 +1483,9 @@ async def search_guides_index(request: Request):
     html_path = Path(__file__).parent / "templates" / "guides_index.html"
     page = render_hub_page(html_path.read_text(), {
         "TOPICS": _topic_cards(topics),
+        "CANONICAL": escape_text(f"{GROWTH_SITE_BASE}{_public_path('/guides/')}")
     })
-    _record_search_view(request, "search-guides", "guides:index")
+    _record_search_view(request, "search-guides", "guides:index", SEARCH_CAMPAIGN)
     return HTMLResponse(page)
 
 
@@ -1496,8 +1503,9 @@ async def search_guide_topic(topic_id: str, request: Request):
     except TrackingConfigError:
         raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")
     articles = "\n".join(
-        '<li><a href="{}">{}</a><p>{}</p></li>'.format(
+        '<li><a href="{}?c={}">{}</a><p>{}</p></li>'.format(
             escape_text(_public_path(f"/growth/articles/{article['id']}")),
+            SEARCH_CAMPAIGN,
             escape_text(article.get("title", article["id"])),
             escape_text(article.get("description", "")),
         )
@@ -1518,7 +1526,7 @@ async def search_guide_topic(topic_id: str, request: Request):
         "CTA_URL": escape_text(cta_path),
         "CTA_LABEL": "View the book on Amazon",
     })
-    _record_search_view(request, topic["slug"], f"guide:{topic_id}")
+    _record_search_view(request, topic["slug"], f"guide:{topic_id}", SEARCH_CAMPAIGN)
     return HTMLResponse(page)
 
 
@@ -1563,7 +1571,7 @@ async def growth_book_hub_page(slug: str, c: str | None = None):
 
 
 @app.get("/growth/articles/{article_id}", response_class=HTMLResponse)
-async def growth_article_hub_page(article_id: str, request: Request):
+async def growth_article_hub_page(article_id: str, request: Request, c: str | None = None):
     """Public article hub page with exactly one tracked Amazon CTA linking
     to the article's target book."""
     if not _SLUG_ID_RE.fullmatch(article_id):
@@ -1589,11 +1597,13 @@ async def growth_article_hub_page(article_id: str, request: Request):
     destination = f"https://www.amazon.com/dp/{asin}"
     _, search_topics = _search_topics()
     search_topic = topic_for_article(search_topics, article_id)
-    # Campaign names go through the same declared-campaign check as ?c= — an
-    # article file may not invent a label in our own click data either. An article
-    # admitted to the active search portfolio uses the search campaign so its CTA
-    # and view stay in the same measurement lane.
-    campaign = SEARCH_CAMPAIGN if search_topic else _hub_campaign(article.get("campaign"))
+    # Search eligibility describes the page, not its acquisition source. Only an
+    # explicit internal guide tag enters the search-surface lane. Old Pins and
+    # direct/search landings share this canonical URL and remain unattributed.
+    if search_topic:
+        campaign = SEARCH_CAMPAIGN if c == SEARCH_CAMPAIGN else UNATTRIBUTED_CAMPAIGN
+    else:
+        campaign = _hub_campaign(article.get("campaign"))
     try:
         cta_path = _hub_cta_path(target_slug, campaign, destination)
     except TrackingConfigError:
@@ -1628,7 +1638,7 @@ async def growth_article_hub_page(article_id: str, request: Request):
         "inLanguage": article.get("language") or "en",
         "datePublished": article.get("published_at"),
         "mainEntityOfPage": canonical,
-    }, ensure_ascii=False, indent=2).replace("</", "<\\/")
+    }, ensure_ascii=False, indent=2).replace("<", "\\u003c")
     disclosures = {
         "es": "Nota educativa práctica. No sustituye asesoramiento médico ni promete resultados.",
         "fr": "Note éducative pratique. Elle ne remplace pas un avis professionnel et ne promet aucun résultat.",
@@ -1654,9 +1664,14 @@ async def growth_article_hub_page(article_id: str, request: Request):
             article.get("language"),
             "Practical educational note. It does not replace professional advice or promise results.",
         )),
+        "EDITORIAL_NOTE": escape_text(
+            "Prepared by Libra. This article was individually approved before publication; "
+            "the related book link is checked against the live catalogue. It is practical "
+            "educational material, not professional advice, and Amazon availability can change."
+        ),
     })
     if search_topic:
-        _record_search_view(request, target_slug, f"article:{article_id}")
+        _record_search_view(request, target_slug, f"article:{article_id}", campaign)
     return HTMLResponse(page)
 
 

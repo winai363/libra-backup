@@ -46,7 +46,7 @@ def test_eligible_topics_fail_closed_on_hold_or_non_live(tmp_path):
     assert [row["slug"] for row in eligible_topics(config, tmp_path / "kdp", tmp_path / "articles")] == ["approved"]
 
 def test_build_view_event_keeps_only_privacy_safe_fields():
-    event = build_view_event("book-a", "seo-search", "article:a1")
+    event = build_view_event("book-a", "search-surface", "article:a1")
     assert event["event_kind"] == "qualified_view"
     assert event["payload"] == {"page_id": "article:a1"}
     assert set(event) == {"event_key", "occurred_at", "slug", "campaign", "event_kind", "payload"}
@@ -60,7 +60,7 @@ Expected: collection fails with `ModuleNotFoundError: No module named 'organic_s
 
 - [ ] **Step 3: Implement the minimal policy module and configuration**
 
-Create `data/search_portfolio.json` with `seo-search` as the campaign, a release state of `PRE_RELEASE`, a 90-day goal, TDAH as `APPROVED`, bilingual and watercolor as `QA_REQUIRED`, and senior smartphone as `HOLD_PROMOTION`. Each public book entry contains a public topic title and description; no unverified expertise or result promise is included. Promotion status changes require a separate recorded product/content review.
+Create `data/search_portfolio.json` with `search-surface` as the campaign, a release state of `PRE_RELEASE`, a 90-day goal, TDAH as `APPROVED`, bilingual and watercolor as `QA_REQUIRED`, and senior smartphone as `HOLD_PROMOTION`. `search-surface` measures only explicitly tagged guide navigation and does not claim acquisition-source attribution; direct article landings remain `unattributed`. Each public book entry contains a public topic title and description; no unverified expertise or result promise is included. Promotion status changes require a separate recorded product/content review.
 
 Implement strict JSON validation, LIVE listing checks, approved-article filtering, and view events with this stable payload:
 
@@ -133,7 +133,7 @@ Expected: `/guides/` and `/guides/{topic}` return 404.
 
 - [ ] **Step 3: Implement public templates and routes**
 
-Render semantic HTML with one H1, language, canonical link, topic description, crawlable article links, book cover, honest format line, and one signed Amazon CTA tagged `seo-search`. The index has no operational state, internal revenue, or administration links. Return 404 for unknown, held, QA-required, blocked, or unpublished topics.
+Render semantic HTML with one H1, language, canonical link, topic description, crawlable article links, book cover, honest format line, and one signed Amazon CTA tagged `search-surface`. The index has no operational state, internal revenue, or administration links. Return 404 for unknown, held, QA-required, blocked, or unpublished topics.
 
 - [ ] **Step 4: Verify routes and existing hub behavior**
 

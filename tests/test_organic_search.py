@@ -30,6 +30,7 @@ def write_article(articles_dir, article_id, **overrides):
         "description": "Useful summary",
         "target_slug": "approved",
         "language": "es",
+        "published_at": "2026-09-12T09:00:00+07:00",
     }
     payload.update(overrides)
     (articles_dir / f"{article_id}.json").write_text(json.dumps(payload))
@@ -70,9 +71,20 @@ def test_eligible_topics_excludes_unapproved_article(tmp_path):
     assert eligible_topics(config, tmp_path / "kdp", tmp_path / "articles") == []
 
 
+def test_eligible_topics_excludes_missing_or_future_publication_date(tmp_path):
+    config = {"books": [
+        {"slug": "approved", "promotion_status": "APPROVED", "topic": "focus", "language": "es"},
+    ]}
+    write_listing(tmp_path / "kdp", "approved")
+    write_article(tmp_path / "articles", "missing", published_at=None)
+    write_article(tmp_path / "articles", "future", published_at="2099-01-01T00:00:00+00:00")
+
+    assert eligible_topics(config, tmp_path / "kdp", tmp_path / "articles") == []
+
+
 def test_build_view_event_keeps_only_privacy_safe_fields():
     event = build_view_event(
-        "book-a", "seo-search", "article:a1",
+        "book-a", "search-surface", "article:a1",
         now=datetime(2026, 10, 30, tzinfo=timezone.utc),
     )
 
@@ -96,7 +108,7 @@ def test_scorecard_uses_latest_snapshot_and_keeps_search_console_unknown(tmp_pat
     ledger = tmp_path / "ledger.db"
     seed_snapshot(ledger, "2026-11-20T09:00:00+07:00", "2026-11", 19.0)
     seed_snapshot(ledger, "2026-11-30T09:00:00+07:00", "2026-11", 21.0)
-    record_hub_event(ledger, build_view_event("book-a", "seo-search", "article:a1"))
+    record_hub_event(ledger, build_view_event("book-a", "search-surface", "article:a1"))
 
     result = build_scorecard(ledger, {"release": {"state": "PRE_RELEASE"}})
 
@@ -104,3 +116,25 @@ def test_scorecard_uses_latest_snapshot_and_keeps_search_console_unknown(tmp_pat
     assert result["traffic"] == {"qualified_views": 1, "amazon_outbound": 0}
     assert result["search_console"] == {"status": "UNKNOWN", "reason": "not_connected"}
     assert result["purchase_attribution"] == "UNKNOWN"
+
+
+def test_scorecard_is_read_only_and_missing_ledger_is_unknown(tmp_path):
+    ledger = tmp_path / "missing.db"
+
+    result = build_scorecard(ledger, {"release": {"state": "ACTIVE"}})
+
+    assert not ledger.exists()
+    assert result["ledger"] == {"status": "UNKNOWN", "reason": "ledger_unavailable"}
+    assert result["kdp_months"] == {}
+    assert result["traffic"] == {"qualified_views": None, "amazon_outbound": None}
+
+
+def test_scorecard_does_not_change_existing_ledger(tmp_path):
+    ledger = tmp_path / "ledger.db"
+    seed_snapshot(ledger, "2026-11-30T09:00:00+07:00", "2026-11", 21.0)
+    before = (ledger.read_bytes(), ledger.stat().st_size, ledger.stat().st_mtime_ns)
+
+    build_scorecard(ledger, {"release": {"state": "ACTIVE"}})
+
+    after = (ledger.read_bytes(), ledger.stat().st_size, ledger.stat().st_mtime_ns)
+    assert after == before

@@ -1,6 +1,6 @@
 {
   "schema": "libra-search-portfolio/1",
-  "campaign": "seo-search",
+  "campaign": "search-surface",
   "release": {
     "state": "PRE_RELEASE",
     "released_at": null,
@@ -16,7 +16,7 @@
       "promotion_status": "APPROVED",
       "title": "Rutinas prácticas para adultos con TDAH",
       "description": "Sistemas sencillos para organizar tareas cotidianas con papel, señales visibles y pasos pequeños.",
-      "review_basis": "Existing live title and individually approved non-clinical articles"
+      "review_basis": "LIVE ebook B0H6VB1SDX; local editorial review passed with no critical issues; only individually approved practical articles are eligible"
     },
     {
       "slug": "bilingual-english-spanish-kids-vocab",

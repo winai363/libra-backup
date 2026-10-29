@@ -59,12 +59,21 @@ def build_report(ledger: Path, portfolio_path: Path, *, as_of: date | None = Non
     as_of = as_of or date.today()
     config = load_search_portfolio(portfolio_path)
     scorecard = build_scorecard(ledger, config)
+    visible_months = {}
+    for month, row in scorecard["kdp_months"].items():
+        try:
+            observed_date = datetime.fromisoformat(row["observed_at"]).date()
+        except (KeyError, TypeError, ValueError):
+            continue
+        if observed_date <= as_of:
+            visible_months[month] = row
+    scorecard["kdp_months"] = visible_months
     release = config.get("release", {})
     target = float(release.get("target_royalties_usd", 20.0))
     required_count = int(release.get("required_consecutive_complete_months", 2))
     values = {
         month: float(row["royalties_usd"])
-        for month, row in scorecard["kdp_months"].items()
+        for month, row in visible_months.items()
     }
     status = "PRE_RELEASE"
     reason = "release_not_active"
@@ -121,12 +130,23 @@ def human_summary(payload: dict) -> str:
     latest = goal["latest_month"] or "UNKNOWN"
     royalties = goal["latest_royalties_usd"]
     amount = "UNKNOWN" if royalties is None else f"USD {royalties:.2f}"
+    observed = (
+        payload["kdp_months"].get(latest, {}).get("observed_at")
+        if latest != "UNKNOWN" else None
+    ) or "UNKNOWN"
+    gap = goal["gap_to_20_usd"]
+    gap_text = "UNKNOWN" if gap is None else f"USD {gap:.2f}"
+    ledger_status = payload.get("ledger", {}).get("status", "UNKNOWN")
     return "\n".join([
         f"Libra organic search — {payload['as_of']}",
         f"Goal: {goal['status']} ({goal['reason']})",
         f"Latest KDP estimate: {latest} = {amount}",
-        f"Qualified views: {traffic['qualified_views']}",
-        f"Amazon outbound clicks: {traffic['amazon_outbound']}",
+        f"KDP observed at: {observed}",
+        f"Gap to strict USD 20 threshold: {gap_text}",
+        f"Ledger source: {ledger_status}",
+        f"Search-surface requests: {traffic['qualified_views'] if traffic['qualified_views'] is not None else 'UNKNOWN'}",
+        f"Search-surface Amazon outbound clicks: {traffic['amazon_outbound'] if traffic['amazon_outbound'] is not None else 'UNKNOWN'}",
+        "Traffic note: requests are not unique people; source filtering is incomplete.",
         "Purchase attribution: UNKNOWN",
         "Search Console: UNKNOWN (not connected)",
     ])

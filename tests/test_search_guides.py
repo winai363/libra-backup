@@ -20,7 +20,7 @@ def client(tmp_path, monkeypatch):
     portfolio = tmp_path / "search_portfolio.json"
     portfolio.write_text(json.dumps({
         "schema": "libra-search-portfolio/1",
-        "campaign": "seo-search",
+        "campaign": "search-surface",
         "release": {"state": "ACTIVE"},
         "books": [
             {
@@ -37,7 +37,9 @@ def client(tmp_path, monkeypatch):
     }))
     monkeypatch.setattr(libra_app, "SEARCH_PORTFOLIO_FILE", portfolio)
     campaigns = tmp_path / "growth_campaigns.json"
-    campaigns.write_text(json.dumps({"campaigns": ["content-hub", "seo-search", "pin-adhd-es"]}))
+    campaigns.write_text(json.dumps({"campaigns": [
+        "content-hub", "search-surface", "unattributed", "pin-adhd-es",
+    ]}))
     monkeypatch.setattr(libra_app, "GROWTH_CAMPAIGNS_FILE", campaigns)
     ledger = tmp_path / "libra-business.db"
     monkeypatch.setattr(libra_app, "PROFIT_LEDGER_FILE", ledger)
@@ -93,6 +95,8 @@ def test_guides_index_lists_only_approved_live_topics(client):
     assert "Rutinas prácticas" in response.text
     assert "Guía visual para smartphone" not in response.text
     assert "/libra/guides/rutinas-tdah-adultos" in response.text
+    assert '<link rel="canonical" href="https://newton-winai-klinprasom.incomeinclick.in.th/libra/guides/">' in response.text
+    assert "individually approved" in response.text
 
 
 def test_topic_page_links_to_articles_and_one_tracked_amazon_cta(client):
@@ -102,6 +106,9 @@ def test_topic_page_links_to_articles_and_one_tracked_amazon_cta(client):
     assert "/libra/growth/articles/a1" in response.text
     assert response.text.count("/libra/growth/out/") == 1
     assert "Cuaderno práctico" in response.text
+    assert "?c=search-surface" in response.text
+    assert "How this page is prepared" in response.text
+    assert "cannot be tied to a purchase" in response.text
 
 
 def test_held_and_unknown_topic_are_404(client):
@@ -110,7 +117,7 @@ def test_held_and_unknown_topic_are_404(client):
 
 
 def test_eligible_article_has_topic_navigation_related_links_and_schema(client):
-    response = client.get("/growth/articles/a1")
+    response = client.get("/growth/articles/a1?c=search-surface")
 
     assert response.status_code == 200
     assert "/libra/guides/rutinas-tdah-adultos" in response.text
@@ -118,9 +125,10 @@ def test_eligible_article_has_topic_navigation_related_links_and_schema(client):
     assert "application/ld+json" in response.text
     assert '"@type": "Article"' in response.text
     assert "Nota educativa práctica" in response.text
+    assert "Prepared by Libra" in response.text
     start = response.text.index('href="/libra/growth/out/') + len('href="/libra/growth/out/')
     token = response.text[start:response.text.index('"', start)]
-    assert resolve_tracking_token(token)["campaign"] == "seo-search"
+    assert resolve_tracking_token(token)["campaign"] == "search-surface"
 
 
 def test_held_book_article_is_not_added_to_search_navigation(client):
@@ -146,6 +154,42 @@ def test_reader_view_counts_but_googlebot_does_not(client):
     client.get("/guides/rutinas-tdah-adultos", headers={"User-Agent": GOOGLEBOT_UA})
 
     assert event_count(ledger, "qualified_view") == 1
+
+
+def test_synthetic_owner_and_test_requests_do_not_count(client):
+    ledger = libra_app.PROFIT_LEDGER_FILE
+    for marker in ("synthetic", "owner", "test"):
+        client.get(
+            "/guides/rutinas-tdah-adultos",
+            headers={"User-Agent": READER_UA, "X-Libra-Measurement": marker},
+        )
+
+    assert not ledger.exists()
+
+
+def test_direct_article_request_is_not_labeled_as_search(client):
+    response = client.get("/growth/articles/a1", headers={"User-Agent": READER_UA})
+    start = response.text.index('href="/libra/growth/out/') + len('href="/libra/growth/out/')
+    token = response.text[start:response.text.index('"', start)]
+
+    assert resolve_tracking_token(token)["campaign"] == "unattributed"
+    with sqlite3.connect(libra_app.PROFIT_LEDGER_FILE) as connection:
+        campaign = connection.execute(
+            "SELECT campaign FROM hub_events WHERE event_kind='qualified_view'"
+        ).fetchone()[0]
+    assert campaign == "unattributed"
+
+
+def test_json_ld_neutralizes_mixed_case_script_end_tag(client):
+    article = libra_app.GROWTH_ARTICLES_DIR / "a1.json"
+    payload = json.loads(article.read_text())
+    payload["title"] = "Safe </SCRIPT><script>alert(1)</script> title"
+    article.write_text(json.dumps(payload))
+
+    response = client.get("/growth/articles/a1?c=search-surface")
+
+    assert "</SCRIPT>" not in response.text
+    assert "\\u003c/SCRIPT>" in response.text
 
 
 def test_article_view_counts_only_when_article_is_search_eligible(client):

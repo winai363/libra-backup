@@ -7,11 +7,9 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-from business_ledger import init_ledger
-
-
 SCHEMA = "libra-search-portfolio/1"
-SEARCH_CAMPAIGN = "seo-search"
+SEARCH_CAMPAIGN = "search-surface"
+UNATTRIBUTED_CAMPAIGN = "unattributed"
 
 
 def load_search_portfolio(path: Path) -> dict:
@@ -56,6 +54,12 @@ def _approved_articles(articles_dir: Path, slug: str) -> list[dict]:
         except (OSError, json.JSONDecodeError):
             continue
         if article.get("qa_approved") is not True or article.get("target_slug") != slug:
+            continue
+        try:
+            published_at = datetime.fromisoformat(article["published_at"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if published_at.tzinfo is None or published_at > datetime.now(timezone.utc):
             continue
         row = dict(article)
         row["id"] = path.stem
@@ -127,19 +131,26 @@ def build_view_event(slug: str, campaign: str, page_id: str, *, now=None) -> dic
 
 
 def build_scorecard(ledger_path: Path, config: dict, *, now=None) -> dict:
-    init_ledger(ledger_path)
-    with sqlite3.connect(ledger_path) as connection:
-        snapshots = connection.execute(
-            "SELECT s.month, s.observed_at, s.royalties_usd, s.orders_all_types, s.kenp "
-            "FROM kdp_snapshots s JOIN ("
-            " SELECT month, MAX(observed_at) observed_at FROM kdp_snapshots GROUP BY month"
-            ") latest ON latest.month=s.month AND latest.observed_at=s.observed_at "
-            "ORDER BY s.month"
-        ).fetchall()
-        counts = dict(connection.execute(
-            "SELECT event_kind, COUNT(*) FROM hub_events "
-            "WHERE campaign=? GROUP BY event_kind", (SEARCH_CAMPAIGN,)
-        ).fetchall())
+    snapshots = []
+    counts = {}
+    ledger_status = {"status": "UNKNOWN", "reason": "ledger_unavailable"}
+    try:
+        uri = f"file:{ledger_path.resolve()}?mode=ro"
+        with sqlite3.connect(uri, uri=True) as connection:
+            snapshots = connection.execute(
+                "SELECT s.month, s.observed_at, s.royalties_usd, s.orders_all_types, s.kenp "
+                "FROM kdp_snapshots s JOIN ("
+                " SELECT month, MAX(observed_at) observed_at FROM kdp_snapshots GROUP BY month"
+                ") latest ON latest.month=s.month AND latest.observed_at=s.observed_at "
+                "ORDER BY s.month"
+            ).fetchall()
+            counts = dict(connection.execute(
+                "SELECT event_kind, COUNT(*) FROM hub_events "
+                "WHERE campaign=? GROUP BY event_kind", (SEARCH_CAMPAIGN,)
+            ).fetchall())
+        ledger_status = {"status": "AVAILABLE", "reason": None}
+    except (OSError, sqlite3.Error):
+        pass
     months = {
         month: {
             "observed_at": observed_at,
@@ -152,10 +163,11 @@ def build_scorecard(ledger_path: Path, config: dict, *, now=None) -> dict:
     return {
         "generated_at": (now or datetime.now(timezone.utc)).isoformat(),
         "release": config.get("release", {}),
+        "ledger": ledger_status,
         "kdp_months": months,
         "traffic": {
-            "qualified_views": counts.get("qualified_view", 0),
-            "amazon_outbound": counts.get("amazon_outbound", 0),
+            "qualified_views": counts.get("qualified_view", 0) if ledger_status["status"] == "AVAILABLE" else None,
+            "amazon_outbound": counts.get("amazon_outbound", 0) if ledger_status["status"] == "AVAILABLE" else None,
         },
         "search_console": {"status": "UNKNOWN", "reason": "not_connected"},
         "purchase_attribution": "UNKNOWN",

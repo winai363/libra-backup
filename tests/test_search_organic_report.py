@@ -21,7 +21,7 @@ def seed_snapshot(ledger, month, royalties, observed_at):
 def write_portfolio(path, *, state="ACTIVE", released_at="2026-10-30T10:00:00+07:00"):
     path.write_text(json.dumps({
         "schema": "libra-search-portfolio/1",
-        "campaign": "seo-search",
+        "campaign": "search-surface",
         "release": {
             "state": state,
             "released_at": released_at,
@@ -38,7 +38,7 @@ def test_json_report_keeps_traffic_and_revenue_separate(tmp_path):
     portfolio = tmp_path / "portfolio.json"
     write_portfolio(portfolio)
     seed_snapshot(ledger, "2026-11", 21.0, "2026-11-30T09:00:00+07:00")
-    record_hub_event(ledger, build_view_event("book-a", "seo-search", "article:a1"))
+    record_hub_event(ledger, build_view_event("book-a", "search-surface", "article:a1"))
 
     payload = build_report(ledger, portfolio, as_of=date(2026, 12, 1))
 
@@ -92,3 +92,15 @@ def test_months_before_release_cannot_satisfy_goal(tmp_path):
     payload = build_report(ledger, portfolio, as_of=date(2027, 1, 29))
 
     assert payload["goal"]["status"] == "TARGET_NOT_MET"
+
+
+def test_as_of_excludes_snapshots_observed_in_the_future(tmp_path):
+    ledger = tmp_path / "ledger.db"
+    portfolio = tmp_path / "portfolio.json"
+    write_portfolio(portfolio)
+    seed_snapshot(ledger, "2026-11", 21.0, "2026-12-05T09:00:00+07:00")
+
+    payload = build_report(ledger, portfolio, as_of=date(2026, 12, 1))
+
+    assert payload["kdp_months"] == {}
+    assert payload["goal"]["latest_royalties_usd"] is None

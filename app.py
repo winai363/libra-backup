@@ -1587,17 +1587,19 @@ async def growth_article_hub_page(article_id: str, request: Request):
         return HTMLResponse("<h1>Article not found</h1>", status_code=404)
     listing, asin = result
     destination = f"https://www.amazon.com/dp/{asin}"
+    _, search_topics = _search_topics()
+    search_topic = topic_for_article(search_topics, article_id)
     # Campaign names go through the same declared-campaign check as ?c= — an
-    # article file may not invent a label in our own click data either.
-    campaign = _hub_campaign(article.get("campaign"))
+    # article file may not invent a label in our own click data either. An article
+    # admitted to the active search portfolio uses the search campaign so its CTA
+    # and view stay in the same measurement lane.
+    campaign = SEARCH_CAMPAIGN if search_topic else _hub_campaign(article.get("campaign"))
     try:
         cta_path = _hub_cta_path(target_slug, campaign, destination)
     except TrackingConfigError:
         raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")
     cover_url = f"{GROWTH_SITE_BASE}/libra/api/books/{target_slug}/cover"
     canonical = f"{GROWTH_SITE_BASE}/libra/growth/articles/{article_id}"
-    _, search_topics = _search_topics()
-    search_topic = topic_for_article(search_topics, article_id)
     if search_topic:
         guide_href = _public_path(f"/guides/{search_topic['topic']}")
         guide_nav = (

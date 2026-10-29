@@ -75,7 +75,10 @@ def build_report(ledger: Path, portfolio_path: Path, *, as_of: date | None = Non
             released = datetime.fromisoformat(release["released_at"]).date()
             deadline = released + timedelta(days=int(release.get("goal_days", 90)))
             target_months = _required_months(released, required_count)
-            status = evaluate_goal(values, as_of=as_of, target=target)
+            measurement_values = {
+                month: values[month] for month in target_months if month in values
+            }
+            status = evaluate_goal(measurement_values, as_of=as_of, target=target)
             reason = "measurement_window_open"
             if status == "TARGET_MET":
                 reason = "two_consecutive_complete_months_above_target"

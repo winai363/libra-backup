@@ -78,3 +78,17 @@ def test_missing_months_at_deadline_are_unknown(tmp_path):
 
     assert payload["goal"]["status"] == "UNKNOWN"
     assert payload["goal"]["reason"] == "required_complete_month_data_missing"
+
+
+def test_months_before_release_cannot_satisfy_goal(tmp_path):
+    ledger = tmp_path / "ledger.db"
+    portfolio = tmp_path / "portfolio.json"
+    write_portfolio(portfolio)
+    seed_snapshot(ledger, "2026-07", 30.0, "2026-07-31T09:00:00+07:00")
+    seed_snapshot(ledger, "2026-08", 31.0, "2026-08-31T09:00:00+07:00")
+    seed_snapshot(ledger, "2026-11", 10.0, "2026-11-30T09:00:00+07:00")
+    seed_snapshot(ledger, "2026-12", 11.0, "2026-12-31T09:00:00+07:00")
+
+    payload = build_report(ledger, portfolio, as_of=date(2027, 1, 29))
+
+    assert payload["goal"]["status"] == "TARGET_NOT_MET"

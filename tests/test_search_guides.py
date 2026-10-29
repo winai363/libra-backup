@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app as libra_app
+from content_hub import resolve_tracking_token
 
 
 @pytest.fixture
@@ -36,7 +37,7 @@ def client(tmp_path, monkeypatch):
     }))
     monkeypatch.setattr(libra_app, "SEARCH_PORTFOLIO_FILE", portfolio)
     campaigns = tmp_path / "growth_campaigns.json"
-    campaigns.write_text(json.dumps({"campaigns": ["content-hub", "seo-search"]}))
+    campaigns.write_text(json.dumps({"campaigns": ["content-hub", "seo-search", "pin-adhd-es"]}))
     monkeypatch.setattr(libra_app, "GROWTH_CAMPAIGNS_FILE", campaigns)
     ledger = tmp_path / "libra-business.db"
     monkeypatch.setattr(libra_app, "PROFIT_LEDGER_FILE", ledger)
@@ -77,7 +78,7 @@ def write_article(articles_dir, article_id, *, target_slug="book-a"):
         "description": "A useful article.",
         "body": "First useful step.\n\nSecond useful step.",
         "target_slug": target_slug,
-        "campaign": "seo-search",
+        "campaign": "pin-adhd-es",
         "language": "es",
         "book_line": "Ejercicios para practicar en papel.",
         "cta_label": "Ver el cuaderno en Amazon",
@@ -117,6 +118,9 @@ def test_eligible_article_has_topic_navigation_related_links_and_schema(client):
     assert "application/ld+json" in response.text
     assert '"@type": "Article"' in response.text
     assert "Nota educativa práctica" in response.text
+    start = response.text.index('href="/libra/growth/out/') + len('href="/libra/growth/out/')
+    token = response.text[start:response.text.index('"', start)]
+    assert resolve_tracking_token(token)["campaign"] == "seo-search"
 
 
 def test_held_book_article_is_not_added_to_search_navigation(client):

@@ -118,6 +118,23 @@ def test_spanish_index_marks_fixed_english_brand_word(client):
     assert inherited_language(soup.select_one(".brand span")) == "en"
 
 
+def test_portuguese_article_marks_english_disclaimer_fallback(client):
+    path = libra_app.GROWTH_ARTICLES_DIR / "a1.json"
+    article = json.loads(path.read_text())
+    article.update({"language": "pt", "title": "Uma rotina simples", "body": "Um passo por vez."})
+    path.write_text(json.dumps(article))
+    soup = BeautifulSoup(client.get("/growth/articles/a1").text, "html.parser")
+
+    assert soup.html["lang"] == "pt"
+    assert inherited_language(soup.h1) == "pt"
+    assert inherited_language(soup.select_one(".article-body")) == "pt"
+    disclosure = soup.select_one(".disclosure p")
+    assert disclosure.get_text(strip=True) == (
+        "Practical educational note. It does not replace professional advice or promise results."
+    )
+    assert inherited_language(disclosure) == "en"
+
+
 def test_index_has_skip_link_landmarks_and_one_h1(client):
     soup = BeautifulSoup(client.get("/guides/").text, "html.parser")
     assert soup.select_one('a.skip-link[href="#main-content"]')

@@ -74,3 +74,37 @@ $ git diff --check
 - Routing, canonical links, JSON-LD, signed tracking tokens, search/direct attribution, qualified-view filtering, article eligibility, and the one tracked Amazon CTA are unchanged and covered by the 169-test run.
 - No inventory, publication approval, KDP, Pinterest, dependency, service, environment, production data, shared control surface, or ownership-lock changes.
 - No remaining concern identified within the assigned findings. This fix verifies rendered HTML inheritance and existing audit-runner contracts; it does not claim a fresh real-browser/assistive-technology audit. Parent retains responsibility for deployment, root memory, and project ownership lifecycle.
+
+## Re-review follow-up: unsupported disclaimer language
+
+The initial self-review missed an existing English disclaimer fallback for languages outside Spanish/French. A Portuguese article still marked that English prose `pt`. Re-review identified the gap; this follow-up corrects it without changing article content, copy, routing, or attribution.
+
+Changed files:
+
+- `app.py`: add escaped `DISCLOSURE_LANG`, selecting the article language only when the `disclosures` map contains a translation, and English otherwise.
+- `templates/hub_article.html`: use `DISCLOSURE_LANG` for disclaimer prose; keep the disclaimer label's independent UI language.
+- `tests/test_public_guides_accessibility.py`: add a Portuguese article regression checking Portuguese document/title/body language and unchanged English fallback prose correctly marked English.
+- `.superpowers/sdd/final-fix-report.md`: append this evidence.
+
+TDD RED, before implementation:
+
+```text
+$ python3 -m pytest tests/test_public_guides_accessibility.py -q -k portuguese
+F                                                                        [100%]
+FAILED tests/test_public_guides_accessibility.py::test_portuguese_article_marks_english_disclaimer_fallback
+AssertionError: assert 'pt' == 'en'
+1 failed, 23 deselected in 0.49s
+```
+
+GREEN and verification:
+
+```text
+$ python3 -m pytest tests/test_search_guides.py tests/test_public_guides_accessibility.py -q
+....................................................                     [100%]
+52 passed in 1.04s
+
+$ git diff --check
+[no output; exit 0]
+```
+
+Self-review: disclosure text and language now use the same translation availability condition. Existing Spanish/French language-preservation regressions pass; the new Portuguese case proves fallback English does not override document/title/body language. No production changes or remaining concern identified within this follow-up.

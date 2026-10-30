@@ -1792,6 +1792,7 @@ async def growth_article_hub_page(article_id: str, request: Request, c: str | No
         "SKIP_LABEL": escape_text(copy["skip"]),
         "ARTICLE_LABEL": escape_text(copy["article"]),
         "DISCLOSURE_LABEL": escape_text(copy["disclosure"]),
+        "DISCLOSURE_LANG": escape_text(language if language in disclosures else "en"),
         "BOOK_LABEL": escape_text(copy["book"]),
         "BOOK_COVER_ALT": escape_text(f"{copy['cover_prefix']} {book_title}"),
         "SUMMARY": escape_text(article.get("description", "")),

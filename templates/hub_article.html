@@ -12,58 +12,27 @@
   <meta property="og:image" content="{{OG_IMAGE}}">
   <meta property="og:url" content="{{CANONICAL}}">
   <script type="application/ld+json">{{JSON_LD}}</script>
-  <style>
-    :root { color-scheme: light; --ink:#17223b; --paper:#f3f7f6; --blue:#284db8; --mint:#d8f2e9; --sun:#ffd166; --line:#cbd7d3; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; background: var(--paper); color: var(--ink);
-      font-family: Verdana, Geneva, sans-serif;
-      line-height: 1.7;
-    }
-    .wrap { max-width: 760px; margin: 0 auto; padding: 1.25rem 1.5rem 5rem; }
-    .guide-nav a { color: var(--blue); font-weight: 700; }
-    h1 { font: 700 clamp(2.25rem,7vw,4.8rem)/1 Georgia, serif; letter-spacing:-.035em; margin:clamp(2rem,7vw,5rem) 0 2rem; }
-    .body p { font-size: 1.05rem; margin: 0 0 1.1rem; }
-    .disclosure { margin:2rem 0; padding:1rem 1.1rem; background:var(--mint); border-left:5px solid #2f8c6e; font-size:.9rem; }
-    .editorial { margin:1.25rem 0 2rem; font-size:.84rem; color:#43506a; }
-    /* The book card exists so the reader knows what the button leads to before
-       they press it: same cover, same title, honest format line. */
-    .book {
-      display: flex; gap: 1.1rem; align-items: flex-start; margin: 2.5rem 0 0;
-      padding: 1.2rem; background: #fff; border:1px solid var(--line); border-top:6px solid var(--sun);
-    }
-    .book img { width: 96px; height: auto; flex: none; box-shadow:0 8px 18px rgba(23,34,59,.15); }
-    .book h2 { font:700 1.15rem/1.2 Georgia, serif; margin: 0 0 0.4rem; }
-    .book p { font-size: 0.95rem; margin: 0 0 0.3rem; }
-    .book .format { font-size: 0.9rem; }
-    .cta {
-      display: inline-block; margin-top: 1.25rem; padding: 0.9rem 1.8rem;
-      background: var(--blue); color:#fff; font-weight:700; text-decoration:none; font-size:1.05rem;
-    }
-    .related { margin-top:2.5rem; padding-top:1.25rem; border-top:1px solid var(--line); }
-    .related h2 { font:700 1.4rem/1.2 Georgia, serif; }
-    .related a { color:var(--blue); }
-    a:focus-visible { outline:3px solid var(--sun); outline-offset:4px; }
-    @media (max-width: 480px) { .book { flex-direction: column; } .book img { width: 120px; } }
-  </style>
+  <style>{{THEME_CSS}}</style>
 </head>
-<body>
-  <div class="wrap">
-    {{GUIDE_NAV}}
-    <h1>{{TITLE}}</h1>
-    <div class="body">{{BODY}}</div>
-    <p class="disclosure">{{DISCLOSURE}}</p>
+<body class="article-page">
+  <a class="skip-link" href="#article-content">{{SKIP_LABEL}}</a>
+  {{GUIDE_NAV}}
+  <main id="article-content" class="reading-surface">
+    <header class="article-header"><p class="eyebrow">{{ARTICLE_LABEL}}</p><h1>{{TITLE}}</h1><p class="article-summary">{{SUMMARY}}</p></header>
+    <div class="article-body">{{BODY}}</div>
+    <aside class="disclosure" aria-label="{{DISCLOSURE_LABEL}}"><strong>{{DISCLOSURE_LABEL}}</strong><p>{{DISCLOSURE}}</p></aside>
     <p class="editorial">{{EDITORIAL_NOTE}}</p>
-    <div class="book">
-      <img src="{{BOOK_COVER}}" alt="{{BOOK_TITLE}}" width="96" loading="lazy">
+    <aside class="book-dock glass-control" aria-labelledby="article-book-title">
+      <img src="{{BOOK_COVER}}" alt="{{BOOK_COVER_ALT}}" width="128" loading="lazy">
       <div>
-        <h2>{{BOOK_TITLE}}</h2>
+        <p class="dock-label">{{BOOK_LABEL}}</p>
+        <h2 id="article-book-title">{{BOOK_TITLE}}</h2>
         <p>{{BOOK_LINE}}</p>
         <p class="format">{{BOOK_FORMAT}}</p>
         <a class="cta" href="{{CTA_URL}}" rel="nofollow sponsored">{{CTA_LABEL}}</a>
       </div>
-    </div>
+    </aside>
     {{RELATED}}
-  </div>
+  </main>
 </body>
 </html>

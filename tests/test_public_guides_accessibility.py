@@ -98,3 +98,29 @@ def test_theme_keeps_content_opaque_and_glass_progressive():
     assert "max-width: 760px" in css
     assert "max-width: 420px" in css
     assert "--r-pill: 999px" in css
+
+
+def test_article_has_named_landmarks_and_one_h1(client):
+    soup = BeautifulSoup(client.get("/growth/articles/a1?c=search-surface").text, "html.parser")
+
+    assert soup.body["class"] == ["article-page"]
+    assert soup.select_one('a.skip-link[href="#article-content"]')
+    main = soup.select_one("main#article-content.reading-surface")
+    assert main
+    assert len(soup.find_all("main")) == 1
+    assert len(soup.find_all("h1")) == 1
+    assert main.select_one("header.article-header h1")
+    assert main.select_one(".article-body p")
+    assert main.select_one('aside.disclosure[aria-label] strong')
+    assert main.select_one('aside.book-dock[aria-labelledby="article-book-title"] h2#article-book-title')
+    assert main.select_one('aside.related[aria-labelledby="related-title"] h2#related-title')
+
+
+def test_article_injects_shared_theme_without_unresolved_placeholders(client, monkeypatch):
+    css = "/* Shared article theme */ body { color: #101828; }"
+    monkeypatch.setattr(libra_app, "_public_guides_theme", lambda: css)
+    response = client.get("/growth/articles/a1?c=search-surface")
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    assert soup.style.string == css
+    assert "{{" not in response.text

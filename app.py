@@ -1724,12 +1724,30 @@ async def growth_article_hub_page(article_id: str, request: Request, c: str | No
         raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")
     cover_url = f"{GROWTH_SITE_BASE}/libra/api/books/{target_slug}/cover"
     canonical = f"{GROWTH_SITE_BASE}/libra/growth/articles/{article_id}"
+    language = article.get("language") or "en"
+    copy = {
+        "es": {
+            "skip": "Saltar al artículo", "nav": "Navegación principal",
+            "all_guides": "Todas las guías", "article": "Nota práctica",
+            "disclosure": "Aviso educativo", "book": "Cuaderno relacionado",
+            "related": "Sigue leyendo", "cover_prefix": "Portada de",
+        },
+    }.get(language if search_topic else "en", {
+        "skip": "Skip to article", "nav": "Primary navigation",
+        "all_guides": "All guides", "article": "Practical note",
+        "disclosure": "Educational notice", "book": "Related workbook",
+        "related": "Read next", "cover_prefix": "Cover of",
+    })
+    book_title = listing.get("title", target_slug)
     if search_topic:
         guide_href = _public_path(f"/guides/{search_topic['topic']}")
         guide_nav = (
-            f'<nav class="guide-nav" aria-label="Topic">'
-            f'<a href="{escape_text(guide_href)}">← {escape_text(search_topic.get("title", "Guide"))}</a>'
-            '</nav>'
+            '<header class="site-bar glass-control">'
+            f'<nav class="guide-nav" aria-label="{escape_text(copy["nav"])}">'
+            f'<a href="{escape_text(_public_path("/guides/"))}">{escape_text(copy["all_guides"])}</a>'
+            f'<a href="{escape_text(guide_href)}"><span aria-hidden="true">←</span> '
+            f'{escape_text(search_topic.get("title", "Guide"))}</a>'
+            '</nav></header>'
         )
     else:
         guide_nav = ""
@@ -1737,7 +1755,11 @@ async def growth_article_hub_page(article_id: str, request: Request, c: str | No
     related_html = ""
     if related:
         links = _related_cards(related, campaign)
-        related_html = f'<aside class="related"><h2>Read next</h2><ul>{links}</ul></aside>'
+        related_html = (
+            '<aside class="related" aria-labelledby="related-title">'
+            f'<h2 id="related-title">{escape_text(copy["related"])}</h2>'
+            f'<ul class="related-grid">{links}</ul></aside>'
+        )
     structured = json.dumps({
         "@context": "https://schema.org",
         "@type": "Article",
@@ -1753,12 +1775,18 @@ async def growth_article_hub_page(article_id: str, request: Request, c: str | No
     }
     html_path = Path(__file__).parent / "templates" / "hub_article.html"
     page = render_hub_page(html_path.read_text(), {
-        "LANG": escape_text(article.get("language") or "en"),
+        "LANG": escape_text(language),
+        "THEME_CSS": _public_guides_theme(),
+        "SKIP_LABEL": escape_text(copy["skip"]),
+        "ARTICLE_LABEL": escape_text(copy["article"]),
+        "DISCLOSURE_LABEL": escape_text(copy["disclosure"]),
+        "BOOK_LABEL": escape_text(copy["book"]),
+        "BOOK_COVER_ALT": escape_text(f"{copy['cover_prefix']} {book_title}"),
         "SUMMARY": escape_text(article.get("description", "")),
         "CANONICAL": escape_text(canonical),
         "OG_IMAGE": escape_text(cover_url),
         "BOOK_COVER": escape_text(cover_url),
-        "BOOK_TITLE": escape_text(listing.get("title", target_slug)),
+        "BOOK_TITLE": escape_text(book_title),
         "BOOK_LINE": escape_text(article.get("book_line", "")),
         "BOOK_FORMAT": escape_text(_book_offer(target_slug)["format_line"]),
         "TITLE": escape_text(article.get("title", article_id)),

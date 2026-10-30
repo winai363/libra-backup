@@ -188,6 +188,56 @@ def test_eligible_article_has_topic_navigation_related_links_and_schema(client):
     assert resolve_tracking_token(token)["campaign"] == "search-surface"
 
 
+def test_article_has_skip_link_reading_landmark_and_localized_related_heading(client):
+    soup = BeautifulSoup(client.get("/growth/articles/a1?c=search-surface").text, "html.parser")
+
+    assert soup.select_one('a.skip-link[href="#article-content"]').get_text(strip=True) == "Saltar al artículo"
+    assert soup.select_one("main#article-content.reading-surface")
+    assert soup.find("h2", string="Sigue leyendo")
+    assert soup.select_one(".book-dock img")["alt"] == "Portada de Cuaderno práctico"
+    assert soup.select_one(".article-header .eyebrow").get_text(strip=True) == "Nota práctica"
+    assert soup.select_one(".article-summary").get_text(strip=True) == "A useful article."
+    assert soup.select_one(".dock-label").get_text(strip=True) == "Cuaderno relacionado"
+    assert soup.select_one(".disclosure")["aria-label"] == "Aviso educativo"
+    assert soup.select_one(".disclosure p").get_text(strip=True) == (
+        "Nota educativa práctica. No sustituye asesoramiento médico ni promete resultados."
+    )
+    nav = soup.select_one(".site-bar nav")
+    assert nav["aria-label"] == "Navegación principal"
+    assert nav.select_one('a[href="/libra/guides/"]').get_text(" ", strip=True) == "Todas las guías"
+    assert nav.select_one('a[href="/libra/guides/rutinas-tdah-adultos"]')
+
+
+def test_article_related_cards_keep_one_tagged_link_each(client):
+    soup = BeautifulSoup(client.get("/growth/articles/a1?c=search-surface").text, "html.parser")
+    cards = soup.select(".related-grid > .related-card")
+
+    assert len(cards) == 1
+    assert len(cards[0].select("a[href]")) == 1
+    assert cards[0].a["href"].endswith("/growth/articles/a2?c=search-surface")
+    assert soup.select_one('.related[aria-labelledby="related-title"] h2#related-title')
+
+
+def test_direct_article_related_cards_do_not_acquire_search_attribution(client):
+    soup = BeautifulSoup(client.get("/growth/articles/a1").text, "html.parser")
+    assert soup.select_one(".related-card a")["href"] == "/libra/growth/articles/a2"
+
+
+def test_article_english_controls_for_non_spanish_inventory(client):
+    article = libra_app.GROWTH_ARTICLES_DIR / "a1.json"
+    payload = json.loads(article.read_text())
+    payload["language"] = "en"
+    article.write_text(json.dumps(payload))
+    soup = BeautifulSoup(client.get("/growth/articles/a1?c=search-surface").text, "html.parser")
+
+    assert soup.select_one(".skip-link").get_text(strip=True) == "Skip to article"
+    assert soup.select_one(".article-header .eyebrow").get_text(strip=True) == "Practical note"
+    assert soup.select_one(".disclosure")["aria-label"] == "Educational notice"
+    assert soup.select_one(".dock-label").get_text(strip=True) == "Related workbook"
+    assert soup.select_one(".book-dock img")["alt"] == "Cover of Cuaderno práctico"
+    assert soup.select_one(".related h2").get_text(strip=True) == "Read next"
+
+
 def test_tagged_read_next_keeps_search_surface_for_next_cta(client):
     first = client.get("/growth/articles/a1?c=search-surface")
     assert "/libra/growth/articles/a2?c=search-surface" in first.text

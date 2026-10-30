@@ -332,7 +332,9 @@ def test_topic_feature_has_one_non_overlapping_link():
     soup = BeautifulSoup(html, "html.parser")
     card = soup.select_one(".topic-card")
     assert len(card.select("a[href]")) == 1
-    assert card.select_one("a[href]").get("aria-label") == "Explorar 2 notas: Rutinas prácticas"
+    action = card.select_one("a[href]")
+    labels = [soup.find(id=label_id) for label_id in action["aria-labelledby"].split()]
+    assert [label.get_text(strip=True) for label in labels] == ["Explorar 2 notas", "Rutinas prácticas"]
 
 
 def test_topic_article_card_has_one_tagged_link():

@@ -1482,6 +1482,7 @@ def _index_copy(language: str) -> dict[str, str]:
             "meta_title": "Guías prácticas de Libra",
             "meta_description": "Notas prácticas para organizar días reales y encontrar el cuaderno completo cuando lo necesites.",
             "topic_label": "tema",
+            "topics_label": "temas",
         }
     return {
         "skip": "Skip to content", "nav": "Primary navigation",
@@ -1493,6 +1494,7 @@ def _index_copy(language: str) -> dict[str, str]:
         "meta_title": "Libra practical guides",
         "meta_description": "Practical notes for real days, with complete workbooks when you want to go deeper.",
         "topic_label": "topic",
+        "topics_label": "topics",
     }
 
 
@@ -1501,21 +1503,25 @@ def _topic_cards(topics: list[dict]) -> str:
     for topic in topics:
         href = escape_text(_public_path(f"/guides/{topic['topic']}"))
         language = escape_text(topic.get("language", "en"))
+        ui_language = "es" if language == "es" else "en"
         title = escape_text(topic.get("title", ""))
         description = escape_text(topic.get("description", ""))
         count = len(topic.get("articles", []))
         action = "Explorar" if language == "es" else "Explore"
         note_word = "notas" if language == "es" else "notes"
         slug = topic["slug"]
+        title_id = escape_text(f"topic-{topic['topic']}-title")
+        action_id = escape_text(f"topic-{topic['topic']}-action")
         cover = escape_text(f"{GROWTH_SITE_BASE}{_public_path(f'/api/books/{slug}/cover')}")
         cards.append(
             f'<article class="topic-card" lang="{language}">'
             f'<div class="topic-card__copy"><p class="language-pill">{language}</p>'
-            f'<p class="topic-card__count">{count} {note_word}</p>'
-            f'<h2>{title}</h2><p>{description}</p>'
-            f'<a class="topic-card__action" href="{href}" '
-            f'aria-label="{action} {count} {note_word}: {title}">'
-            f'{action} {count} {note_word} <span aria-hidden="true">→</span></a></div>'
+            f'<p class="topic-card__count" lang="{ui_language}">{count} {note_word}</p>'
+            f'<h2 id="{title_id}">{title}</h2><p>{description}</p>'
+            f'<a class="topic-card__action" lang="{ui_language}" href="{href}" '
+            f'aria-labelledby="{action_id} {title_id}">'
+            f'<span id="{action_id}">{action} {count} {note_word}</span> '
+            '<span aria-hidden="true">→</span></a></div>'
             f'<div class="topic-card__visual" aria-hidden="true">'
             f'<span class="focus-lens"></span><img src="{cover}" alt=""></div>'
             '</article>'
@@ -1556,7 +1562,7 @@ async def search_guides_index(request: Request):
     config, topics = _search_topics()
     if config.get("release", {}).get("state") != "ACTIVE":
         return HTMLResponse("<h1>Guides not found</h1>", status_code=404)
-    language = _guides_language(topics)
+    language = "es" if _guides_language(topics) == "es" else "en"
     copy = _index_copy(language)
     html_path = Path(__file__).parent / "templates" / "guides_index.html"
     page = render_hub_page(html_path.read_text(), {
@@ -1573,7 +1579,7 @@ async def search_guides_index(request: Request):
         "EDITORIAL_TEXT": escape_text(copy["editorial_text"]),
         "META_TITLE": escape_text(copy["meta_title"]),
         "META_DESCRIPTION": escape_text(copy["meta_description"]),
-        "TOPIC_LABEL": escape_text(copy["topic_label"]),
+        "TOPIC_LABEL": escape_text(copy["topic_label" if len(topics) == 1 else "topics_label"]),
         "TOPICS": _topic_cards(topics),
         "CANONICAL": escape_text(f"{GROWTH_SITE_BASE}{_public_path('/guides/')}")
     })
@@ -1598,6 +1604,7 @@ async def search_guide_topic(topic_id: str, request: Request):
     canonical = f"{GROWTH_SITE_BASE}{_public_path(f'/guides/{topic_id}')}"
     cover = f"{GROWTH_SITE_BASE}{_public_path(f'/api/books/{topic["slug"]}/cover')}"
     language = topic.get("language", "en")
+    ui_language = "es" if language == "es" else "en"
     book_title = listing.get("title", topic["slug"])
     copy = {
         "es": {
@@ -1619,6 +1626,7 @@ async def search_guide_topic(topic_id: str, request: Request):
     html_path = Path(__file__).parent / "templates" / "guide_topic.html"
     page = render_hub_page(html_path.read_text(), {
         "LANG": escape_text(language),
+        "UI_LANG": ui_language,
         "THEME_CSS": _public_guides_theme(),
         "SKIP_LABEL": escape_text(copy["skip"]),
         "NAV_LABEL": escape_text(copy["nav"]),
@@ -1725,6 +1733,7 @@ async def growth_article_hub_page(article_id: str, request: Request, c: str | No
     cover_url = f"{GROWTH_SITE_BASE}/libra/api/books/{target_slug}/cover"
     canonical = f"{GROWTH_SITE_BASE}/libra/growth/articles/{article_id}"
     language = article.get("language") or "en"
+    ui_language = "es" if search_topic and language == "es" else "en"
     copy = {
         "es": {
             "skip": "Saltar al artículo", "nav": "Navegación principal",
@@ -1743,9 +1752,10 @@ async def growth_article_hub_page(article_id: str, request: Request, c: str | No
         guide_href = _public_path(f"/guides/{search_topic['topic']}")
         guide_nav = (
             '<header class="site-bar glass-control">'
-            f'<nav class="guide-nav" aria-label="{escape_text(copy["nav"])}">'
+            f'<nav class="guide-nav" lang="{ui_language}" aria-label="{escape_text(copy["nav"])}">'
             f'<a href="{escape_text(_public_path("/guides/"))}">{escape_text(copy["all_guides"])}</a>'
-            f'<a href="{escape_text(guide_href)}"><span aria-hidden="true">←</span> '
+            f'<a lang="{escape_text(search_topic.get("language", "en"))}" '
+            f'href="{escape_text(guide_href)}"><span aria-hidden="true">←</span> '
             f'{escape_text(search_topic.get("title", "Guide"))}</a>'
             '</nav></header>'
         )
@@ -1757,7 +1767,7 @@ async def growth_article_hub_page(article_id: str, request: Request, c: str | No
         links = _related_cards(related, campaign)
         related_html = (
             '<aside class="related" aria-labelledby="related-title">'
-            f'<h2 id="related-title">{escape_text(copy["related"])}</h2>'
+            f'<h2 id="related-title" lang="{ui_language}">{escape_text(copy["related"])}</h2>'
             f'<ul class="related-grid">{links}</ul></aside>'
         )
     structured = json.dumps({
@@ -1776,6 +1786,8 @@ async def growth_article_hub_page(article_id: str, request: Request, c: str | No
     html_path = Path(__file__).parent / "templates" / "hub_article.html"
     page = render_hub_page(html_path.read_text(), {
         "LANG": escape_text(language),
+        "UI_LANG": ui_language,
+        "CTA_LANG": escape_text(language if article.get("cta_label") else "en"),
         "THEME_CSS": _public_guides_theme(),
         "SKIP_LABEL": escape_text(copy["skip"]),
         "ARTICLE_LABEL": escape_text(copy["article"]),

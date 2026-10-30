@@ -9,20 +9,20 @@
   <style>{{THEME_CSS}}</style>
 </head>
 <body>
-  <a class="skip-link" href="#main-content">{{SKIP_LABEL}}</a>
-  <header class="site-bar glass-control">
+  <a class="skip-link" lang="{{UI_LANG}}" href="#main-content">{{SKIP_LABEL}}</a>
+  <header class="site-bar glass-control" lang="{{UI_LANG}}">
     <nav aria-label="{{NAV_LABEL}}"><a href="/libra/guides/"><span aria-hidden="true">←</span> {{ALL_GUIDES_LABEL}}</a><span class="site-meta">{{ARTICLE_COUNT}} {{NOTE_WORD}}</span></nav>
   </header>
   <main id="main-content" class="topic-shell">
     <header class="topic-hero"><p class="language-pill">{{LANG}}</p><h1>{{TITLE}}</h1><p>{{DESCRIPTION}}</p></header>
     <div class="topic-layout">
-      <section aria-labelledby="notes-title"><h2 id="notes-title">{{NOTES_LABEL}}</h2><ul class="note-grid">{{ARTICLES}}</ul></section>
+      <section aria-labelledby="notes-title"><h2 id="notes-title" lang="{{UI_LANG}}">{{NOTES_LABEL}}</h2><ul class="note-grid">{{ARTICLES}}</ul></section>
       <aside class="book-dock glass-control" aria-labelledby="book-title">
-        <img src="{{BOOK_COVER}}" alt="{{BOOK_COVER_ALT}}" width="128">
-        <div><p class="dock-label">{{BOOK_LABEL}}</p><h2 id="book-title">{{BOOK_TITLE}}</h2><p>{{BOOK_FORMAT}}</p><a class="cta" href="{{CTA_URL}}" rel="nofollow sponsored">{{CTA_LABEL}}</a></div>
+        <img src="{{BOOK_COVER}}" alt="{{BOOK_COVER_ALT}}" lang="{{UI_LANG}}" width="128">
+        <div><p class="dock-label" lang="{{UI_LANG}}">{{BOOK_LABEL}}</p><h2 id="book-title">{{BOOK_TITLE}}</h2><p lang="en">{{BOOK_FORMAT}}</p><a class="cta" lang="{{UI_LANG}}" href="{{CTA_URL}}" rel="nofollow sponsored">{{CTA_LABEL}}</a></div>
       </aside>
     </div>
-    <aside class="editorial-note" aria-labelledby="method-title"><h2 id="method-title">{{METHOD_TITLE}}</h2><p>{{METHOD_TEXT}}</p></aside>
+    <aside class="editorial-note" lang="{{UI_LANG}}" aria-labelledby="method-title"><h2 id="method-title">{{METHOD_TITLE}}</h2><p>{{METHOD_TEXT}}</p></aside>
   </main>
 </body>
 </html>

@@ -64,6 +64,7 @@ GROWTH_PINS_DIR = Path(__file__).parent / "data" / "growth_pins"
 PROFIT_AGENT_STATE_FILE = Path(__file__).parent / "data" / "profit-agent-state.json"
 GROWTH_AUTOPILOT_STATE_FILE = Path(__file__).parent / "data" / "growth-autopilot-state.json"
 SEARCH_PORTFOLIO_FILE = Path(__file__).parent / "data" / "search_portfolio.json"
+PUBLIC_GUIDES_THEME_FILE = Path(__file__).parent / "templates" / "public_guides_theme.css"
 USERNAME = ENV.get("USERNAME", "")
 PASSWORD = ENV.get("PASSWORD", "")
 TOKEN = ENV.get("SESSION_TOKEN", "")
@@ -1460,19 +1461,94 @@ def _record_search_view(request: Request, slug: str, page_id: str, campaign: str
     )
 
 
+def _public_guides_theme() -> str:
+    return PUBLIC_GUIDES_THEME_FILE.read_text(encoding="utf-8")
+
+
+def _guides_language(topics: list[dict]) -> str:
+    languages = {row.get("language") for row in topics if row.get("language")}
+    return next(iter(languages)) if len(languages) == 1 else "en"
+
+
+def _index_copy(language: str) -> dict[str, str]:
+    if language == "es":
+        return {
+            "skip": "Saltar al contenido", "nav": "Navegación principal",
+            "eyebrow": "Guías para días reales", "title_1": "Pequeños sistemas.",
+            "title_2": "Días más claros.",
+            "description": "Ideas prácticas que puedes probar hoy, con cuadernos completos cuando quieras profundizar.",
+            "editorial_title": "Cómo preparamos estas guías",
+            "editorial_text": "Libra publica únicamente artículos revisados individualmente y comprueba que el libro relacionado siga disponible. El contenido es educativo y no sustituye asesoramiento profesional.",
+            "meta_title": "Guías prácticas de Libra",
+            "meta_description": "Notas prácticas para organizar días reales y encontrar el cuaderno completo cuando lo necesites.",
+            "topic_label": "tema",
+        }
+    return {
+        "skip": "Skip to content", "nav": "Primary navigation",
+        "eyebrow": "Guides for real days", "title_1": "Small systems.",
+        "title_2": "Clearer days.",
+        "description": "Practical ideas to try today, with complete workbooks when you want to go deeper.",
+        "editorial_title": "How these guides are prepared",
+        "editorial_text": "Libra publishes individually reviewed articles and checks that each related book remains available. The material is educational and does not replace professional advice.",
+        "meta_title": "Libra practical guides",
+        "meta_description": "Practical notes for real days, with complete workbooks when you want to go deeper.",
+        "topic_label": "topic",
+    }
+
+
 def _topic_cards(topics: list[dict]) -> str:
     cards = []
     for topic in topics:
-        href = _public_path(f"/guides/{topic['topic']}")
+        href = escape_text(_public_path(f"/guides/{topic['topic']}"))
+        language = escape_text(topic.get("language", "en"))
+        title = escape_text(topic.get("title", ""))
+        description = escape_text(topic.get("description", ""))
+        count = len(topic.get("articles", []))
+        action = "Explorar" if language == "es" else "Explore"
+        note_word = "notas" if language == "es" else "notes"
+        slug = topic["slug"]
+        cover = escape_text(f"{GROWTH_SITE_BASE}{_public_path(f'/api/books/{slug}/cover')}")
         cards.append(
-            '<article class="topic-card">'
-            f'<p class="language">{escape_text(topic.get("language", ""))}</p>'
-            f'<h2><a href="{escape_text(href)}">{escape_text(topic.get("title", ""))}</a></h2>'
-            f'<p>{escape_text(topic.get("description", ""))}</p>'
-            f'<a class="read-link" href="{escape_text(href)}">Open the guide <span aria-hidden="true">→</span></a>'
+            f'<article class="topic-card" lang="{language}">'
+            f'<div class="topic-card__copy"><p class="language-pill">{language}</p>'
+            f'<p class="topic-card__count">{count} {note_word}</p>'
+            f'<h2>{title}</h2><p>{description}</p>'
+            f'<a class="topic-card__action" href="{href}" '
+            f'aria-label="{action} {count} {note_word}: {title}">'
+            f'{action} {count} {note_word} <span aria-hidden="true">→</span></a></div>'
+            f'<div class="topic-card__visual" aria-hidden="true">'
+            f'<span class="focus-lens"></span><img src="{cover}" alt=""></div>'
             '</article>'
         )
     return "\n".join(cards)
+
+
+def _article_cards(topic: dict) -> str:
+    return "\n".join(
+        '<li><a class="note-card" lang="{}" href="{}?c={}"><span class="note-card__title">{}</span>'
+        '<span class="note-card__summary">{}</span><span class="note-card__arrow" '
+        'aria-hidden="true">→</span></a></li>'.format(
+            escape_text(article.get("language", topic.get("language", "en"))),
+            escape_text(_public_path(f"/growth/articles/{article['id']}")),
+            SEARCH_CAMPAIGN,
+            escape_text(article.get("title", article["id"])),
+            escape_text(article.get("description", "")),
+        )
+        for article in topic["articles"]
+    )
+
+
+def _related_cards(rows: list[dict], campaign: str) -> str:
+    suffix = f"?c={SEARCH_CAMPAIGN}" if campaign == SEARCH_CAMPAIGN else ""
+    return "".join(
+        '<li class="related-card"><a href="{}{}"><span>{}</span>'
+        '<span aria-hidden="true">→</span></a></li>'.format(
+            escape_text(_public_path(f"/growth/articles/{row['id']}")),
+            suffix,
+            escape_text(row.get("title", row["id"])),
+        )
+        for row in rows
+    )
 
 
 @app.get("/guides/", response_class=HTMLResponse)
@@ -1480,8 +1556,23 @@ async def search_guides_index(request: Request):
     config, topics = _search_topics()
     if config.get("release", {}).get("state") != "ACTIVE":
         return HTMLResponse("<h1>Guides not found</h1>", status_code=404)
+    language = _guides_language(topics)
+    copy = _index_copy(language)
     html_path = Path(__file__).parent / "templates" / "guides_index.html"
     page = render_hub_page(html_path.read_text(), {
+        "PAGE_LANG": escape_text(language),
+        "TOPIC_COUNT": escape_text(len(topics)),
+        "SKIP_LABEL": escape_text(copy["skip"]),
+        "NAV_LABEL": escape_text(copy["nav"]),
+        "HERO_EYEBROW": escape_text(copy["eyebrow"]),
+        "HERO_TITLE_1": escape_text(copy["title_1"]),
+        "HERO_TITLE_2": escape_text(copy["title_2"]),
+        "HERO_DESCRIPTION": escape_text(copy["description"]),
+        "EDITORIAL_TITLE": escape_text(copy["editorial_title"]),
+        "EDITORIAL_TEXT": escape_text(copy["editorial_text"]),
+        "META_TITLE": escape_text(copy["meta_title"]),
+        "META_DESCRIPTION": escape_text(copy["meta_description"]),
+        "TOPIC_LABEL": escape_text(copy["topic_label"]),
         "TOPICS": _topic_cards(topics),
         "CANONICAL": escape_text(f"{GROWTH_SITE_BASE}{_public_path('/guides/')}")
     })
@@ -1502,15 +1593,7 @@ async def search_guide_topic(topic_id: str, request: Request):
         cta_path = _hub_cta_path(topic["slug"], campaign, destination)
     except TrackingConfigError:
         raise HTTPException(status_code=503, detail="Growth tracking is temporarily unavailable")
-    articles = "\n".join(
-        '<li><a href="{}?c={}">{}</a><p>{}</p></li>'.format(
-            escape_text(_public_path(f"/growth/articles/{article['id']}")),
-            SEARCH_CAMPAIGN,
-            escape_text(article.get("title", article["id"])),
-            escape_text(article.get("description", "")),
-        )
-        for article in topic["articles"]
-    )
+    articles = _article_cards(topic)
     canonical = f"{GROWTH_SITE_BASE}{_public_path(f'/guides/{topic_id}')}"
     cover = f"{GROWTH_SITE_BASE}{_public_path(f'/api/books/{topic["slug"]}/cover')}"
     html_path = Path(__file__).parent / "templates" / "guide_topic.html"
@@ -1520,6 +1603,7 @@ async def search_guide_topic(topic_id: str, request: Request):
         "DESCRIPTION": escape_text(topic.get("description", "")),
         "CANONICAL": escape_text(canonical),
         "ARTICLES": articles,
+        "ARTICLE_COUNT": escape_text(len(topic["articles"])),
         "BOOK_COVER": escape_text(cover),
         "BOOK_TITLE": escape_text(listing.get("title", topic["slug"])),
         "BOOK_FORMAT": escape_text(_book_offer(topic["slug"])["format_line"]),
@@ -1622,15 +1706,7 @@ async def growth_article_hub_page(article_id: str, request: Request, c: str | No
     related = related_articles(search_topic, article_id)
     related_html = ""
     if related:
-        related_campaign = f"?c={SEARCH_CAMPAIGN}" if c == SEARCH_CAMPAIGN else ""
-        links = "".join(
-            '<li><a href="{}{}">{}</a></li>'.format(
-                escape_text(_public_path(f"/growth/articles/{row['id']}")),
-                related_campaign,
-                escape_text(row.get("title", row["id"])),
-            )
-            for row in related
-        )
+        links = _related_cards(related, campaign)
         related_html = f'<aside class="related"><h2>Read next</h2><ul>{links}</ul></aside>'
     structured = json.dumps({
         "@context": "https://schema.org",

@@ -2,6 +2,7 @@ import json
 import sqlite3
 
 import pytest
+from bs4 import BeautifulSoup
 from fastapi.testclient import TestClient
 
 import app as libra_app
@@ -209,3 +210,74 @@ def test_article_view_counts_only_when_article_is_search_eligible(client):
     client.get("/growth/articles/held-a1", headers={"User-Agent": READER_UA})
 
     assert event_count(ledger, "qualified_view") == 1
+
+
+def test_guides_language_uses_the_only_public_language():
+    assert libra_app._guides_language([{"language": "es"}, {"language": "es"}]) == "es"
+    assert libra_app._guides_language([{"language": "es"}, {"language": "en"}]) == "en"
+    assert libra_app._guides_language([]) == "en"
+
+
+def test_topic_feature_has_one_non_overlapping_link():
+    html = libra_app._topic_cards([{
+        "slug": "book-a", "topic": "focus", "language": "es",
+        "title": "Rutinas prácticas", "description": "Pasos claros.",
+        "articles": [{"id": "a1"}, {"id": "a2"}],
+    }])
+    soup = BeautifulSoup(html, "html.parser")
+    card = soup.select_one(".topic-card")
+    assert len(card.select("a[href]")) == 1
+    assert card.select_one("a[href]").get("aria-label") == "Explorar 2 notas: Rutinas prácticas"
+
+
+def test_topic_article_card_has_one_tagged_link():
+    html = libra_app._article_cards({"articles": [{
+        "id": "a1", "title": "Una nota", "description": "Descripción",
+    }]})
+    soup = BeautifulSoup(html, "html.parser")
+    first = soup.select_one(".note-card")
+    assert first.name == "a"
+    assert len(first.parent.select("a[href]")) == 1
+    assert first["href"].endswith("/growth/articles/a1?c=search-surface")
+
+
+@pytest.mark.parametrize("campaign,suffix", [
+    ("search-surface", "?c=search-surface"), ("unattributed", ""),
+])
+def test_related_cards_preserve_campaign_attribution(campaign, suffix):
+    soup = BeautifulSoup(libra_app._related_cards([
+        {"id": "a2", "title": "Otra nota"},
+    ], campaign), "html.parser")
+    card = soup.select_one(".related-card")
+    assert len(card.select("a[href]")) == 1
+    assert card.a["href"] == f"/libra/growth/articles/a2{suffix}"
+    assert card.a.get_text(strip=True) == "Otra nota→"
+
+
+def test_public_guides_theme_reads_utf8_file(tmp_path, monkeypatch):
+    theme = tmp_path / "public_guides_theme.css"
+    theme.write_text("/* Guías */\n:root { color-scheme: light; }", encoding="utf-8")
+    monkeypatch.setattr(libra_app, "PUBLIC_GUIDES_THEME_FILE", theme)
+    assert libra_app._public_guides_theme() == theme.read_text(encoding="utf-8")
+
+
+def test_index_copy_supports_spanish_and_english_fallback():
+    assert libra_app._index_copy("es")["skip"] == "Saltar al contenido"
+    assert libra_app._index_copy("es")["meta_title"] == "Guías prácticas de Libra"
+    assert libra_app._index_copy("fr") == libra_app._index_copy("en")
+
+
+def test_card_renderers_escape_dynamic_content():
+    unsafe = '\"><script>alert("x")</script>'
+    article = {"id": unsafe, "title": unsafe, "description": unsafe, "language": unsafe}
+    topic = {
+        "slug": unsafe, "topic": unsafe, "language": unsafe,
+        "title": unsafe, "description": unsafe, "articles": [article],
+    }
+    for html in (
+        libra_app._topic_cards([topic]), libra_app._article_cards(topic),
+        libra_app._related_cards([article], "search-surface"),
+    ):
+        assert "<script>" not in html
+        assert "&lt;script&gt;" in html
+        assert not BeautifulSoup(html, "html.parser").select("script")

@@ -124,3 +124,20 @@ def test_article_injects_shared_theme_without_unresolved_placeholders(client, mo
 
     assert soup.style.string == css
     assert "{{" not in response.text
+
+
+def test_synthetic_browser_audit_requests_do_not_write_business_ledger(client, monkeypatch):
+    def unexpected_event(*args, **kwargs):
+        raise AssertionError("Synthetic accessibility audit must not record business events")
+
+    monkeypatch.setattr(libra_app, "record_hub_event", unexpected_event)
+    for path in (
+        "/guides/", "/guides/rutinas-tdah-adultos",
+        "/growth/articles/a1?c=search-surface",
+    ):
+        response = client.get(path, headers={
+            "User-Agent": "Mozilla/5.0 Chrome/140.0.0.0 Safari/537.36",
+            "X-Libra-Measurement": "synthetic",
+        })
+        assert response.status_code == 200
+    assert not libra_app.PROFIT_LEDGER_FILE.exists()

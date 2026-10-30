@@ -97,7 +97,8 @@ def test_guides_index_lists_only_approved_live_topics(client):
     assert "Guía visual para smartphone" not in response.text
     assert "/libra/guides/rutinas-tdah-adultos" in response.text
     assert '<link rel="canonical" href="https://newton-winai-klinprasom.incomeinclick.in.th/libra/guides/">' in response.text
-    assert "individually approved" in response.text
+    assert "artículos revisados individualmente" in response.text
+    assert "El contenido es educativo" in response.text
 
 
 def test_topic_page_links_to_articles_and_one_tracked_amazon_cta(client):

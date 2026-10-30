@@ -1561,12 +1561,13 @@ async def search_guides_index(request: Request):
     html_path = Path(__file__).parent / "templates" / "guides_index.html"
     page = render_hub_page(html_path.read_text(), {
         "PAGE_LANG": escape_text(language),
+        "THEME_CSS": _public_guides_theme(),
         "TOPIC_COUNT": escape_text(len(topics)),
         "SKIP_LABEL": escape_text(copy["skip"]),
         "NAV_LABEL": escape_text(copy["nav"]),
         "HERO_EYEBROW": escape_text(copy["eyebrow"]),
-        "HERO_TITLE_1": escape_text(copy["title_1"]),
-        "HERO_TITLE_2": escape_text(copy["title_2"]),
+        "HERO_TITLE_ONE": escape_text(copy["title_1"]),
+        "HERO_TITLE_TWO": escape_text(copy["title_2"]),
         "HERO_DESCRIPTION": escape_text(copy["description"]),
         "EDITORIAL_TITLE": escape_text(copy["editorial_title"]),
         "EDITORIAL_TEXT": escape_text(copy["editorial_text"]),

@@ -109,8 +109,62 @@ def test_topic_page_links_to_articles_and_one_tracked_amazon_cta(client):
     assert response.text.count("/libra/growth/out/") == 1
     assert "Cuaderno práctico" in response.text
     assert "?c=search-surface" in response.text
-    assert "How this page is prepared" in response.text
-    assert "cannot be tied to a purchase" in response.text
+    assert "Cómo se prepara esta página" in response.text
+    assert "no se pueden vincular a una compra" in response.text
+    soup = BeautifulSoup(response.text, "html.parser")
+    cta = soup.select_one(".book-dock .cta")
+    assert set(cta["rel"]) == {"nofollow", "sponsored"}
+    payload = resolve_tracking_token(cta["href"].rsplit("/", 1)[1])
+    assert {key: payload[key] for key in ("slug", "campaign", "destination")} == {
+        "slug": "book-a", "campaign": "search-surface",
+        "destination": "https://www.amazon.com/dp/B0TESTASIN1",
+    }
+
+
+def test_spanish_topic_uses_localized_controls_and_meaningful_cover_alt(client):
+    soup = BeautifulSoup(client.get("/guides/rutinas-tdah-adultos").text, "html.parser")
+
+    assert soup.html["lang"] == "es"
+    assert soup.select_one(".site-bar a").get_text(" ", strip=True) == "← Todas las guías"
+    assert soup.select_one(".site-meta").get_text(" ", strip=True) == "2 notas"
+    assert soup.select_one("#notes-title").get_text(strip=True) == "Notas prácticas"
+    assert soup.select_one(".dock-label").get_text(strip=True) == "Cuaderno relacionado"
+    assert soup.select_one(".book-dock img")["alt"] == "Portada de Cuaderno práctico"
+    assert soup.select_one(".book-dock .cta").get_text(" ", strip=True) == "Ver el libro en Amazon"
+
+
+def test_topic_note_cards_are_single_links_with_descriptions(client):
+    soup = BeautifulSoup(client.get("/guides/rutinas-tdah-adultos").text, "html.parser")
+    cards = soup.select(".note-card")
+
+    assert len(cards) == 2
+    assert len(soup.select(".note-grid > li")) == 2
+    for card in cards:
+        assert card.name == "a"
+        assert len(card.parent.select("a[href]")) == 1
+        assert card.select_one(".note-card__summary").get_text(strip=True) == "A useful article."
+        assert card["href"].endswith("?c=search-surface")
+
+
+@pytest.mark.parametrize("language", ["en", "fr"])
+def test_topic_uses_english_fallback_for_non_spanish_inventory(client, language):
+    portfolio = libra_app.SEARCH_PORTFOLIO_FILE
+    data = json.loads(portfolio.read_text())
+    data["books"][0]["language"] = language
+    portfolio.write_text(json.dumps(data))
+    soup = BeautifulSoup(client.get("/guides/rutinas-tdah-adultos").text, "html.parser")
+
+    assert soup.html["lang"] == language
+    assert soup.select_one(".skip-link").get_text(strip=True) == "Skip to content"
+    assert soup.select_one(".site-bar nav")["aria-label"] == "Primary navigation"
+    assert soup.select_one(".site-bar a").get_text(" ", strip=True) == "← All guides"
+    assert soup.select_one(".site-meta").get_text(strip=True) == "2 notes"
+    assert soup.select_one("#notes-title").get_text(strip=True) == "Practical notes"
+    assert soup.select_one(".dock-label").get_text(strip=True) == "Related workbook"
+    assert soup.select_one(".book-dock img")["alt"] == "Cover of Cuaderno práctico"
+    assert soup.select_one(".cta").get_text(strip=True) == "View the book on Amazon"
+    assert soup.select_one("#method-title").get_text(strip=True) == "How this page is prepared"
+    assert "cannot be tied to a purchase" in soup.select_one(".editorial-note").get_text()
 
 
 def test_held_and_unknown_topic_are_404(client):

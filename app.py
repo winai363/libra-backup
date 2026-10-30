@@ -1597,19 +1597,48 @@ async def search_guide_topic(topic_id: str, request: Request):
     articles = _article_cards(topic)
     canonical = f"{GROWTH_SITE_BASE}{_public_path(f'/guides/{topic_id}')}"
     cover = f"{GROWTH_SITE_BASE}{_public_path(f'/api/books/{topic["slug"]}/cover')}"
+    language = topic.get("language", "en")
+    book_title = listing.get("title", topic["slug"])
+    copy = {
+        "es": {
+            "skip": "Saltar al contenido", "nav": "Navegación principal",
+            "all_guides": "Todas las guías", "notes": "Notas prácticas",
+            "note_word": "notas", "book": "Cuaderno relacionado",
+            "amazon": "Ver el libro en Amazon", "cover_prefix": "Portada de",
+            "method_title": "Cómo se prepara esta página",
+            "method_text": "Libra incluye únicamente artículos revisados individualmente para este tema y comprueba que el libro relacionado siga disponible. Estas notas prácticas son educativas y no sustituyen asesoramiento profesional. La disponibilidad en Amazon puede cambiar y las visitas no se pueden vincular a una compra.",
+        },
+    }.get(language, {
+        "skip": "Skip to content", "nav": "Primary navigation",
+        "all_guides": "All guides", "notes": "Practical notes",
+        "note_word": "notes", "book": "Related workbook",
+        "amazon": "View the book on Amazon", "cover_prefix": "Cover of",
+        "method_title": "How this page is prepared",
+        "method_text": "Libra lists only articles individually approved for this topic and checks the related book against the live catalogue. These practical notes are educational, not professional advice. Amazon availability can change, and visits cannot be tied to a purchase.",
+    })
     html_path = Path(__file__).parent / "templates" / "guide_topic.html"
     page = render_hub_page(html_path.read_text(), {
-        "LANG": escape_text(topic.get("language", "en")),
+        "LANG": escape_text(language),
+        "THEME_CSS": _public_guides_theme(),
+        "SKIP_LABEL": escape_text(copy["skip"]),
+        "NAV_LABEL": escape_text(copy["nav"]),
+        "ALL_GUIDES_LABEL": escape_text(copy["all_guides"]),
+        "NOTES_LABEL": escape_text(copy["notes"]),
+        "NOTE_WORD": escape_text(copy["note_word"]),
+        "BOOK_LABEL": escape_text(copy["book"]),
+        "METHOD_TITLE": escape_text(copy["method_title"]),
+        "METHOD_TEXT": escape_text(copy["method_text"]),
         "TITLE": escape_text(topic.get("title", "")),
         "DESCRIPTION": escape_text(topic.get("description", "")),
         "CANONICAL": escape_text(canonical),
         "ARTICLES": articles,
         "ARTICLE_COUNT": escape_text(len(topic["articles"])),
         "BOOK_COVER": escape_text(cover),
-        "BOOK_TITLE": escape_text(listing.get("title", topic["slug"])),
+        "BOOK_COVER_ALT": escape_text(f"{copy['cover_prefix']} {book_title}"),
+        "BOOK_TITLE": escape_text(book_title),
         "BOOK_FORMAT": escape_text(_book_offer(topic["slug"])["format_line"]),
         "CTA_URL": escape_text(cta_path),
-        "CTA_LABEL": "View the book on Amazon",
+        "CTA_LABEL": escape_text(copy["amazon"]),
     })
     _record_search_view(request, topic["slug"], f"guide:{topic_id}", SEARCH_CAMPAIGN)
     return HTMLResponse(page)

@@ -6,45 +6,23 @@
   <title>{{TITLE}}</title>
   <meta name="description" content="{{DESCRIPTION}}">
   <link rel="canonical" href="{{CANONICAL}}">
-  <style>
-    :root { --ink:#17223b; --paper:#f3f7f6; --blue:#284db8; --mint:#d8f2e9; --sun:#ffd166; --line:#cbd7d3; }
-    * { box-sizing:border-box; }
-    body { margin:0; background:var(--paper); color:var(--ink); font-family:Verdana, Geneva, sans-serif; line-height:1.65; }
-    main { max-width:70rem; margin:auto; padding:1.25rem 1.25rem 5rem; }
-    nav a { color:var(--blue); font-weight:700; }
-    header { max-width:52rem; padding:clamp(2rem,7vw,5rem) 0 3rem; }
-    .language { width:max-content; margin:0 0 .8rem; padding:.12rem .55rem; background:var(--mint); color:#175d49; font-size:.74rem; font-weight:700; text-transform:uppercase; }
-    h1 { margin:0; font:700 clamp(2.3rem,7vw,5rem)/1 Georgia, serif; letter-spacing:-.035em; }
-    .lead { max-width:42rem; font-size:1.08rem; }
-    .layout { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(16rem,.8fr); gap:clamp(1.5rem,5vw,4rem); align-items:start; }
-    h2 { font:700 1.65rem/1.2 Georgia, serif; }
-    .articles { list-style:none; margin:0; padding:0; border-top:1px solid var(--line); }
-    .articles li { position:relative; padding:1.2rem 0; border-bottom:1px solid var(--line); }
-    .articles a { color:var(--ink); font:700 1.12rem/1.3 Georgia, serif; }
-    .articles p { margin:.35rem 0 0; }
-    .book { padding:1.25rem; background:#fff; border:1px solid var(--line); border-top:6px solid var(--sun); }
-    .book img { width:8rem; max-width:100%; height:auto; box-shadow:0 8px 18px rgba(23,34,59,.15); }
-    .book h2 { margin:.8rem 0 .3rem; }
-    .format { font-size:.85rem; }
-    .cta { display:block; margin-top:1rem; padding:.85rem 1rem; background:var(--blue); color:#fff; font-weight:700; text-align:center; text-decoration:none; }
-    .method { max-width:48rem; margin:3rem 0 0; padding:1rem 1.1rem; background:var(--mint); border-left:5px solid #2f8c6e; font-size:.88rem; }
-    a:focus-visible { outline:3px solid var(--sun); outline-offset:4px; }
-    @media (max-width:700px) { .layout { grid-template-columns:1fr; } .book { display:grid; grid-template-columns:6rem 1fr; gap:1rem; } .book .cta { grid-column:1/-1; } }
-  </style>
+  <style>{{THEME_CSS}}</style>
 </head>
 <body>
-  <main>
-    <nav aria-label="Breadcrumb"><a href="/libra/guides/">All guides</a></nav>
-    <header><p class="language">{{LANG}}</p><h1>{{TITLE}}</h1><p class="lead">{{DESCRIPTION}}</p></header>
-    <div class="layout">
-      <section><h2>Practical notes</h2><ul class="articles">{{ARTICLES}}</ul></section>
-      <aside class="book" aria-label="Related book">
-        <img src="{{BOOK_COVER}}" alt="" width="128">
-        <div><h2>{{BOOK_TITLE}}</h2><p class="format">{{BOOK_FORMAT}}</p></div>
-        <a class="cta" href="{{CTA_URL}}" rel="nofollow sponsored">{{CTA_LABEL}}</a>
+  <a class="skip-link" href="#main-content">{{SKIP_LABEL}}</a>
+  <header class="site-bar glass-control">
+    <nav aria-label="{{NAV_LABEL}}"><a href="/libra/guides/"><span aria-hidden="true">←</span> {{ALL_GUIDES_LABEL}}</a><span class="site-meta">{{ARTICLE_COUNT}} {{NOTE_WORD}}</span></nav>
+  </header>
+  <main id="main-content" class="topic-shell">
+    <header class="topic-hero"><p class="language-pill">{{LANG}}</p><h1>{{TITLE}}</h1><p>{{DESCRIPTION}}</p></header>
+    <div class="topic-layout">
+      <section aria-labelledby="notes-title"><h2 id="notes-title">{{NOTES_LABEL}}</h2><ul class="note-grid">{{ARTICLES}}</ul></section>
+      <aside class="book-dock glass-control" aria-labelledby="book-title">
+        <img src="{{BOOK_COVER}}" alt="{{BOOK_COVER_ALT}}" width="128">
+        <div><p class="dock-label">{{BOOK_LABEL}}</p><h2 id="book-title">{{BOOK_TITLE}}</h2><p>{{BOOK_FORMAT}}</p><a class="cta" href="{{CTA_URL}}" rel="nofollow sponsored">{{CTA_LABEL}}</a></div>
       </aside>
     </div>
-    <p class="method"><strong>How this page is prepared:</strong> Libra lists only articles individually approved for this topic and checks the related book against the live catalogue. These practical notes are educational, not professional advice. Amazon availability can change, and visits cannot be tied to a purchase.</p>
+    <aside class="editorial-note" aria-labelledby="method-title"><h2 id="method-title">{{METHOD_TITLE}}</h2><p>{{METHOD_TEXT}}</p></aside>
   </main>
 </body>
 </html>

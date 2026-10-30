@@ -49,6 +49,31 @@ def test_index_injects_shared_theme_without_unresolved_placeholders(client, monk
     assert soup.select_one(".topic-card__action")["href"] == "/libra/guides/rutinas-tdah-adultos"
 
 
+def test_topic_has_localized_skip_link_named_landmarks_and_one_h1(client):
+    soup = BeautifulSoup(client.get("/guides/rutinas-tdah-adultos").text, "html.parser")
+
+    assert soup.select_one('a.skip-link[href="#main-content"]').get_text(strip=True) == "Saltar al contenido"
+    assert soup.select_one("header.site-bar nav")["aria-label"] == "Navegación principal"
+    main = soup.select_one("main#main-content.topic-shell")
+    assert main
+    assert len(soup.find_all("h1")) == 1
+    assert main.select_one('section[aria-labelledby="notes-title"] h2#notes-title')
+    assert main.select_one('aside.book-dock[aria-labelledby="book-title"] h2#book-title')
+    assert main.select_one('aside.editorial-note[aria-labelledby="method-title"] h2#method-title')
+    assert [child.name for child in soup.select_one(".topic-layout").find_all(recursive=False)] == ["section", "aside"]
+
+
+def test_topic_injects_shared_theme_without_unresolved_placeholders(client, monkeypatch):
+    css = "/* Shared topic theme */ body { color: #101828; }"
+    monkeypatch.setattr(libra_app, "_public_guides_theme", lambda: css)
+    response = client.get("/guides/rutinas-tdah-adultos")
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    assert soup.style.string == css
+    assert "{{" not in response.text
+    assert soup.select_one(".site-bar a")["href"] == "/libra/guides/"
+
+
 def test_theme_has_accessibility_preferences_and_target_floor():
     css = THEME.read_text(encoding="utf-8")
     for contract in (

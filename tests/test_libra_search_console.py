@@ -1,0 +1,146 @@
+from datetime import date
+
+from libra_search_console import (
+    collect_search_console,
+    property_status,
+    recommendation_for,
+)
+
+
+SITE = "https://newton-winai-klinprasom.incomeinclick.in.th/libra/"
+SITEMAP = f"{SITE}sitemap.xml"
+
+
+class Request:
+    def __init__(self, result=None):
+        self.result = result if result is not None else {}
+
+    def execute(self):
+        return self.result
+
+
+class FakeSites:
+    def __init__(self, entries):
+        self.entries = entries
+
+    def list(self):
+        return Request({"siteEntry": self.entries})
+
+
+class FakeSitemaps:
+    def __init__(self, rows=None):
+        self.rows = rows or []
+        self.submitted = []
+
+    def list(self, **kwargs):
+        return Request({"sitemap": self.rows})
+
+    def submit(self, **kwargs):
+        self.submitted.append(kwargs)
+        return Request()
+
+
+class FakeAnalytics:
+    def __init__(self, rows=None):
+        self.rows = rows or []
+        self.queries = []
+
+    def query(self, **kwargs):
+        self.queries.append(kwargs)
+        return Request({"rows": self.rows})
+
+
+class FakeClient:
+    def __init__(self, permission, *, sitemaps=None, rows=None):
+        self._sites = FakeSites([{"siteUrl": SITE, "permissionLevel": permission}])
+        self._sitemaps = FakeSitemaps(sitemaps)
+        self._analytics = FakeAnalytics(rows)
+
+    def sites(self):
+        return self._sites
+
+    def sitemaps(self):
+        return self._sitemaps
+
+    def searchanalytics(self):
+        return self._analytics
+
+
+def test_unverified_property_never_submits_or_queries():
+    client = FakeClient("siteUnverifiedUser")
+
+    result = collect_search_console(
+        client, SITE, SITEMAP, start=date(2026, 10, 30), end=date(2026, 11, 4),
+        ensure_sitemap=True,
+    )
+
+    assert result == {
+        "status": "PENDING_VERIFICATION",
+        "permission": "siteUnverifiedUser",
+        "property": SITE,
+    }
+    assert client._sitemaps.submitted == []
+    assert client._analytics.queries == []
+
+
+def test_verified_property_submits_missing_sitemap_once_and_reads_metrics():
+    client = FakeClient(
+        "siteFullUser",
+        rows=[{"clicks": 2, "impressions": 50, "ctr": 0.04, "position": 13.5}],
+    )
+
+    result = collect_search_console(
+        client, SITE, SITEMAP, start=date(2026, 10, 30), end=date(2026, 11, 4),
+        ensure_sitemap=True,
+    )
+
+    assert client._sitemaps.submitted == [{"siteUrl": SITE, "feedpath": SITEMAP}]
+    assert result["status"] == "CONNECTED"
+    assert result["sitemap"] == "SUBMITTED"
+    assert result["metrics"] == {
+        "clicks": 2,
+        "impressions": 50,
+        "ctr": 0.04,
+        "position": 13.5,
+    }
+
+
+def test_existing_sitemap_is_not_submitted_again():
+    client = FakeClient(
+        "siteOwner",
+        sitemaps=[{"path": SITEMAP}],
+        rows=[],
+    )
+
+    result = collect_search_console(
+        client, SITE, SITEMAP, start=date(2026, 10, 30), end=date(2026, 11, 4),
+        ensure_sitemap=True,
+    )
+
+    assert client._sitemaps.submitted == []
+    assert result["sitemap"] == "PRESENT"
+    assert result["metrics"]["impressions"] == 0
+
+
+def test_property_status_distinguishes_absent_pending_and_verified():
+    assert property_status([], SITE)["status"] == "NOT_CONFIGURED"
+    assert property_status(
+        [{"siteUrl": SITE, "permissionLevel": "siteUnverifiedUser"}], SITE
+    )["status"] == "PENDING_VERIFICATION"
+    assert property_status(
+        [{"siteUrl": SITE, "permissionLevel": "siteRestrictedUser"}], SITE
+    )["status"] == "CONNECTED"
+
+
+def test_recommendation_uses_observed_funnel_without_inventing_zeroes():
+    assert recommendation_for({"status": "PENDING_VERIFICATION"}, {}) == "VERIFY_PROPERTY"
+    assert recommendation_for({"status": "CONNECTED", "metrics": {"impressions": 0}}, {}) == "CHECK_INDEXING"
+    assert recommendation_for(
+        {"status": "CONNECTED", "metrics": {"impressions": 100, "ctr": 0.01}},
+        {"amazon_outbound": 0},
+    ) == "IMPROVE_SEARCH_SNIPPETS"
+    assert recommendation_for(
+        {"status": "CONNECTED", "metrics": {"impressions": 100, "ctr": 0.05}},
+        {"amazon_outbound": 0},
+    ) == "IMPROVE_AMAZON_CTA"
+    assert recommendation_for({"status": "UNKNOWN"}, {}) == "KEEP_MEASURING"

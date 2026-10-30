@@ -133,6 +133,25 @@ def _append_snapshot(path: Path, payload: dict) -> None:
         stream.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
 
 
+def _record_metrics_state(state_path: Path, gsc: dict, observed_on: date) -> None:
+    state = load_state(state_path)
+    metrics = gsc.get("metrics") if gsc.get("status") == "CONNECTED" else None
+    if isinstance(metrics, dict) and isinstance(metrics.get("impressions"), int):
+        state["metrics"] = {
+            "state": "FINAL",
+            "observed_on": observed_on.isoformat(),
+            "window": gsc.get("window"),
+            "values": metrics,
+        }
+    else:
+        state["metrics"] = {
+            "state": (metrics or {}).get("status", "WAITING_FOR_CONNECTION")
+            if isinstance(metrics, dict) else "WAITING_FOR_CONNECTION",
+            "observed_on": observed_on.isoformat(),
+        }
+    _write_state(state_path, state)
+
+
 def _message(report: dict, gsc: dict, recommendation: str) -> str:
     metrics = gsc.get("metrics") or {}
     impressions = metrics.get("impressions")
@@ -174,11 +193,13 @@ def main(argv=None) -> int:
         checkpoint_done = (state.get("checkpoint") or {}).get("state") in {
             "SENDING", "SENT", "DELIVERY_UNCERTAIN",
         }
-        if sitemap_done and checkpoint_done:
+        metrics_done = (state.get("metrics") or {}).get("state") == "FINAL"
+        if sitemap_done and checkpoint_done and metrics_done:
             print(json.dumps({"status": "NOOP", "reason": "monitor_complete"}))
             return 0
 
         gsc = collect_live(args.credentials, today=args.as_of, state_path=args.state)
+        _record_metrics_state(args.state, gsc, args.as_of)
         report = build_report(args.ledger, args.portfolio, as_of=args.as_of)
         recommendation = recommendation_for(gsc, report["traffic"])
         snapshot = {

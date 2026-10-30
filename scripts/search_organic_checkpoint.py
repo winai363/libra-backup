@@ -53,7 +53,7 @@ def checkpoint_due(today: date, target: date, state_path: Path) -> bool:
     if today < target:
         return False
     checkpoint = load_state(state_path).get("checkpoint") or {}
-    return checkpoint.get("state") not in {"SENDING", "SENT"}
+    return checkpoint.get("state") not in {"SENDING", "SENT", "DELIVERY_UNCERTAIN"}
 
 
 def claim_delivery(state_path: Path, target: date, digest: str) -> None:
@@ -68,7 +68,7 @@ def claim_delivery(state_path: Path, target: date, digest: str) -> None:
 
 
 def mark_delivery(state_path: Path, delivery_state: str) -> None:
-    if delivery_state not in {"SENT", "RETRYABLE"}:
+    if delivery_state not in {"SENT", "DELIVERY_UNCERTAIN"}:
         raise ValueError("unsupported delivery state")
     state = load_state(state_path)
     checkpoint = state.get("checkpoint")
@@ -171,7 +171,9 @@ def main(argv=None) -> int:
     with exclusive_lock(args.lock):
         state = load_state(args.state)
         sitemap_done = (state.get("sitemap") or {}).get("state") in {"SUBMITTED", "CONFIRMED"}
-        checkpoint_done = (state.get("checkpoint") or {}).get("state") in {"SENDING", "SENT"}
+        checkpoint_done = (state.get("checkpoint") or {}).get("state") in {
+            "SENDING", "SENT", "DELIVERY_UNCERTAIN",
+        }
         if sitemap_done and checkpoint_done:
             print(json.dumps({"status": "NOOP", "reason": "monitor_complete"}))
             return 0
@@ -200,7 +202,7 @@ def main(argv=None) -> int:
                 sent = send_telegram(message)
             except Exception:
                 sent = False
-            mark_delivery(args.state, "SENT" if sent else "RETRYABLE")
+            mark_delivery(args.state, "SENT" if sent else "DELIVERY_UNCERTAIN")
             if not sent:
                 return 1
     return 0

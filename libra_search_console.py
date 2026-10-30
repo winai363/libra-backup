@@ -72,6 +72,33 @@ def collect_search_console(
             "metrics": {"status": "PENDING_FINAL_WINDOW"},
         }
 
+    coverage = client.searchanalytics().query(
+        siteUrl=site,
+        body={
+            "startDate": start.isoformat(),
+            "endDate": end.isoformat(),
+            "dimensions": ["date"],
+            "dataState": "all",
+            "rowLimit": 25000,
+        },
+    ).execute()
+    first_incomplete = (coverage.get("metadata") or {}).get("firstIncompleteDate")
+    if first_incomplete is not None:
+        try:
+            complete = date.fromisoformat(first_incomplete) > end
+        except (TypeError, ValueError):
+            complete = False
+        if not complete:
+            return {
+                **state,
+                "sitemap": sitemap_state,
+                "window": {"start": start.isoformat(), "end": end.isoformat()},
+                "metrics": {
+                    "status": "PENDING_FINAL_DATA",
+                    "first_incomplete_date": first_incomplete,
+                },
+            }
+
     response = client.searchanalytics().query(
         siteUrl=site,
         body={"startDate": start.isoformat(), "endDate": end.isoformat(), "dataState": "final"},
@@ -90,7 +117,7 @@ def recommendation_for(search_console: dict, traffic: dict) -> str:
     if search_console.get("status") != "CONNECTED":
         return "KEEP_MEASURING"
     metrics = search_console.get("metrics") or {}
-    if metrics.get("status") == "PENDING_FINAL_WINDOW" or not isinstance(metrics.get("impressions"), int):
+    if metrics.get("status") in {"PENDING_FINAL_WINDOW", "PENDING_FINAL_DATA"} or not isinstance(metrics.get("impressions"), int):
         return "KEEP_MEASURING"
     if metrics.get("impressions") == 0:
         return "CHECK_INDEXING"

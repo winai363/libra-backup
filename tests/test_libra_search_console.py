@@ -41,20 +41,23 @@ class FakeSitemaps:
 
 
 class FakeAnalytics:
-    def __init__(self, rows=None):
+    def __init__(self, rows=None, responses=None):
         self.rows = rows or []
+        self.responses = list(responses or [])
         self.queries = []
 
     def query(self, **kwargs):
         self.queries.append(kwargs)
+        if self.responses:
+            return Request(self.responses.pop(0))
         return Request({"rows": self.rows})
 
 
 class FakeClient:
-    def __init__(self, permission, *, sitemaps=None, rows=None):
+    def __init__(self, permission, *, sitemaps=None, rows=None, responses=None):
         self._sites = FakeSites([{"siteUrl": SITE, "permissionLevel": permission}])
         self._sitemaps = FakeSitemaps(sitemaps)
-        self._analytics = FakeAnalytics(rows)
+        self._analytics = FakeAnalytics(rows, responses)
 
     def sites(self):
         return self._sites
@@ -175,6 +178,28 @@ def test_metrics_are_not_queried_before_the_final_window_is_available():
 
     assert result["metrics"] == {"status": "PENDING_FINAL_WINDOW"}
     assert client._analytics.queries == []
+
+
+def test_incomplete_provider_window_stays_pending_instead_of_becoming_zero():
+    client = FakeClient(
+        "siteFullUser",
+        responses=[{
+            "metadata": {"firstIncompleteDate": "2026-11-05"},
+            "rows": [{"keys": ["2026-11-05"], "impressions": 0, "clicks": 0}],
+        }],
+    )
+
+    result = collect_search_console(
+        client, SITE, SITEMAP, start=date(2026, 10, 30), end=date(2026, 11, 5),
+    )
+
+    assert result["metrics"] == {
+        "status": "PENDING_FINAL_DATA",
+        "first_incomplete_date": "2026-11-05",
+    }
+    assert len(client._analytics.queries) == 1
+    assert client._analytics.queries[0]["body"]["dimensions"] == ["date"]
+    assert client._analytics.queries[0]["body"]["dataState"] == "all"
 
 
 def test_recommendation_uses_observed_funnel_without_inventing_zeroes():

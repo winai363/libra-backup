@@ -26,13 +26,10 @@ def test_checkpoint_is_due_on_or_after_target_until_successfully_sent(tmp_path):
     assert json.loads(state.read_text())["checkpoint"]["state"] == "SENT"
 
 
-def test_failed_delivery_becomes_retryable_but_uncertain_delivery_does_not(tmp_path):
+def test_uncertain_delivery_is_never_retried_automatically(tmp_path):
     state = tmp_path / "state.json"
     claim_delivery(state, date(2026, 11, 8), "digest-1")
-    mark_delivery(state, "RETRYABLE")
-    assert checkpoint_due(date(2026, 11, 8), date(2026, 11, 8), state) is True
-
-    claim_delivery(state, date(2026, 11, 8), "digest-2")
+    mark_delivery(state, "DELIVERY_UNCERTAIN")
     assert checkpoint_due(date(2026, 11, 9), date(2026, 11, 8), state) is False
 
 

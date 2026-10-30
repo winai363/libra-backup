@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date
 
 
+VERIFIED_PERMISSIONS = {"siteOwner", "siteFullUser", "siteRestrictedUser"}
 WRITE_PERMISSIONS = {"siteOwner", "siteFullUser"}
 
 
@@ -14,6 +15,8 @@ def property_status(entries: list[dict], site: str) -> dict:
     permission = entry.get("permissionLevel")
     if permission == "siteUnverifiedUser":
         return {"status": "PENDING_VERIFICATION", "permission": permission, "property": site}
+    if permission not in VERIFIED_PERMISSIONS:
+        return {"status": "PERMISSION_UNKNOWN", "permission": permission, "property": site}
     return {"status": "CONNECTED", "permission": permission, "property": site}
 
 
@@ -35,6 +38,9 @@ def collect_search_console(
     start: date,
     end: date,
     ensure_sitemap: bool = False,
+    submission_state: dict | None = None,
+    before_submit=None,
+    query_metrics: bool = True,
 ) -> dict:
     state = property_status(client.sites().list().execute().get("siteEntry", []), site)
     if state["status"] != "CONNECTED":
@@ -45,14 +51,30 @@ def collect_search_console(
     sitemap_state = "PRESENT" if sitemap_present else "MISSING"
     if ensure_sitemap and not sitemap_present:
         if state["permission"] in WRITE_PERMISSIONS:
-            client.sitemaps().submit(siteUrl=site, feedpath=sitemap_url).execute()
-            sitemap_state = "SUBMITTED"
+            attempt_state = (submission_state or {}).get("state")
+            if attempt_state in {"ATTEMPTED", "SUBMITTED"}:
+                sitemap_state = "SUBMISSION_PENDING_CONFIRMATION"
+            else:
+                if before_submit is not None:
+                    before_submit()
+                client.sitemaps().submit(siteUrl=site, feedpath=sitemap_url).execute()
+                if submission_state is not None:
+                    submission_state["state"] = "SUBMITTED"
+                sitemap_state = "SUBMITTED"
         else:
             sitemap_state = "READ_ONLY_PERMISSION"
 
+    if not query_metrics:
+        return {
+            **state,
+            "sitemap": sitemap_state,
+            "window": {"start": start.isoformat(), "end": end.isoformat()},
+            "metrics": {"status": "PENDING_FINAL_WINDOW"},
+        }
+
     response = client.searchanalytics().query(
         siteUrl=site,
-        body={"startDate": start.isoformat(), "endDate": end.isoformat()},
+        body={"startDate": start.isoformat(), "endDate": end.isoformat(), "dataState": "final"},
     ).execute()
     return {
         **state,
@@ -68,6 +90,8 @@ def recommendation_for(search_console: dict, traffic: dict) -> str:
     if search_console.get("status") != "CONNECTED":
         return "KEEP_MEASURING"
     metrics = search_console.get("metrics") or {}
+    if metrics.get("status") == "PENDING_FINAL_WINDOW" or not isinstance(metrics.get("impressions"), int):
+        return "KEEP_MEASURING"
     if metrics.get("impressions") == 0:
         return "CHECK_INDEXING"
     if float(metrics.get("ctr") or 0.0) < 0.02:

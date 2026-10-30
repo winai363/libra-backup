@@ -132,6 +132,51 @@ def test_property_status_distinguishes_absent_pending_and_verified():
     )["status"] == "CONNECTED"
 
 
+def test_unknown_permission_fails_closed_without_provider_reads():
+    for permission in (None, "", "futurePermission"):
+        client = FakeClient(permission)
+        result = collect_search_console(
+            client, SITE, SITEMAP, start=date(2026, 10, 30), end=date(2026, 11, 5),
+            ensure_sitemap=True,
+        )
+        assert result["status"] == "PERMISSION_UNKNOWN"
+        assert client._sitemaps.submitted == []
+        assert client._analytics.queries == []
+
+
+def test_submission_attempt_is_durable_when_provider_list_is_stale():
+    client = FakeClient("siteFullUser")
+    submission = {}
+
+    def claim():
+        submission["state"] = "ATTEMPTED"
+
+    first = collect_search_console(
+        client, SITE, SITEMAP, start=date(2026, 10, 30), end=date(2026, 11, 5),
+        ensure_sitemap=True, submission_state=submission, before_submit=claim,
+    )
+    second = collect_search_console(
+        client, SITE, SITEMAP, start=date(2026, 10, 30), end=date(2026, 11, 5),
+        ensure_sitemap=True, submission_state=submission, before_submit=claim,
+    )
+
+    assert first["sitemap"] == "SUBMITTED"
+    assert second["sitemap"] == "SUBMISSION_PENDING_CONFIRMATION"
+    assert len(client._sitemaps.submitted) == 1
+
+
+def test_metrics_are_not_queried_before_the_final_window_is_available():
+    client = FakeClient("siteFullUser")
+
+    result = collect_search_console(
+        client, SITE, SITEMAP, start=date(2026, 10, 30), end=date(2026, 11, 5),
+        query_metrics=False,
+    )
+
+    assert result["metrics"] == {"status": "PENDING_FINAL_WINDOW"}
+    assert client._analytics.queries == []
+
+
 def test_recommendation_uses_observed_funnel_without_inventing_zeroes():
     assert recommendation_for({"status": "PENDING_VERIFICATION"}, {}) == "VERIFY_PROPERTY"
     assert recommendation_for({"status": "CONNECTED", "metrics": {"impressions": 0}}, {}) == "CHECK_INDEXING"

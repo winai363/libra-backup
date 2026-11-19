@@ -1,0 +1,53 @@
+{
+  "schema": "libra-amazon-ads-pilot-inputs/1",
+  "candidate_slug": "adhd-adults-workbook-es",
+  "account_profile": {
+    "account_id": "amzn1.ads-account.g.9a7i9ns9qab5rapgyf8vjrw9k",
+    "entity_id": "ENTITY22P2PV112QGKX",
+    "marketplace": "Amazon.com",
+    "country": "United States",
+    "currency": "USD",
+    "timezone": null,
+    "authority": "Admin",
+    "observed_at": "2026-11-19T10:43:00+07:00"
+  },
+  "account_snapshot": {
+    "fingerprint": "sha256:638159abafa56bab54fd957c07e21ccabd154728ba459352ef5d47590cc8caae",
+    "observed_at": "2026-11-19T10:43:00+07:00",
+    "campaigns": 0,
+    "spend_usd": 0.0
+  },
+  "capability_manifest": {
+    "create_sponsored_products": "discovered",
+    "pause_campaign": "disabled",
+    "read_campaign": "live-read-verified",
+    "spend_watcher": "disabled"
+  },
+  "mutation": {
+    "asin": "B0H6VB1SDX",
+    "campaign_name": "LIBRA-TDAH-ES-US-20261119-PILOT",
+    "daily_budget_usd": 2.0,
+    "total_loss_cap_usd": 10.0,
+    "duration_days": 14,
+    "bid_usd": null,
+    "bidding_strategy": "dynamic_bids_down_only",
+    "targeting": [
+      {
+        "keyword": "cuaderno tdah adultos",
+        "match_type": "EXACT"
+      },
+      {
+        "keyword": "tdah adultos ejercicios",
+        "match_type": "EXACT"
+      },
+      {
+        "keyword": "workbook tdah adultos",
+        "match_type": "PHRASE"
+      }
+    ],
+    "owner_approved_exact_plan": false,
+    "idempotency_key": "libra-tdah-us-20261119-v1",
+    "audit_destination": "data/amazon_ads_pilot_audit.jsonl",
+    "rollback": "pause_campaign"
+  }
+}

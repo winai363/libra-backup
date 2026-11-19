@@ -1,0 +1,78 @@
+{
+  "schema": "libra-amazon-ads-pilot-gate/1",
+  "as_of": "2026-11-19T11:20:00+07:00",
+  "status": "BLOCKED_WITH_EVIDENCE",
+  "candidate": {
+    "slug": "adhd-adults-workbook-es",
+    "asin": "B0H6VB1SDX",
+    "retail_verdict": "PASS"
+  },
+  "missing_inputs": [
+    "account_profile:timezone",
+    "capability:create_sponsored_products",
+    "capability:pause_campaign",
+    "capability:spend_watcher",
+    "mutation:bid_usd",
+    "mutation:owner_approved_exact_plan"
+  ],
+  "capability_manifest": {
+    "create_sponsored_products": "discovered",
+    "pause_campaign": "disabled",
+    "read_campaign": "live-read-verified",
+    "spend_watcher": "disabled"
+  },
+  "account_snapshot": {
+    "fingerprint": "sha256:638159abafa56bab54fd957c07e21ccabd154728ba459352ef5d47590cc8caae",
+    "observed_at": "2026-11-19T10:43:00+07:00",
+    "campaigns": 0,
+    "spend_usd": 0.0
+  },
+  "plan": {
+    "schema": "libra-amazon-ads-mutation-plan/1",
+    "generated_at": "2026-11-19T11:20:00+07:00",
+    "objective": "attributed paid book order and contribution after ad spend",
+    "conversion": "Amazon Ads attributed order, reconciled side-by-side with KDP royalties and KENP",
+    "account_id": "amzn1.ads-account.g.9a7i9ns9qab5rapgyf8vjrw9k",
+    "entity_id": "ENTITY22P2PV112QGKX",
+    "marketplace": "Amazon.com",
+    "country": "United States",
+    "currency": "USD",
+    "timezone": null,
+    "remote_snapshot_fingerprint": "sha256:638159abafa56bab54fd957c07e21ccabd154728ba459352ef5d47590cc8caae",
+    "asin": "B0H6VB1SDX",
+    "campaign_name": "LIBRA-TDAH-ES-US-20261119-PILOT",
+    "daily_budget_usd": 2.0,
+    "total_loss_cap_usd": 10.0,
+    "duration_days": 14,
+    "bid_usd": null,
+    "bidding_strategy": "dynamic_bids_down_only",
+    "targeting": [
+      {
+        "keyword": "cuaderno tdah adultos",
+        "match_type": "EXACT"
+      },
+      {
+        "keyword": "tdah adultos ejercicios",
+        "match_type": "EXACT"
+      },
+      {
+        "keyword": "workbook tdah adultos",
+        "match_type": "PHRASE"
+      }
+    ],
+    "negative_targeting": [],
+    "idempotency_key": "libra-tdah-us-20261119-v1",
+    "audit_destination": "data/amazon_ads_pilot_audit.jsonl",
+    "rollback": "pause_campaign",
+    "blast_radius": "one United States Sponsored Products campaign and one ASIN",
+    "learning_impact": "new campaign with no prior Amazon Ads history",
+    "verification_window": "read back immediately; spend freshness must remain under 24 hours",
+    "stop_rules": [
+      "verified total spend reaches USD 10",
+      "retail eligibility, listing availability, policy or measurement anomaly",
+      "remote state cannot be read back or spend freshness exceeds 24 hours",
+      "spend occurs while conversion evidence cannot be reconciled",
+      "owner stop"
+    ]
+  }
+}

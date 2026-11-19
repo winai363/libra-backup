@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from amazon_ads_pilot import build_pilot_gate
+from libra_amazon_ads_pilot import build_pilot_gate
 
 
 def _load(path: Path) -> dict:

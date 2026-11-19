@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from amazon_ads_pilot import APPROVED_CAPS, apply_pilot, build_pilot_gate
+from libra_amazon_ads_pilot import APPROVED_CAPS, apply_pilot, build_pilot_gate
 
 
 AS_OF = datetime(2026, 11, 19, 4, 0, tzinfo=timezone.utc)

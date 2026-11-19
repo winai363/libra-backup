@@ -263,7 +263,12 @@ def run_checkpoints(state: dict, *, report: dict | None = None, paths=None) -> d
     has already run never runs again, and a missed one fires on the next run
     rather than being skipped."""
     paths = paths or _paths()
-    report = report or report_module.build_report()
+    report = report or report_module.build_report(
+        experiment_file=paths.experiment,
+        ledger=paths.data / "libra-business.db",
+        kdp_dir=paths.kdp,
+        roster_file=paths.kdp / "bookshelf-roster.json",
+    )
     if report.get("state") in ("inactive", "blocked"):
         return {"state": report.get("state")}
     elapsed = report.get("days_elapsed")

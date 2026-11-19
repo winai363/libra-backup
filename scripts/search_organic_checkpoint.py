@@ -56,6 +56,27 @@ def checkpoint_due(today: date, target: date, state_path: Path) -> bool:
     return checkpoint.get("state") not in {"SENDING", "SENT", "DELIVERY_UNCERTAIN"}
 
 
+def rolling_window(as_of: date) -> tuple[date, date]:
+    """Return the latest 28-day window likely to be final in Search Console."""
+    end = as_of - timedelta(days=3)
+    return end - timedelta(days=27), end
+
+
+def weekly_collection_due(state: dict, as_of: date) -> bool:
+    raw = (state.get("rolling") or {}).get("last_final_on")
+    if not raw:
+        metrics = state.get("metrics") or {}
+        if metrics.get("state") == "FINAL":
+            raw = metrics.get("observed_on")
+    if not raw:
+        return True
+    try:
+        last_final = date.fromisoformat(raw)
+    except (TypeError, ValueError):
+        return True
+    return as_of >= last_final + timedelta(days=7)
+
+
 def claim_delivery(state_path: Path, target: date, digest: str) -> None:
     state = load_state(state_path)
     state["schema"] = "libra-search-checkpoint/2"
@@ -88,7 +109,15 @@ def _client(credentials_path: Path):
     return build("searchconsole", "v1", credentials=credentials, cache_discovery=False)
 
 
-def collect_live(credentials_path: Path, *, today: date, state_path: Path) -> dict:
+def collect_live(
+    credentials_path: Path,
+    *,
+    today: date,
+    state_path: Path,
+    start: date = RELEASE_DATE,
+    end: date = MEASUREMENT_END,
+    query_metrics: bool | None = None,
+) -> dict:
     if not credentials_path.exists():
         return {"status": "UNKNOWN", "reason": "credentials_missing", "property": SITE}
     try:
@@ -102,12 +131,12 @@ def collect_live(credentials_path: Path, *, today: date, state_path: Path) -> di
 
         result = collect_search_console(
             _client(credentials_path), SITE, SITEMAP,
-            start=RELEASE_DATE,
-            end=MEASUREMENT_END,
+            start=start,
+            end=end,
             ensure_sitemap=True,
             submission_state=submission,
             before_submit=claim_submission,
-            query_metrics=today >= CHECKPOINT_DATE,
+            query_metrics=today >= CHECKPOINT_DATE if query_metrics is None else query_metrics,
         )
         if result.get("sitemap") == "SUBMITTED":
             submission["state"] = "SUBMITTED"
@@ -152,6 +181,23 @@ def _record_metrics_state(state_path: Path, gsc: dict, observed_on: date) -> Non
     _write_state(state_path, state)
 
 
+def _record_rolling_state(state_path: Path, gsc: dict, observed_on: date) -> bool:
+    """Persist only final rolling evidence, preserving the last good state otherwise."""
+    metrics = gsc.get("metrics") if gsc.get("status") == "CONNECTED" else None
+    if not isinstance(metrics, dict) or not isinstance(metrics.get("impressions"), int):
+        return False
+    state = load_state(state_path)
+    state["schema"] = "libra-search-checkpoint/3"
+    state["rolling"] = {
+        "state": "FINAL",
+        "last_final_on": observed_on.isoformat(),
+        "window": gsc.get("window"),
+        "values": metrics,
+    }
+    _write_state(state_path, state)
+    return True
+
+
 def _message(report: dict, gsc: dict, recommendation: str) -> str:
     metrics = gsc.get("metrics") or {}
     impressions = metrics.get("impressions")
@@ -167,6 +213,36 @@ def _message(report: dict, gsc: dict, recommendation: str) -> str:
         f"คำแนะนำถัดไป: {recommendation}",
         "หมายเหตุ: Search Console อาจหน่วงข้อมูล และยังไม่ใช่หลักฐาน purchase attribution",
     ])
+
+
+def _weekly_message(report: dict, gsc: dict, recommendation: str) -> str:
+    metrics = gsc.get("metrics") or {}
+    traffic = report["traffic"]
+    show = lambda value: "UNKNOWN" if value is None else value
+    window = gsc.get("window") or {}
+    return "\n".join([
+        "🔎 Libra organic — รายงาน Search Console รายสัปดาห์",
+        f"ช่วงข้อมูล: {show(window.get('start'))} ถึง {show(window.get('end'))}",
+        f"Impressions / clicks: {show(metrics.get('impressions'))} / {show(metrics.get('clicks'))}",
+        f"CTR / position: {show(metrics.get('ctr'))} / {show(metrics.get('position'))}",
+        f"Qualified requests / Amazon outbound: {show(traffic.get('qualified_views'))} / {show(traffic.get('amazon_outbound'))}",
+        f"KDP ล่าสุด: USD {show(report['goal'].get('latest_royalties_usd'))}",
+        f"คำแนะนำถัดไป: {recommendation}",
+        "หมายเหตุ: requests ไม่ใช่คนไม่ซ้ำ และ Search Console ไม่ใช่ purchase attribution",
+    ])
+
+
+def _record_weekly_delivery(state_path: Path, observed_on: date, delivery_state: str, digest: str) -> None:
+    state = load_state(state_path)
+    rolling = state.get("rolling")
+    if not isinstance(rolling, dict):
+        raise ValueError("rolling evidence was not recorded")
+    rolling["notification"] = {
+        "state": delivery_state,
+        "for": observed_on.isoformat(),
+        "report_digest": digest,
+    }
+    _write_state(state_path, state)
 
 
 def main(argv=None) -> int:
@@ -194,20 +270,41 @@ def main(argv=None) -> int:
             "SENDING", "SENT", "DELIVERY_UNCERTAIN",
         }
         metrics_done = (state.get("metrics") or {}).get("state") == "FINAL"
-        if sitemap_done and checkpoint_done and metrics_done:
-            print(json.dumps({"status": "NOOP", "reason": "monitor_complete"}))
+        rolling_mode = sitemap_done and checkpoint_done and metrics_done
+        if rolling_mode and not weekly_collection_due(state, args.as_of):
+            print(json.dumps({"status": "NOOP", "reason": "weekly_not_due"}))
             return 0
 
-        gsc = collect_live(args.credentials, today=args.as_of, state_path=args.state)
-        _record_metrics_state(args.state, gsc, args.as_of)
-        report = build_report(args.ledger, args.portfolio, as_of=args.as_of)
+        start, end = rolling_window(args.as_of) if rolling_mode else (RELEASE_DATE, MEASUREMENT_END)
+        gsc = collect_live(
+            args.credentials,
+            today=args.as_of,
+            state_path=args.state,
+            start=start,
+            end=end,
+            query_metrics=True if rolling_mode else None,
+        )
+        rolling_final = _record_rolling_state(args.state, gsc, args.as_of) if rolling_mode else False
+        if not rolling_mode:
+            _record_metrics_state(args.state, gsc, args.as_of)
+        report = build_report(
+            args.ledger, args.portfolio, as_of=args.as_of, snapshots_path=args.snapshots,
+        )
         recommendation = recommendation_for(gsc, report["traffic"])
         snapshot = {
-            "schema": "libra-search-console-snapshot/1",
+            "schema": "libra-search-console-snapshot/2",
             "observed_on": args.as_of.isoformat(),
+            "collection": "rolling_28_day" if rolling_mode else "day7",
             "search_console": gsc,
             "traffic": report["traffic"],
             "goal": report["goal"],
+            "freshness": {
+                "observed_on": args.as_of.isoformat(),
+                "search_console_final": rolling_final or (
+                    isinstance(gsc.get("metrics"), dict)
+                    and isinstance(gsc["metrics"].get("impressions"), int)
+                ),
+            },
             "recommendation": recommendation,
         }
         _append_snapshot(args.snapshots, snapshot)
@@ -224,6 +321,21 @@ def main(argv=None) -> int:
             except Exception:
                 sent = False
             mark_delivery(args.state, "SENT" if sent else "DELIVERY_UNCERTAIN")
+            if not sent:
+                return 1
+        elif args.send and rolling_mode and rolling_final:
+            from scripts.organic_experiment_report import send_telegram
+
+            message = _weekly_message(report, gsc, recommendation)
+            digest = hashlib.sha256(message.encode("utf-8")).hexdigest()
+            _record_weekly_delivery(args.state, args.as_of, "SENDING", digest)
+            try:
+                sent = send_telegram(message)
+            except Exception:
+                sent = False
+            _record_weekly_delivery(
+                args.state, args.as_of, "SENT" if sent else "DELIVERY_UNCERTAIN", digest,
+            )
             if not sent:
                 return 1
     return 0

@@ -4,7 +4,11 @@ from datetime import date
 
 from business_ledger import init_ledger, record_hub_event
 from organic_search import build_view_event
-from scripts.search_organic_report import build_report, evaluate_goal
+from scripts.search_organic_report import (
+    build_report,
+    evaluate_goal,
+    latest_search_console_snapshot,
+)
 
 
 def seed_snapshot(ledger, month, royalties, observed_at):
@@ -114,3 +118,72 @@ def test_active_release_with_unavailable_ledger_is_unknown_immediately(tmp_path)
 
     assert payload["goal"]["status"] == "UNKNOWN"
     assert payload["goal"]["reason"] == "ledger_unavailable"
+
+
+def test_latest_search_console_snapshot_returns_fresh_final_metrics(tmp_path):
+    snapshots = tmp_path / "snapshots.jsonl"
+    snapshots.write_text("\n".join([
+        json.dumps({
+            "observed_on": "2026-11-12",
+            "search_console": {"status": "UNKNOWN", "reason": "provider_error"},
+        }),
+        json.dumps({
+            "observed_on": "2026-11-18",
+            "search_console": {
+                "status": "CONNECTED",
+                "window": {"start": "2026-10-19", "end": "2026-11-15"},
+                "metrics": {"impressions": 4, "clicks": 1, "ctr": 0.25, "position": 8.0},
+            },
+        }),
+    ]) + "\n")
+
+    result = latest_search_console_snapshot(snapshots, date(2026, 11, 19))
+
+    assert result == {
+        "status": "AVAILABLE",
+        "observed_on": "2026-11-18",
+        "age_days": 1,
+        "window": {"start": "2026-10-19", "end": "2026-11-15"},
+        "metrics": {"impressions": 4, "clicks": 1, "ctr": 0.25, "position": 8.0},
+    }
+
+
+def test_latest_search_console_snapshot_marks_stale_or_malformed_unknown(tmp_path):
+    snapshots = tmp_path / "snapshots.jsonl"
+    snapshots.write_text("not-json\n" + json.dumps({
+        "observed_on": "2026-11-01",
+        "search_console": {
+            "status": "CONNECTED",
+            "metrics": {"impressions": 1, "clicks": 0, "ctr": 0.0, "position": 70.0},
+        },
+    }) + "\n")
+
+    result = latest_search_console_snapshot(snapshots, date(2026, 11, 19))
+
+    assert result["status"] == "UNKNOWN"
+    assert result["reason"] == "snapshot_stale"
+    assert result["observed_on"] == "2026-11-01"
+    assert result["age_days"] == 18
+
+
+def test_build_report_includes_latest_search_console_snapshot(tmp_path):
+    ledger = tmp_path / "ledger.db"
+    portfolio = tmp_path / "portfolio.json"
+    snapshots = tmp_path / "snapshots.jsonl"
+    write_portfolio(portfolio)
+    seed_snapshot(ledger, "2026-11", 0.72, "2026-11-18T09:00:00+07:00")
+    snapshots.write_text(json.dumps({
+        "observed_on": "2026-11-18",
+        "search_console": {
+            "status": "CONNECTED",
+            "window": {"start": "2026-10-19", "end": "2026-11-15"},
+            "metrics": {"impressions": 4, "clicks": 1, "ctr": 0.25, "position": 8.0},
+        },
+    }) + "\n")
+
+    payload = build_report(
+        ledger, portfolio, as_of=date(2026, 11, 19), snapshots_path=snapshots,
+    )
+
+    assert payload["search_console"]["status"] == "AVAILABLE"
+    assert payload["search_console"]["metrics"]["impressions"] == 4

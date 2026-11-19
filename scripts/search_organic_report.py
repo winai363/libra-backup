@@ -16,6 +16,50 @@ if str(ROOT) not in sys.path:
 from organic_search import build_scorecard, load_search_portfolio
 
 
+def latest_search_console_snapshot(
+    path: Path,
+    as_of: date,
+    stale_after_days: int = 9,
+) -> dict:
+    latest = None
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {"status": "UNKNOWN", "reason": "snapshot_unavailable"}
+    for line in lines:
+        try:
+            row = json.loads(line)
+            observed = date.fromisoformat(row["observed_on"])
+            search_console = row["search_console"]
+            metrics = search_console["metrics"]
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            continue
+        if observed > as_of or search_console.get("status") != "CONNECTED":
+            continue
+        if not isinstance(metrics, dict) or not isinstance(metrics.get("impressions"), int):
+            continue
+        if latest is None or observed > latest[0]:
+            latest = (observed, search_console)
+    if latest is None:
+        return {"status": "UNKNOWN", "reason": "final_snapshot_missing"}
+    observed, search_console = latest
+    age_days = (as_of - observed).days
+    if age_days > stale_after_days:
+        return {
+            "status": "UNKNOWN",
+            "reason": "snapshot_stale",
+            "observed_on": observed.isoformat(),
+            "age_days": age_days,
+        }
+    return {
+        "status": "AVAILABLE",
+        "observed_on": observed.isoformat(),
+        "age_days": age_days,
+        "window": search_console.get("window"),
+        "metrics": search_console["metrics"],
+    }
+
+
 def _month_number(month: str) -> int:
     year, number = (int(part) for part in month.split("-"))
     return year * 12 + number
@@ -55,7 +99,13 @@ def _required_months(released: date, count: int) -> list[str]:
     return months
 
 
-def build_report(ledger: Path, portfolio_path: Path, *, as_of: date | None = None) -> dict:
+def build_report(
+    ledger: Path,
+    portfolio_path: Path,
+    *,
+    as_of: date | None = None,
+    snapshots_path: Path | None = None,
+) -> dict:
     as_of = as_of or date.today()
     config = load_search_portfolio(portfolio_path)
     scorecard = build_scorecard(ledger, config)
@@ -109,7 +159,7 @@ def build_report(ledger: Path, portfolio_path: Path, *, as_of: date | None = Non
     latest_month = max(scorecard["kdp_months"], default=None)
     latest = scorecard["kdp_months"].get(latest_month) if latest_month else None
     current_royalties = float(latest["royalties_usd"]) if latest else None
-    return {
+    payload = {
         **scorecard,
         "as_of": as_of.isoformat(),
         "goal": {
@@ -125,6 +175,9 @@ def build_report(ledger: Path, portfolio_path: Path, *, as_of: date | None = Non
             if current_royalties is not None else None,
         },
     }
+    if snapshots_path is not None:
+        payload["search_console"] = latest_search_console_snapshot(snapshots_path, as_of)
+    return payload
 
 
 def human_summary(payload: dict) -> str:
@@ -140,6 +193,17 @@ def human_summary(payload: dict) -> str:
     gap = goal["gap_to_20_usd"]
     gap_text = "UNKNOWN" if gap is None else f"USD {gap:.2f}"
     ledger_status = payload.get("ledger", {}).get("status", "UNKNOWN")
+    search_console = payload.get("search_console") or {"status": "UNKNOWN"}
+    search_status = search_console.get("status", "UNKNOWN")
+    search_observed = search_console.get("observed_on", "UNKNOWN")
+    search_metrics = search_console.get("metrics") or {}
+    impressions = search_metrics.get("impressions")
+    clicks = search_metrics.get("clicks")
+    search_values = (
+        f"{impressions} impressions / {clicks} clicks"
+        if isinstance(impressions, int) and isinstance(clicks, int)
+        else "UNKNOWN"
+    )
     return "\n".join([
         f"Libra organic search — {payload['as_of']}",
         f"Goal: {goal['status']} ({goal['reason']})",
@@ -151,7 +215,7 @@ def human_summary(payload: dict) -> str:
         f"Search-surface Amazon outbound clicks: {traffic['amazon_outbound'] if traffic['amazon_outbound'] is not None else 'UNKNOWN'}",
         "Traffic note: requests are not unique people; source filtering is incomplete.",
         "Purchase attribution: UNKNOWN",
-        "Search Console: UNKNOWN (not connected)",
+        f"Search Console: {search_status} ({search_values}; observed {search_observed})",
     ])
 
 
@@ -160,9 +224,12 @@ def main(argv=None) -> int:
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--ledger", type=Path, default=ROOT / "data" / "libra-business.db")
     parser.add_argument("--portfolio", type=Path, default=ROOT / "data" / "search_portfolio.json")
+    parser.add_argument("--snapshots", type=Path, default=ROOT / "data" / "search_console_snapshots.jsonl")
     parser.add_argument("--as-of", type=date.fromisoformat)
     args = parser.parse_args(argv)
-    payload = build_report(args.ledger, args.portfolio, as_of=args.as_of)
+    payload = build_report(
+        args.ledger, args.portfolio, as_of=args.as_of, snapshots_path=args.snapshots,
+    )
     print(json.dumps(payload, ensure_ascii=False, indent=2) if args.json else human_summary(payload))
     return 0
 

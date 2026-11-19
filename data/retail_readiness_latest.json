@@ -1,0 +1,375 @@
+{
+  "schema": "libra-retail-readiness/1",
+  "observed_at": "2026-11-19T10:55:00+07:00",
+  "mode": "read_only",
+  "summary": {
+    "PASS": 1,
+    "HOLD": 2,
+    "UNKNOWN": 1
+  },
+  "candidates": [
+    {
+      "slug": "adhd-adults-workbook-es",
+      "asin": "B0H6VB1SDX",
+      "verdict": "PASS",
+      "blockers": [],
+      "controls": {
+        "live": {
+          "result": "pass",
+          "evidence": "Fresh KDP Bookshelf roster reports ebook B0H6VB1SDX LIVE."
+        },
+        "marketplace": {
+          "result": "pass",
+          "evidence": "Amazon.com detail page and United States Sponsored Products selector both resolved this ASIN."
+        },
+        "price": {
+          "result": "pass",
+          "evidence": "Fresh Bookshelf roster and Ads selector both show USD 2.99."
+        },
+        "landing": {
+          "result": "pass",
+          "evidence": "Fresh public detail page returned HTTP 200, matching title/canonical and a purchase control."
+        },
+        "promise_match": {
+          "result": "pass",
+          "evidence": "Title promises exercises, templates and routines; local EPUB headings contain dedicated exercises, four named templates and daily routines. Prior editorial audit records no unmet visual promise."
+        },
+        "language": {
+          "result": "pass",
+          "evidence": "Local editorial review passed Spanish language purity with no critical issue."
+        },
+        "claims": {
+          "result": "pass",
+          "evidence": "Local editorial review supports sampled ADHD claims; manuscript states diagnosis is by a qualified professional and includes an explicit medical-information disclaimer."
+        },
+        "rights": {
+          "result": "pass",
+          "evidence": "Local generation cost report records the authored manuscript and one generated image; EPUB contains only its cover image and no third-party interior imagery."
+        },
+        "policy_eligibility": {
+          "result": "pass",
+          "evidence": "Authenticated US Sponsored Products selector returned this exact ASIN as In stock with an Add control; final ad creative remains subject to review."
+        }
+      },
+      "local_artifacts": {
+        "book_directory_present": true,
+        "listing_present": true,
+        "epub_present": true,
+        "paperback_present": true,
+        "cover_present": true,
+        "aplus_present": true,
+        "epub_image_count": 1,
+        "epub_interior_image_count": 0,
+        "editorial_passed": true,
+        "editorial_critical_issues": []
+      },
+      "listing": {
+        "title": "TDAH en Adultos: Cuaderno de Ejercicios",
+        "subtitle": "Ejercicios prácticos, plantillas y rutinas diarias para organizar tu vida, mejorar el enfoque y reducir el caos",
+        "language": "Spanish"
+      },
+      "retail_observation": {
+        "marketplace": "Amazon.com / United States",
+        "price": 2.99,
+        "currency": "USD",
+        "landing_url": "https://www.amazon.com/dp/B0H6VB1SDX",
+        "review_evidence": "Public detail page showed 4.0/5 from 2 ratings on 2026-11-19."
+      },
+      "monthly_history": [
+        {
+          "month": "2026-08",
+          "observed_at": "2026-08-31T09:15:10+07:00",
+          "royalties_usd": 1.44,
+          "orders": 0,
+          "kenp": 274
+        },
+        {
+          "month": "2026-09",
+          "observed_at": "2026-09-30T09:15:10+07:00",
+          "royalties_usd": 10.41,
+          "orders": 4,
+          "kenp": 112
+        },
+        {
+          "month": "2026-10",
+          "observed_at": "2026-10-31T09:15:10+07:00",
+          "royalties_usd": 0.62,
+          "orders": 0,
+          "kenp": 142
+        }
+      ],
+      "selection_basis": "USD 10.41 royalties, 4 orders and 112 KENP in September 2026; Search-first support assets already exist."
+    },
+    {
+      "slug": "beginner-watercolor-spanish",
+      "asin": "B0H4FMMP8P",
+      "verdict": "HOLD",
+      "blockers": [
+        "promise_match",
+        "rights"
+      ],
+      "controls": {
+        "live": {
+          "result": "pass",
+          "evidence": "Fresh KDP Bookshelf roster reports ebook B0H4FMMP8P LIVE."
+        },
+        "marketplace": {
+          "result": "pass",
+          "evidence": "Amazon.com detail page and United States Sponsored Products selector both resolved this ASIN."
+        },
+        "price": {
+          "result": "pass",
+          "evidence": "Fresh Bookshelf roster and Ads selector both show USD 3.49."
+        },
+        "landing": {
+          "result": "pass",
+          "evidence": "Fresh public detail page returned HTTP 200, matching title/canonical and a purchase control."
+        },
+        "promise_match": {
+          "result": "fail",
+          "evidence": "A visual step-by-step painting guide promises projects and first works, but the EPUB has zero interior images; the only image is its cover."
+        },
+        "language": {
+          "result": "pass",
+          "evidence": "Local editorial review passed Spanish language purity with no critical issue."
+        },
+        "claims": {
+          "result": "pass",
+          "evidence": "Local editorial review found no critical factual issue; unsupported practice advice is non-medical and framed as guidance."
+        },
+        "rights": {
+          "result": "unknown",
+          "evidence": "Legacy local files do not include complete image/cover provenance even though no interior image is shipped."
+        },
+        "policy_eligibility": {
+          "result": "pass",
+          "evidence": "Authenticated US Sponsored Products selector returned this exact ASIN as In stock with an Add control."
+        }
+      },
+      "local_artifacts": {
+        "book_directory_present": true,
+        "listing_present": true,
+        "epub_present": true,
+        "paperback_present": true,
+        "cover_present": true,
+        "aplus_present": true,
+        "epub_image_count": 1,
+        "epub_interior_image_count": 0,
+        "editorial_passed": true,
+        "editorial_critical_issues": []
+      },
+      "listing": {
+        "title": "Acuarela para Principiantes: Guía Paso a Paso para Dominar Técnicas y Crear Tus Primeras Obras",
+        "subtitle": "Instrucciones claras, ejercicios prácticos y consejos para pintar desde casa",
+        "language": "Spanish"
+      },
+      "retail_observation": {
+        "marketplace": "Amazon.com / United States",
+        "price": 3.49,
+        "currency": "USD",
+        "landing_url": "https://www.amazon.com/dp/B0H4FMMP8P",
+        "review_evidence": "No rating/review summary was visible in the fresh public response."
+      },
+      "monthly_history": [
+        {
+          "month": "2026-07",
+          "observed_at": "2026-07-31T09:15:09+07:00",
+          "royalties_usd": 2.76,
+          "orders": 6,
+          "kenp": 88
+        },
+        {
+          "month": "2026-08",
+          "observed_at": "2026-08-31T09:15:10+07:00",
+          "royalties_usd": 3.8,
+          "orders": 1,
+          "kenp": 255
+        },
+        {
+          "month": "2026-09",
+          "observed_at": "2026-09-30T09:15:10+07:00",
+          "royalties_usd": 2.42,
+          "orders": 1,
+          "kenp": 24
+        },
+        {
+          "month": "2026-10",
+          "observed_at": "2026-10-31T09:15:10+07:00",
+          "royalties_usd": 2.9,
+          "orders": 1,
+          "kenp": 103
+        }
+      ],
+      "selection_basis": "USD 2.42 in September and USD 2.90 plus one order and 103 KENP in October 2026."
+    },
+    {
+      "slug": "ai-productivity-workflows-professionals",
+      "asin": "B0H4CWBKNV",
+      "verdict": "UNKNOWN",
+      "blockers": [
+        "promise_match",
+        "claims",
+        "rights"
+      ],
+      "controls": {
+        "live": {
+          "result": "pass",
+          "evidence": "Fresh KDP Bookshelf roster reports ebook B0H4CWBKNV LIVE."
+        },
+        "marketplace": {
+          "result": "pass",
+          "evidence": "Amazon.com detail page and United States Sponsored Products selector both resolved this ASIN."
+        },
+        "price": {
+          "result": "pass",
+          "evidence": "Fresh Bookshelf roster and Ads selector both show USD 2.99."
+        },
+        "landing": {
+          "result": "pass",
+          "evidence": "Fresh public detail page returned HTTP 200, matching title/canonical and a purchase control."
+        },
+        "promise_match": {
+          "result": "unknown",
+          "evidence": "The EPUB contains the promised step-by-step prompts, but still names Google Bard and relies on 2026 tool/benchmark claims whose current differentiation and accuracy have not received an independent human review."
+        },
+        "language": {
+          "result": "pass",
+          "evidence": "Local editorial review passed English language purity with no critical issue."
+        },
+        "claims": {
+          "result": "unknown",
+          "evidence": "Local editorial review itself marks several productivity figures uncertain; current primary-source verification is incomplete."
+        },
+        "rights": {
+          "result": "unknown",
+          "evidence": "This legacy title predates per-book generation logs; cost is estimated and complete content/cover provenance is not recoverable from current files."
+        },
+        "policy_eligibility": {
+          "result": "pass",
+          "evidence": "Authenticated US Sponsored Products selector returned this exact ASIN as In stock with an Add control."
+        }
+      },
+      "local_artifacts": {
+        "book_directory_present": true,
+        "listing_present": true,
+        "epub_present": true,
+        "paperback_present": true,
+        "cover_present": true,
+        "aplus_present": true,
+        "epub_image_count": 1,
+        "epub_interior_image_count": 0,
+        "editorial_passed": true,
+        "editorial_critical_issues": []
+      },
+      "listing": {
+        "title": "AI-Driven Productivity Workflows for Busy Professionals",
+        "subtitle": "Step-by-Step Prompt Templates to Automate Your Daily Tasks and Boost Efficiency",
+        "language": "English"
+      },
+      "retail_observation": {
+        "marketplace": "Amazon.com / United States",
+        "price": 2.99,
+        "currency": "USD",
+        "landing_url": "https://www.amazon.com/dp/B0H4CWBKNV",
+        "review_evidence": "No rating/review summary was visible in the fresh public response."
+      },
+      "monthly_history": [
+        {
+          "month": "2026-11",
+          "observed_at": "2026-11-19T09:15:13+07:00",
+          "royalties_usd": 0.7,
+          "orders": 0,
+          "kenp": 127
+        }
+      ],
+      "selection_basis": "Only title with November activity: USD 0.70 and 127 KENP through 2026-11-19; activity alone does not prove readiness."
+    },
+    {
+      "slug": "senior-smartphone-french",
+      "asin": "B0H7BCJRM3",
+      "verdict": "HOLD",
+      "blockers": [
+        "promise_match"
+      ],
+      "controls": {
+        "live": {
+          "result": "pass",
+          "evidence": "Fresh KDP Bookshelf roster reports ebook B0H7BCJRM3 LIVE."
+        },
+        "marketplace": {
+          "result": "pass",
+          "evidence": "Amazon.com detail page and United States Sponsored Products selector both resolved this ASIN."
+        },
+        "price": {
+          "result": "pass",
+          "evidence": "Fresh Bookshelf roster and Ads selector both show USD 7.99."
+        },
+        "landing": {
+          "result": "pass",
+          "evidence": "Fresh public detail page returned HTTP 200, matching title/canonical and a purchase control."
+        },
+        "promise_match": {
+          "result": "fail",
+          "evidence": "Title/subtitle and manuscript promise illustrated steps, but the EPUB has zero interior images; the only image is its cover."
+        },
+        "language": {
+          "result": "pass",
+          "evidence": "Local editorial review passed French language purity with no critical issue."
+        },
+        "claims": {
+          "result": "pass",
+          "evidence": "Local editorial review sampled current senior-tech claims and found no critical issue; manuscript contains safety guidance and a disclaimer."
+        },
+        "rights": {
+          "result": "pass",
+          "evidence": "Local generation cost report records the authored manuscript and one generated image; EPUB contains only its cover image and no third-party interior imagery."
+        },
+        "policy_eligibility": {
+          "result": "pass",
+          "evidence": "Authenticated US Sponsored Products selector returned this exact ASIN as In stock with an Add control; product eligibility does not override the customer-promise hold."
+        }
+      },
+      "local_artifacts": {
+        "book_directory_present": true,
+        "listing_present": true,
+        "epub_present": true,
+        "paperback_present": true,
+        "cover_present": true,
+        "aplus_present": true,
+        "epub_image_count": 1,
+        "epub_interior_image_count": 0,
+        "editorial_passed": true,
+        "editorial_critical_issues": []
+      },
+      "listing": {
+        "title": "Guide Facile du Smartphone pour Seniors: Apprendre à Utiliser son Téléphone Pas à Pas",
+        "subtitle": "Le manuel illustré et en gros caractères pour débutants, appels vidéo, photos, internet et sécurité en ligne",
+        "language": "French"
+      },
+      "retail_observation": {
+        "marketplace": "Amazon.com / United States",
+        "price": 7.99,
+        "currency": "USD",
+        "landing_url": "https://www.amazon.com/dp/B0H7BCJRM3",
+        "review_evidence": "No rating/review summary was visible in the fresh public response."
+      },
+      "monthly_history": [
+        {
+          "month": "2026-08",
+          "observed_at": "2026-08-31T09:15:10+07:00",
+          "royalties_usd": 5.01,
+          "orders": 1,
+          "kenp": 0
+        },
+        {
+          "month": "2026-09",
+          "observed_at": "2026-09-30T09:15:10+07:00",
+          "royalties_usd": 5.26,
+          "orders": 1,
+          "kenp": 0
+        }
+      ],
+      "selection_basis": "USD 5.01 in August and USD 5.26 in September 2026, but customer-promise defect overrides revenue signal."
+    }
+  ]
+}

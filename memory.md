@@ -808,3 +808,10 @@ Codex สร้าง scripts/libra_kdp_sales_post.py (commit 7d754f5) โพส
 - Amazon Sponsored Products pilot เลือก TDAH ES หนึ่ง ASIN แผนจำกัด USD2/วัน, ขาดทุนรวมไม่เกิน USD10, สูงสุด 14 วัน. สถานะ `BLOCKED_WITH_EVIDENCE` จึง **ไม่ได้เปิดแคมเปญ**: ขาด timezone บัญชี, exact create/pause write capability, spend watcher, bid ที่พิสูจน์ได้ และ owner approval ต่อ exact plan. Read campaign capability ผ่านแล้ว. TOTAL KDP FREEZE คงเดิม.
 - เพิ่ม fail-closed pilot gate + fresh snapshot/readback/idempotency/rollback controls. แก้ชื่อโมดูลชน CLI และแก้ `organic_autopilot.run_checkpoints` ให้ใช้ path ชุดเดียวกับ test/production; ไม่เปลี่ยน logic ทางธุรกิจ.
 - Verification: focused Amazon 87 passed; full suite 1,441 passed, 8 skipped, 1 deprecation warning. Commits: `e42980e`, `d90fc97`, `aaa89d9`, `9df0177`, `a5da4e2`. หลักฐานหลัก: `data/retail_readiness_latest.json`, `data/amazon_ads_pilot_latest.json`, `data/search_console_checkpoint_state.json`.
+
+## 2026-11-19 12:30 (Claude) — Amazon Ads pilot: ปิด blocker ที่อ่านได้เอง
+- อ่านบัญชี Amazon Ads แบบอ่านอย่างเดียวด้วย `kdp_session.json` (Playwright headless): timezone = `America/Los_Angeles` (Dashboard graphql) · billing สหรัฐ Active ยอด USD0 · ไม่มีแคมเปญ.
+- เปิดตัวสร้าง Sponsored Products โดยไม่กด Save as Draft/Launch ใส่ ASIN `B0H6VB1SDX`: bid แนะนำ (auto targeting) USD0.38 ช่วง 0.30–0.46. คีย์เวิร์ดที่ Amazon แนะนำสำหรับเล่มนี้บน Amazon.com ไม่ตรงเรื่อง (free books, anxiety, dementia) impression share 0.
+- เข้าตัวสร้าง: campaigns page → ปุ่ม Create campaign → modal → Sponsored Products → `/cb/sp?entityId=...` (URL `/cm/sp/campaigns/new` ให้ 404).
+- gate ยัง `BLOCKED_WITH_EVIDENCE` เหลือ 5 ข้อ: create/pause write capability · spend watcher · bid_usd · owner approval ต่อ exact plan. ไม่ได้สร้าง draft หรือแคมเปญ.
+- เศรษฐศาสตร์: ราคา USD2.99 ค่าลิขสิทธิ์ราว USD2.04/เล่ม (70%) · ที่ CPC 0.38 ต้องได้ conversion ≥18.6% ถึงเท่าทุน · งบ USD10 ≈ 26–33 คลิก · pilot นี้ปิด gap USD19 ไม่ได้ เป็นการซื้อข้อมูล.

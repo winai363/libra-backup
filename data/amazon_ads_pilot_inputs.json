@@ -7,9 +7,14 @@
     "marketplace": "Amazon.com",
     "country": "United States",
     "currency": "USD",
-    "timezone": null,
+    "timezone": "America/Los_Angeles",
     "authority": "Admin",
-    "observed_at": "2026-11-19T10:43:00+07:00"
+    "observed_at": "2026-11-19T10:43:00+07:00",
+    "timezone_evidence": {
+      "observed_at": "2026-11-19T12:14:00+07:00",
+      "method": "authenticated read-only load of campaign manager; Dashboard graphql response field timezone",
+      "billing_us_status": "Active, balance USD 0.00 (billing history page, read-only)"
+    }
   },
   "account_snapshot": {
     "fingerprint": "sha256:638159abafa56bab54fd957c07e21ccabd154728ba459352ef5d47590cc8caae",
@@ -48,6 +53,16 @@
     "owner_approved_exact_plan": false,
     "idempotency_key": "libra-tdah-us-20261119-v1",
     "audit_destination": "data/amazon_ads_pilot_audit.jsonl",
-    "rollback": "pause_campaign"
+    "rollback": "pause_campaign",
+    "bid_evidence": {
+      "observed_at": "2026-11-19T12:17:00+07:00",
+      "method": "unsaved Sponsored Products builder with ASIN B0H6VB1SDX added; no Save as Draft, no Launch",
+      "auto_targeting_suggested_default_bid_usd": 0.38,
+      "suggested_range_usd": [
+        0.3,
+        0.46
+      ],
+      "note": "Amazon keyword suggestions for this ASIN on Amazon.com were off-topic (free books, anxiety, dementia) with impression share 0; bid_usd stays null until the owner approves the exact plan"
+    }
   }
 }

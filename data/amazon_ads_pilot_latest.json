@@ -1,6 +1,6 @@
 {
   "schema": "libra-amazon-ads-pilot-gate/1",
-  "as_of": "2026-11-19T11:20:00+07:00",
+  "as_of": "2026-11-19T12:17:55.573944+07:00",
   "status": "BLOCKED_WITH_EVIDENCE",
   "candidate": {
     "slug": "adhd-adults-workbook-es",
@@ -8,7 +8,6 @@
     "retail_verdict": "PASS"
   },
   "missing_inputs": [
-    "account_profile:timezone",
     "capability:create_sponsored_products",
     "capability:pause_campaign",
     "capability:spend_watcher",
@@ -29,7 +28,7 @@
   },
   "plan": {
     "schema": "libra-amazon-ads-mutation-plan/1",
-    "generated_at": "2026-11-19T11:20:00+07:00",
+    "generated_at": "2026-11-19T12:17:55.573944+07:00",
     "objective": "attributed paid book order and contribution after ad spend",
     "conversion": "Amazon Ads attributed order, reconciled side-by-side with KDP royalties and KENP",
     "account_id": "amzn1.ads-account.g.9a7i9ns9qab5rapgyf8vjrw9k",
@@ -37,7 +36,7 @@
     "marketplace": "Amazon.com",
     "country": "United States",
     "currency": "USD",
-    "timezone": null,
+    "timezone": "America/Los_Angeles",
     "remote_snapshot_fingerprint": "sha256:638159abafa56bab54fd957c07e21ccabd154728ba459352ef5d47590cc8caae",
     "asin": "B0H6VB1SDX",
     "campaign_name": "LIBRA-TDAH-ES-US-20261119-PILOT",
